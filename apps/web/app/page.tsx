@@ -179,7 +179,7 @@ export default function Home() {
             onLoginSuccess={handleLoginSuccess}
           />
         </>
-      ) : currentUser?.role === 'ADMIN' && adminMode ? (
+      ) : currentUser?.role === 'ADMIN' ? (
         <AdminDashboardView
           onSignOut={() => {
             setCurrentUser(null);
@@ -187,7 +187,6 @@ export default function Home() {
             setAdminMode(false);
             setViewMode('landing');
           }}
-          onOpenWorkstation={() => setAdminMode(false)}
         />
       ) : (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex relative text-slate-900 dark:text-slate-100 transition-colors">

@@ -7,10 +7,9 @@ import { API_BASE_URL } from '../lib/api';
 
 interface AdminDashboardViewProps {
   onSignOut: () => void;
-  onOpenWorkstation?: () => void;
 }
 
-export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: AdminDashboardViewProps) {
+export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProps) {
   const { theme, toggleTheme } = useTheme();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +110,7 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-8 space-y-6 max-w-5xl mx-auto transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-8 space-y-6 w-full max-w-7xl mx-auto transition-colors">
       {/* Header */}
       <header className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs transition-colors">
         <div className="flex items-center space-x-3.5 min-w-0">
@@ -120,12 +119,14 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">NOX Admin Control Panel</h1>
+              <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">NOX Admin Control Panel</h1>
               <span className="text-[10px] font-bold px-2.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 uppercase font-mono whitespace-nowrap shrink-0 border border-rose-200/60 dark:border-rose-900/60">
                 ADMIN ACCESS ONLY
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Account Provisioning & Credentials Server (Privacy Isolated)</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+              Account Provisioning & Credentials Server (Privacy Isolated)
+            </p>
           </div>
         </div>
 
@@ -137,15 +138,6 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
           >
             {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
           </button>
-
-          {onOpenWorkstation && (
-            <button
-              onClick={onOpenWorkstation}
-              className="px-4 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 shadow-2xs"
-            >
-              <span>Open Personal Workstation</span>
-            </button>
-          )}
 
           <button
             onClick={() => setShowCreate(!showCreate)}

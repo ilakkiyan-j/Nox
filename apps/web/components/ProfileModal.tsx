@@ -17,7 +17,7 @@ interface ProfileModalProps {
   };
 }
 
-export default function ProfileModal({ isOpen, onClose, onSignOut, onOpenAdmin, stats }: ProfileModalProps) {
+export default function ProfileModal({ isOpen, onClose, onSignOut, onOpenAdmin, currentUser, stats }: ProfileModalProps) {
   const { theme, toggleTheme } = useTheme();
   if (!isOpen) return null;
 
@@ -31,14 +31,14 @@ export default function ProfileModal({ isOpen, onClose, onSignOut, onOpenAdmin, 
         {/* Profile Identity Context */}
         <div className="flex items-center space-x-4 border-b border-slate-200 dark:border-slate-800 pb-5">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center font-bold text-lg text-white shadow-md shadow-indigo-500/20">
-            NA
+            {currentUser?.name ? currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'NA'}
           </div>
           <div>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 uppercase font-mono border border-indigo-200/50 dark:border-indigo-800/50">
-              Primary User
+              {currentUser?.role === 'ADMIN' ? 'Administrator' : 'Standard User'}
             </span>
-            <h3 className="font-display font-bold text-xl text-slate-900 dark:text-slate-100 mt-0.5">Nox Architect</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">user@nox.internal</p>
+            <h3 className="font-display font-bold text-xl text-slate-900 dark:text-slate-100 mt-0.5">{currentUser?.name || 'Nox Architect'}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{currentUser?.email || 'user@nox.internal'}</p>
           </div>
         </div>
 
