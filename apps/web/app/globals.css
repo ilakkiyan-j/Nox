@@ -123,3 +123,25 @@ h1, h2, h3, h4, .font-display {
   outline: 2px solid #818CF8;
   outline-offset: 2px;
 }
+
+/* Custom Native Select & Option Popup Theming */
+select {
+  color-scheme: light;
+}
+
+.dark select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #FFFFFF;
+  color: #0F172A;
+  padding: 8px 12px;
+}
+
+.dark select option {
+  background-color: #0F172A;
+  color: #F8FAFC;
+  padding: 8px 12px;
+}
+

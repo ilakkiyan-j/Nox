@@ -2,10 +2,14 @@
 
 <div align="center">
 
-![NOX Banner](apps/web/public/arixen.png)
+<img src="apps/web/public/arixen.png" alt="Arixen Logo" width="160" style="max-width: 160px; height: auto;" />
 
 ### **Personal Context Operating System**
 *A Product of Arixen*
+
+[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-nox--self.vercel.app-4F46E5?style=for-the-badge&logo=vercel)](https://nox-self.vercel.app/)
+
+<br />
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg)](https://nextjs.org/)
@@ -16,6 +20,13 @@
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 </div>
+
+---
+
+## 🚀 Live Demo
+
+Access the live production application:  
+👉 **[https://nox-self.vercel.app/](https://nox-self.vercel.app/)**
 
 ---
 
@@ -120,8 +131,8 @@ npm run dev
 
 | Role | Email | Password | Access Rights |
 | :--- | :--- | :--- | :--- |
-| **System Admin** | `admin@nox.internal` | `nox-admin-2026` | Provision accounts, revoke access, generate credentials |
-| **Nox Architect (User)** | `user@nox.internal` | `nox-user-2026` | Personal workstation (Goals, Tasks, Time, Habits, Notes) |
+| **System Admin** | `admin@nox.internal` | `admin123password` | Provision accounts, revoke access, generate credentials |
+| **Nox Architect (User)** | `user@nox.internal` | `user123password` | Personal workstation (Goals, Tasks, Time, Habits, Notes) |
 
 ---
 
@@ -146,8 +157,9 @@ npx playwright test
 
 ## 🌐 Production Deployment
 
-- **Frontend (`@nox/web`)**: Deploy to [Vercel](https://vercel.com) with root directory set to `apps/web` and environment variable `NEXT_PUBLIC_API_BASE_URL` pointing to your deployed API server.
-- **Backend (`@nox/api`)**: Deploy to [Render](https://render.com) or [Railway](https://railway.app) using Node.js runtime (`npm install && npm run build` build command, `npm run start` start command).
+- **Live Application**: [https://nox-self.vercel.app/](https://nox-self.vercel.app/)
+- **Frontend (`@nox/web`)**: Deployed to [Vercel](https://vercel.com) with root directory set to `apps/web` and environment variable `NEXT_PUBLIC_API_BASE_URL` pointing to your deployed API server.
+- **Backend (`@nox/api`)**: Deployed to Node.js cloud runtime.
 - **Database**: [Neon.tech](https://neon.tech) Serverless PostgreSQL.
 
 ---

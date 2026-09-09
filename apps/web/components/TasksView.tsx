@@ -161,10 +161,10 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
                 onChange={(e) => setPriority(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
               >
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-                <option value="URGENT">URGENT</option>
+                <option value="LOW" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">LOW</option>
+                <option value="MEDIUM" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">MEDIUM</option>
+                <option value="HIGH" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">HIGH</option>
+                <option value="URGENT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">URGENT</option>
               </select>
             </div>
 
@@ -185,9 +185,9 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
                 onChange={(e) => setSelectedGoalId(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
               >
-                <option value="">No linked goal</option>
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">No linked goal</option>
                 {goals.map((g) => (
-                  <option key={g.id} value={g.id}>
+                  <option key={g.id} value={g.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
                     🎯 {g.title}
                   </option>
                 ))}
@@ -240,10 +240,10 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
                 onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
               >
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-                <option value="URGENT">URGENT</option>
+                <option value="LOW" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">LOW</option>
+                <option value="MEDIUM" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">MEDIUM</option>
+                <option value="HIGH" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">HIGH</option>
+                <option value="URGENT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">URGENT</option>
               </select>
             </div>
 
@@ -264,9 +264,9 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
                 onChange={(e) => setEditingTask({ ...editingTask, goalId: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
               >
-                <option value="">No linked goal</option>
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">No linked goal</option>
                 {goals.map((g) => (
-                  <option key={g.id} value={g.id}>
+                  <option key={g.id} value={g.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
                     🎯 {g.title}
                   </option>
                 ))}

@@ -442,9 +442,9 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
               onChange={(e) => setSelectedGoalId(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
             >
-              <option value="">Select Target Goal...</option>
+              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Select Target Goal...</option>
               {goals.map((g) => (
-                <option key={g.id} value={g.id}>
+                <option key={g.id} value={g.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
                   {g.title}
                 </option>
               ))}
@@ -600,10 +600,10 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                 onChange={(e) => setEditingGoal({ ...editingGoal, status: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
               >
-                <option value="NOT_STARTED">NOT_STARTED</option>
-                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                <option value="COMPLETED">COMPLETED</option>
-                <option value="ON_HOLD">ON_HOLD</option>
+                <option value="NOT_STARTED" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">NOT_STARTED</option>
+                <option value="IN_PROGRESS" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">IN_PROGRESS</option>
+                <option value="COMPLETED" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">COMPLETED</option>
+                <option value="ON_HOLD" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">ON_HOLD</option>
               </select>
             </div>
             <div>
