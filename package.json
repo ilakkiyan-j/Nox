@@ -1,0 +1,29 @@
+{
+  "name": "nox-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NOX - Your Second Self Personal Operating System",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "build:db": "npm run build --workspace=packages/database",
+    "db:generate": "npm run db:generate --workspace=packages/database",
+    "db:push": "npm run db:push --workspace=packages/database",
+    "db:seed": "npm run db:seed --workspace=packages/database",
+    "test": "npm run test --workspace=apps/api",
+    "test:unit": "npm run test --workspace=apps/api",
+    "test:e2e": "npm run test:e2e --workspace=apps/web"
+  },
+  "keywords": [
+    "nox",
+    "life-os",
+    "second-self",
+    "productivity"
+  ],
+  "author": "",
+  "license": "MIT"
+}

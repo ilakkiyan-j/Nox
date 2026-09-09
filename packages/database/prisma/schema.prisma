@@ -1,0 +1,253 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  password      String         @default("nox123456")
+  role          String         @default("USER") // ADMIN, USER
+  headline      String?        @default("Second Self Operating System User")
+  avatarUrl     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  goals         Goal[]
+  tasks         Task[]
+  learnings     Learning[]
+  events        Event[]
+  habits        Habit[]
+  folders       Folder[]
+  notes         Note[]
+  reminders     Reminder[]
+  notifications Notification[]
+}
+
+model Goal {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      String      @default("IN_PROGRESS") // NOT_STARTED, IN_PROGRESS, COMPLETED, ON_HOLD
+  startDate   DateTime?
+  targetDate  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  roadmaps    Roadmap[]
+  milestones  Milestone[]
+  tasks       Task[]
+  learnings   Learning[]
+  events      Event[]
+  notes       Note[]
+}
+
+model Roadmap {
+  id          String      @id @default(cuid())
+  goalId      String?
+  goal        Goal?       @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      String      @default("IN_PROGRESS")
+  order       Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  milestones  Milestone[]
+  tasks       Task[]
+  learnings   Learning[]
+  events      Event[]
+}
+
+model Milestone {
+  id          String    @id @default(cuid())
+  goalId      String?
+  goal        Goal?     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  roadmapId   String?
+  roadmap     Roadmap?  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, COMPLETED
+  targetDate  DateTime?
+  order       Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tasks       Task[]
+}
+
+model Task {
+  id               String     @id @default(cuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  status           String     @default("TODO") // TODO, IN_PROGRESS, COMPLETED, CANCELLED
+  priority         String     @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  dueDate          DateTime?
+  startDate        DateTime?
+  estimatedMinutes Int?
+  recurrence       String?    // DAILY, WEEKLY, NONE
+  goalId           String?
+  goal             Goal?      @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  roadmapId        String?
+  roadmap          Roadmap?   @relation(fields: [roadmapId], references: [id], onDelete: SetNull)
+  milestoneId      String?
+  milestone        Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  learningId       String?
+  learning         Learning?  @relation(fields: [learningId], references: [id], onDelete: SetNull)
+  eventId          String?
+  event            Event?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  notes            Note[]
+}
+
+model Learning {
+  id               String           @id @default(cuid())
+  userId           String
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  type             String           @default("COURSE") // COURSE, BOOK, CERTIFICATION, TUTORIAL, PRACTICE
+  status           String           @default("IN_PROGRESS") // NOT_STARTED, IN_PROGRESS, COMPLETED
+  totalModules     Int              @default(0)
+  completedModules Int              @default(0)
+  goalId           String?
+  goal             Goal?            @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  roadmapId        String?
+  roadmap          Roadmap?         @relation(fields: [roadmapId], references: [id], onDelete: SetNull)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  modules          LearningModule[]
+  tasks            Task[]
+  events           Event[]
+  notes            Note[]
+}
+
+model LearningModule {
+  id          String    @id @default(cuid())
+  learningId  String
+  learning    Learning  @relation(fields: [learningId], references: [id], onDelete: Cascade)
+  title       String
+  order       Int       @default(0)
+  status      String    @default("NOT_STARTED")
+  notes       String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  date        DateTime
+  startTime   String?   // e.g. "10:00 AM"
+  endTime     String?   // e.g. "11:30 AM"
+  location    String?
+  url         String?
+  isOnline    Boolean   @default(true)
+  goalId      String?
+  goal        Goal?     @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  roadmapId   String?
+  roadmap     Roadmap?  @relation(fields: [roadmapId], references: [id], onDelete: SetNull)
+  learningId  String?
+  learning    Learning? @relation(fields: [learningId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tasks       Task[]
+  notes       Note[]
+}
+
+model Habit {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String
+  frequency    String     @default("DAILY") // DAILY, WEEKLY
+  targetCount  Int        @default(1)
+  streakCount  Int        @default(0)
+  bestStreak   Int        @default(0)
+  reminderTime String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  logs         HabitLog[]
+}
+
+model HabitLog {
+  id        String   @id @default(cuid())
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      String   // YYYY-MM-DD
+  status    String   @default("COMPLETED") // COMPLETED, SKIPPED
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  icon      String   @default("folder")
+  color     String   @default("#6366F1")
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  notes     Note[]
+}
+
+model Note {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId   String?
+  folder     Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  title      String
+  content    String
+  url        String?
+  tags       String    @default("[]") // JSON string of tags
+  goalId     String?
+  goal       Goal?     @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  taskId     String?
+  task       Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  eventId    String?
+  event      Event?    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  learningId String?
+  learning   Learning? @relation(fields: [learningId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  remindAt    DateTime
+  isCompleted Boolean  @default(false)
+  entityType  String?  // TASK, EVENT, HABIT, GOAL, GENERAL
+  entityId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  message    String
+  type       String   @default("GENERAL") // MILESTONE_ACHIEVED, GOAL_PROGRESS, EVENT_ALERT, TASK_DUE, HABIT_STREAK, REMINDER
+  isRead     Boolean  @default(false)
+  entityType String?
+  entityId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
