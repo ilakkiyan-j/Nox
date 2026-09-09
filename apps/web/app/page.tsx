@@ -12,6 +12,7 @@ import AdminDashboardView from '../components/AdminDashboardView';
 import AdminPanelModal from '../components/AdminPanelModal';
 import QuickCaptureModal from '../components/QuickCaptureModal';
 import CommandPalette from '../components/CommandPalette';
+import UserControlPanel from '../components/UserControlPanel';
 import DashboardView from '../components/DashboardView';
 import GoalsView from '../components/GoalsView';
 import TasksView from '../components/TasksView';
@@ -195,6 +196,7 @@ export default function Home() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             onOpenProfile={() => setIsProfileOpen(true)}
+            currentUser={currentUser}
           />
 
           {/* Main Workstation */}
@@ -234,6 +236,7 @@ export default function Home() {
             isOpen={isQuickCaptureOpen}
             onClose={() => setIsQuickCaptureOpen(false)}
             onSaved={fetchAllData}
+            folders={folders}
           />
 
           <CommandPalette
@@ -254,11 +257,12 @@ export default function Home() {
             onLoginSuccess={handleLoginSuccess}
           />
 
-          <ProfileModal
+          <UserControlPanel
             isOpen={isProfileOpen}
             onClose={() => setIsProfileOpen(false)}
             onSignOut={() => {
               setCurrentUser(null);
+              if (typeof window !== 'undefined') localStorage.removeItem('nox_user');
               setViewMode('landing');
             }}
             onOpenAdmin={() => setIsAdminOpen(true)}
@@ -267,6 +271,10 @@ export default function Home() {
               goalsCount: goals.length,
               habitsStreak: habits[0]?.streakCount || 7,
               notesCount: notes.length,
+              tasksCount: tasks.length,
+              eventsCount: events.length,
+              remindersCount: reminders.length,
+              learningCount: learning.length,
             }}
           />
 

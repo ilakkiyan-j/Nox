@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Clock, Zap, ArrowRight, Calendar, CheckSquare, AlarmClock, Flame, Plus } from 'lucide-react';
+import { Clock, Zap, ArrowRight, Calendar, CheckSquare, AlarmClock, Plus } from 'lucide-react';
 import { NavTab } from './Navigation';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
@@ -75,18 +75,8 @@ export default function TimeView({ onNavigate }: TimeViewProps) {
           </div>
         );
       case 'HABIT':
-        return (
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-            <div className="flex items-center space-x-3">
-              <Flame className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</p>
-                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold">🔥 {item.streakCount || 0} Day Streak</p>
-              </div>
-            </div>
-            <span className="text-[10px] px-2.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-mono font-bold">Habit Routine</span>
-          </div>
-        );
+        // Habits not shown in Time view — filtered server side
+        return null;
       case 'REMINDER':
         return (
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">

@@ -127,30 +127,36 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
 
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-emerald-500/20 transition-all"
+          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-emerald-500/20 transition-all cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
-          <span>New Task</span>
+          {showCreate ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          <span>{showCreate ? 'Close' : 'New Task'}</span>
         </button>
       </div>
 
       {/* Create Task Form */}
       {showCreate && (
-        <form onSubmit={handleCreateTask} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Create Action Item</h3>
+        <form onSubmit={handleCreateTask} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Create Action Item</h3>
+            <button type="button" onClick={() => setShowCreate(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
           <input
             type="text"
             placeholder="Task Title (e.g. Implement Prisma Migration Scripts)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
             required
           />
           <textarea
-            placeholder="Task description & details..."
+            placeholder="Task description & context..."
             value={description}
+            rows={2}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+            className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -159,12 +165,12 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium appearance-none cursor-pointer"
               >
-                <option value="LOW" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">LOW</option>
-                <option value="MEDIUM" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">MEDIUM</option>
-                <option value="HIGH" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">HIGH</option>
-                <option value="URGENT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">URGENT</option>
+                <option value="LOW">🟢 Low</option>
+                <option value="MEDIUM">🔵 Medium</option>
+                <option value="HIGH">🟠 High</option>
+                <option value="URGENT">🔴 Urgent</option>
               </select>
             </div>
 
@@ -183,11 +189,11 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
               <select
                 value={selectedGoalId}
                 onChange={(e) => setSelectedGoalId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 appearance-none cursor-pointer"
               >
-                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">No linked goal</option>
+                <option value="">— No linked goal</option>
                 {goals.map((g) => (
-                  <option key={g.id} value={g.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                  <option key={g.id} value={g.id}>
                     🎯 {g.title}
                   </option>
                 ))}
@@ -195,9 +201,16 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
-            <button type="submit" className="px-5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold shadow-xs">
-              Save Action Task
+          <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setShowCreate(false)}
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button type="submit" className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer">
+              Save Task
             </button>
           </div>
         </form>
@@ -238,12 +251,12 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
               <select
                 value={editingTask.priority || 'MEDIUM'}
                 onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium appearance-none cursor-pointer"
               >
-                <option value="LOW" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">LOW</option>
-                <option value="MEDIUM" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">MEDIUM</option>
-                <option value="HIGH" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">HIGH</option>
-                <option value="URGENT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">URGENT</option>
+                <option value="LOW">🟢 Low</option>
+                <option value="MEDIUM">🔵 Medium</option>
+                <option value="HIGH">🟠 High</option>
+                <option value="URGENT">🔴 Urgent</option>
               </select>
             </div>
 
@@ -262,11 +275,11 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
               <select
                 value={editingTask.goalId || ''}
                 onChange={(e) => setEditingTask({ ...editingTask, goalId: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 appearance-none cursor-pointer"
               >
-                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">No linked goal</option>
+                <option value="">— No linked goal</option>
                 {goals.map((g) => (
-                  <option key={g.id} value={g.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                  <option key={g.id} value={g.id}>
                     🎯 {g.title}
                   </option>
                 ))}
@@ -325,26 +338,28 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
 
               <div className="flex items-center space-x-2 shrink-0">
                 <span
-                  className={`text-[10px] px-2.5 py-0.5 rounded font-mono font-bold uppercase ${
+                  className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wide ${
                     task.priority === 'URGENT'
-                      ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                      ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300'
                       : task.priority === 'HIGH'
-                      ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300'
+                      : task.priority === 'MEDIUM'
+                      ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  {task.priority}
+                  {task.priority === 'URGENT' ? '🔴' : task.priority === 'HIGH' ? '🟠' : task.priority === 'MEDIUM' ? '🔵' : '🟢'} {task.priority}
                 </span>
                 <button
                   onClick={() => setEditingTask(task)}
-                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer transition-colors"
                   title="Edit Task"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => handleDeleteTask(task.id)}
-                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400"
+                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer transition-colors"
                   title="Delete Task"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

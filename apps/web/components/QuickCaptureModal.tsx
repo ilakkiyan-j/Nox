@@ -8,9 +8,10 @@ interface QuickCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
+  folders?: any[];
 }
 
-export default function QuickCaptureModal({ isOpen, onClose, onSaved }: QuickCaptureModalProps) {
+export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = [] }: QuickCaptureModalProps) {
   const [content, setContent] = useState('');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -134,14 +135,24 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved }: QuickCap
               <select
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 font-medium"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 font-medium appearance-none cursor-pointer"
               >
                 <option value="Unsorted">📥 Unsorted</option>
-                <option value="Jobs">📁 Jobs</option>
-                <option value="Events">📁 Events</option>
-                <option value="Learning">📁 Learning</option>
-                <option value="Resources">📁 Resources</option>
-                <option value="Ideas">📁 Ideas</option>
+                {folders.length > 0 ? (
+                  folders.map((f: any) => (
+                    <option key={f.id || f.name} value={f.name || f}>
+                      📁 {f.name || f}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Jobs">📁 Jobs</option>
+                    <option value="Events">📁 Events</option>
+                    <option value="Learning">📁 Learning</option>
+                    <option value="Resources">📁 Resources</option>
+                    <option value="Ideas">📁 Ideas</option>
+                  </>
+                )}
               </select>
             </div>
             <div>

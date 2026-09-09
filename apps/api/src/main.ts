@@ -858,7 +858,7 @@ app.post('/api/v1/events', async (req: Request, res: Response) => {
   try {
     const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
-    const { title, description, date, startTime, endTime, location, url, isOnline, goalId } = req.body;
+    const { title, description, date, endDate, startTime, endTime, location, url, isOnline, goalId } = req.body;
 
     const event = await db.event.create({
       data: {
@@ -866,6 +866,7 @@ app.post('/api/v1/events', async (req: Request, res: Response) => {
         title,
         description,
         date: new Date(date),
+        endDate: endDate ? new Date(endDate) : null,
         startTime,
         endTime,
         location,
@@ -883,13 +884,14 @@ app.post('/api/v1/events', async (req: Request, res: Response) => {
 app.patch('/api/v1/events/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, description, date, startTime, endTime, location, url, isOnline } = req.body;
+    const { title, description, date, endDate, startTime, endTime, location, url, isOnline } = req.body;
     const updated = await db.event.update({
       where: { id },
       data: {
         title,
         description,
         date: date ? new Date(date) : undefined,
+        endDate: endDate !== undefined ? (endDate ? new Date(endDate) : null) : undefined,
         startTime,
         endTime,
         location,
@@ -1347,33 +1349,26 @@ app.delete('/api/v1/notifications', async (req: Request, res: Response) => {
   }
 });
 
-// 13. Non-Grid Vertical Time Feed (User Isolated)
+// 13. Non-Grid Vertical Time Feed (User Isolated) — Tasks & Events only
 app.get('/api/v1/time', async (req: Request, res: Response) => {
   try {
     const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
-    const now = new Date();
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    const [tasksToday, eventsUpcoming, remindersToday, habits] = await Promise.all([
+    const [tasksToday, eventsUpcoming] = await Promise.all([
       db.task.findMany({
         where: { userId: user.id, status: { in: ['TODO', 'IN_PROGRESS'] } },
         orderBy: { dueDate: 'asc' },
         include: { goal: true },
       }),
       db.event.findMany({
-        where: { userId: user.id },
+        where: { userId: user.id, date: { gte: new Date() } },
         orderBy: { date: 'asc' },
         include: { goal: true },
-      }),
-      db.reminder.findMany({
-        where: { userId: user.id, isCompleted: false },
-        orderBy: { remindAt: 'asc' },
-      }),
-      db.habit.findMany({
-        where: { userId: user.id },
+        take: 10,
       }),
     ]);
 
@@ -1401,9 +1396,6 @@ app.get('/api/v1/time', async (req: Request, res: Response) => {
         upcomingItems.push(item);
       }
     });
-
-    remindersToday.forEach((r: any) => nextItems.push({ type: 'REMINDER', ...r }));
-    habits.forEach((h: any) => nowItems.push({ type: 'HABIT', ...h }));
 
     return apiResponse(res, {
       now: nowItems,

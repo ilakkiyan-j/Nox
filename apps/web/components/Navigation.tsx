@@ -35,6 +35,7 @@ interface NavigationProps {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   onOpenProfile: () => void;
+  currentUser?: any;
 }
 
 export const navItems: { id: NavTab; label: string; icon: any }[] = [
@@ -51,7 +52,10 @@ export const navItems: { id: NavTab; label: string; icon: any }[] = [
   { id: 'time', label: 'Time', icon: Clock },
 ];
 
-export default function Navigation({ activeTab, setActiveTab, onOpenProfile }: NavigationProps) {
+export default function Navigation({ activeTab, setActiveTab, onOpenProfile, currentUser }: NavigationProps) {
+  const initials = currentUser?.name
+    ? currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'NA';
   return (
     <>
       {/* Desktop & Laptop Left Navigation Sidebar (Light/Dark Theme Parity) */}
@@ -107,12 +111,12 @@ export default function Navigation({ activeTab, setActiveTab, onOpenProfile }: N
           className="pt-4 border-t border-slate-200 dark:border-slate-800 px-3 flex items-center justify-between cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-800/70 p-2 rounded-xl transition-all"
         >
           <div className="flex items-center space-x-3 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-              NA
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-xs shadow-sm shrink-0">
+              {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">Nox Architect</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">user@nox.internal</p>
+              <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{currentUser?.name || 'Nox Architect'}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || 'user@nox.internal'}</p>
             </div>
           </div>
           <Settings className="w-4 h-4 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 shrink-0" />

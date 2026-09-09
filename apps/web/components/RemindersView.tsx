@@ -94,7 +94,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -116,25 +116,36 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
 
       {/* Create Form */}
       {showCreate && (
-        <form onSubmit={handleCreateReminder} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Set Reminder Prompt</h3>
+        <form onSubmit={handleCreateReminder} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Set Reminder Prompt</h3>
+            <button type="button" onClick={() => setShowCreate(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
           <input
             type="text"
             placeholder="Reminder Title (e.g. Prepare System Architecture Slides)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-600"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-600"
             required
           />
-          <div className="flex items-center space-x-3">
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Remind Date &amp; Time</label>
             <input
               type="datetime-local"
               value={remindAt}
               onChange={(e) => setRemindAt(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+              className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-600 [color-scheme:light] dark:[color-scheme:dark]"
               required
             />
-            <button type="submit" className="px-5 py-2 rounded-xl bg-amber-600 text-white text-xs font-semibold shadow-xs">
+          </div>
+          <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer">
+              Cancel
+            </button>
+            <button type="submit" className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer">
               Save Reminder
             </button>
           </div>
@@ -166,7 +177,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
               type="datetime-local"
               value={editingReminder.remindAt ? new Date(editingReminder.remindAt).toISOString().slice(0, 16) : ''}
               onChange={(e) => setEditingReminder({ ...editingReminder, remindAt: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-600 [color-scheme:light] dark:[color-scheme:dark]"
               required
             />
           </div>

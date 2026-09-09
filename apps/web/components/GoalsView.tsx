@@ -371,32 +371,59 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
 
       {/* Create Goal Form */}
       {showCreateGoal && (
-        <form onSubmit={handleCreateGoal} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Create New Outcome Goal</h3>
-          <input
-            type="text"
-            placeholder="Goal Title (e.g. Become a Senior FDE)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
-            required
-          />
-          <textarea
-            placeholder="Description and success criteria..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
-          />
-          <div className="flex items-center space-x-3">
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200"
-            />
-            <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold">
-              Save Goal
+        <form onSubmit={handleCreateGoal} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 shadow-lg space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+              <Target className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Create New Outcome Goal</span>
+            </h3>
+            <button type="button" onClick={() => setShowCreateGoal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+              <X className="w-4 h-4" />
             </button>
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Goal Title</label>
+            <input
+              type="text"
+              placeholder="e.g. Become a Senior Forward Deployed Engineer (FDE)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Description & Success Criteria</label>
+            <textarea
+              rows={3}
+              placeholder="Define success metrics, scope, and key deliverables..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 leading-relaxed"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Target Completion Date</label>
+              <input
+                type="date"
+                value={targetDate}
+                onChange={(e) => setTargetDate(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200"
+              />
+            </div>
+            <div className="flex items-end justify-end space-x-2 pt-2 sm:pt-0">
+              <button
+                type="button"
+                onClick={() => setShowCreateGoal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+              >
+                Cancel
+              </button>
+              <button type="submit" className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm">
+                Save Outcome Goal
+              </button>
+            </div>
           </div>
         </form>
       )}
@@ -409,28 +436,37 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
               <Compass className="w-4 h-4 text-violet-600 dark:text-violet-400" />
               <span>Create Progression Roadmap</span>
             </h3>
-            {/* Mode Switcher Tabs */}
-            <div className="flex items-center space-x-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+            <div className="flex items-center space-x-2">
+              {/* Mode Switcher Tabs */}
+              <div className="flex items-center space-x-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                <button
+                  onClick={() => setRoadmapMode('manual')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    roadmapMode === 'manual'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Manual
+                </button>
+                <button
+                  onClick={() => setRoadmapMode('json')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+                    roadmapMode === 'json'
+                      ? 'bg-violet-600 text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <FileCode className="w-3.5 h-3.5" />
+                  <span>Import JSON / Plan</span>
+                </button>
+              </div>
               <button
-                onClick={() => setRoadmapMode('manual')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  roadmapMode === 'manual'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
+                type="button"
+                onClick={() => setShowCreateRoadmap(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
               >
-                Manual
-              </button>
-              <button
-                onClick={() => setRoadmapMode('json')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
-                  roadmapMode === 'json'
-                    ? 'bg-violet-600 text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <FileCode className="w-3.5 h-3.5" />
-                <span>Import JSON / Plan</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -452,23 +488,37 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
           </div>
 
           {roadmapMode === 'manual' ? (
-            <form onSubmit={handleCreateRoadmap} className="space-y-3">
-              <input
-                type="text"
-                placeholder="Roadmap Title (e.g. FDE Foundation & Agent Systems)"
-                value={roadmapTitle}
-                onChange={(e) => setRoadmapTitle(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-violet-600"
-                required
-              />
-              <textarea
-                placeholder="Roadmap details and phases..."
-                value={roadmapDescription}
-                onChange={(e) => setRoadmapDescription(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-violet-600"
-              />
-              <div className="flex justify-end pt-2">
-                <button type="submit" className="px-5 py-2 rounded-xl bg-violet-600 text-white text-xs font-semibold shadow-sm">
+            <form onSubmit={handleCreateRoadmap} className="space-y-4">
+              <div>
+                <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Roadmap Title</label>
+                <input
+                  type="text"
+                  placeholder="Roadmap Title (e.g. FDE Foundation & Agent Systems)"
+                  value={roadmapTitle}
+                  onChange={(e) => setRoadmapTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-violet-600"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Roadmap Description & Strategy</label>
+                <textarea
+                  rows={4}
+                  placeholder="Describe this roadmap's vision, key outcomes, and multi-phase progression strategy..."
+                  value={roadmapDescription}
+                  onChange={(e) => setRoadmapDescription(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-violet-600 leading-relaxed"
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateRoadmap(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-sm">
                   Save Roadmap
                 </button>
               </div>

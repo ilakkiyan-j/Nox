@@ -148,6 +148,7 @@ model Event {
   title       String
   description String?
   date        DateTime
+  endDate     DateTime?
   startTime   String?   // e.g. "10:00 AM"
   endTime     String?   // e.g. "11:30 AM"
   location    String?

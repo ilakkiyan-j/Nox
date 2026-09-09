@@ -239,30 +239,35 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
 
       {/* Edit Learning Modal */}
       {editingLearning && (
-        <form onSubmit={handleUpdateLearning} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Learning Track</h3>
+        <form onSubmit={handleUpdateLearning} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 shadow-xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+              <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Edit Learning Track & Phases / Modules</span>
+            </h3>
             <button type="button" onClick={() => setEditingLearning(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
               <X className="w-4 h-4" />
             </button>
           </div>
+
           <div>
             <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Track Title</label>
             <input
               type="text"
               value={editingLearning.title}
               onChange={(e) => setEditingLearning({ ...editingLearning, title: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
               required
             />
           </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Type</label>
               <select
                 value={editingLearning.type || 'COURSE'}
                 onChange={(e) => setEditingLearning({ ...editingLearning, type: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
               >
                 <option value="COURSE">COURSE</option>
                 <option value="BOOK">BOOK</option>
@@ -276,7 +281,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
               <select
                 value={editingLearning.status || 'IN_PROGRESS'}
                 onChange={(e) => setEditingLearning({ ...editingLearning, status: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
               >
                 <option value="NOT_STARTED">NOT_STARTED</option>
                 <option value="IN_PROGRESS">IN_PROGRESS</option>
@@ -284,13 +289,59 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
               </select>
             </div>
           </div>
-          <div className="flex justify-end space-x-2 pt-2">
-            <button type="button" onClick={() => setEditingLearning(null)} className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+
+          {/* Inline Module / Phase Editor */}
+          <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Modules & Chapters ({editingLearning.modules?.length || 0})</label>
+              <button
+                type="button"
+                onClick={() => handleAddModule(editingLearning.id)}
+                className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center space-x-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Module</span>
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {editingLearning.modules?.map((m: any) => (
+                <div key={m.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-x-2">
+                  <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate flex-1">{m.title}</span>
+                  <div className="flex items-center space-x-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleRenameModule(m.id, m.title)}
+                      className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                      title="Edit Module Title"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteModule(m.id)}
+                      className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
+                      title="Delete Module"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setEditingLearning(null)}
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700"
+            >
               Cancel
             </button>
-            <button type="submit" className="px-4 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs">
+            <button type="submit" className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs flex items-center space-x-1">
               <Save className="w-3.5 h-3.5" />
-              <span>Update Track</span>
+              <span>Save Changes</span>
             </button>
           </div>
         </form>
