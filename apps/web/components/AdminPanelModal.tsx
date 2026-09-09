@@ -108,26 +108,26 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative max-h-[90vh] flex flex-col transition-colors">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-4">
+          <div className="flex items-center space-x-3 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h3 className="font-display font-bold text-xl text-slate-900 dark:text-slate-100">Admin Account Manager</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Provision user accounts and serve credentials (No self signup)</p>
+            <div className="min-w-0">
+              <h3 className="font-display font-bold text-xl text-slate-900 dark:text-slate-100 truncate">Admin Account Manager</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Provision user accounts and serve credentials (No self signup)</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 shrink-0">
             <button
               onClick={() => setShowCreate(!showCreate)}
-              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 flex items-center space-x-1.5 shadow-xs"
+              className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 flex items-center space-x-1.5 shadow-xs whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>Create Account</span>
             </button>
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg">
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg shrink-0">
               <X className="w-5 h-5" />
             </button>
           </div>

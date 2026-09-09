@@ -113,26 +113,26 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-8 space-y-6 max-w-5xl mx-auto transition-colors">
       {/* Header */}
-      <header className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs transition-colors">
-        <div className="flex items-center space-x-3">
+      <header className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs transition-colors">
+        <div className="flex items-center space-x-3.5 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-rose-600 flex items-center justify-center shadow-md shadow-rose-500/20 shrink-0">
             <Shield className="w-6 h-6 text-white" />
           </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">NOX Admin Control Panel</h1>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 uppercase font-mono">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">NOX Admin Control Panel</h1>
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 uppercase font-mono whitespace-nowrap shrink-0 border border-rose-200/60 dark:border-rose-900/60">
                 ADMIN ACCESS ONLY
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Account Provisioning & Credentials Server (Privacy Isolated)</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Account Provisioning & Credentials Server (Privacy Isolated)</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all flex items-center justify-center shrink-0"
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
@@ -141,7 +141,7 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
           {onOpenWorkstation && (
             <button
               onClick={onOpenWorkstation}
-              className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all flex items-center space-x-1"
+              className="px-4 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 shadow-2xs"
             >
               <span>Open Personal Workstation</span>
             </button>
@@ -149,7 +149,7 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
 
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all"
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>Create Account</span>
@@ -157,7 +157,7 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
 
           <button
             onClick={onSignOut}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-700 dark:text-slate-300 hover:text-rose-700 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all flex items-center space-x-1"
+            className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-700 dark:text-slate-300 hover:text-rose-700 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0"
           >
             <LogOut className="w-4 h-4" />
             <span>Sign Out</span>
@@ -295,10 +295,10 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
                 className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all"
               >
                 <div className="space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">{u.name}</h4>
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-slate-100 truncate">{u.name}</h4>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono whitespace-nowrap shrink-0 ${
                         u.role === 'ADMIN'
                           ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
                           : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
@@ -307,13 +307,13 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
                       {u.role}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{u.email}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">{u.email}</p>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 shrink-0">
                   <button
                     onClick={() => handleCopyCredentials(u)}
-                    className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all"
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap shrink-0 transition-all"
                   >
                     {copiedId === u.id ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />}
                     <span>{copiedId === u.id ? 'Copied Creds!' : 'Copy Creds'}</span>
@@ -321,7 +321,7 @@ export default function AdminDashboardView({ onSignOut, onOpenWorkstation }: Adm
 
                   <button
                     onClick={() => handleDeleteUser(u.id)}
-                    className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all"
+                    className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all shrink-0"
                     title="Revoke Account"
                   >
                     <Trash2 className="w-4 h-4" />
