@@ -26,6 +26,10 @@
     "second-self",
     "productivity"
   ],
+  "dependencies": {
+    "@types/node": "^20.14.12",
+    "typescript": "^5.5.4"
+  },
   "author": "",
   "license": "MIT"
 }
