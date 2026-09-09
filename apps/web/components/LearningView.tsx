@@ -69,6 +69,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
         body: JSON.stringify({
           title: editingLearning.title,
           type: editingLearning.type,
+          status: editingLearning.status,
         }),
       });
       setEditingLearning(null);
@@ -245,14 +246,49 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
               <X className="w-4 h-4" />
             </button>
           </div>
-          <input
-            type="text"
-            value={editingLearning.title}
-            onChange={(e) => setEditingLearning({ ...editingLearning, title: e.target.value })}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
-          />
-          <div className="flex justify-end space-x-2">
-            <button type="submit" className="px-4 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold flex items-center space-x-1">
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Track Title</label>
+            <input
+              type="text"
+              value={editingLearning.title}
+              onChange={(e) => setEditingLearning({ ...editingLearning, title: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Type</label>
+              <select
+                value={editingLearning.type || 'COURSE'}
+                onChange={(e) => setEditingLearning({ ...editingLearning, type: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+              >
+                <option value="COURSE">COURSE</option>
+                <option value="BOOK">BOOK</option>
+                <option value="CERTIFICATION">CERTIFICATION</option>
+                <option value="PRACTICE">PRACTICE</option>
+                <option value="TUTORIAL">TUTORIAL</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Status</label>
+              <select
+                value={editingLearning.status || 'IN_PROGRESS'}
+                onChange={(e) => setEditingLearning({ ...editingLearning, status: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+              >
+                <option value="NOT_STARTED">NOT_STARTED</option>
+                <option value="IN_PROGRESS">IN_PROGRESS</option>
+                <option value="COMPLETED">COMPLETED</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2 pt-2">
+            <button type="button" onClick={() => setEditingLearning(null)} className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+              Cancel
+            </button>
+            <button type="submit" className="px-4 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs">
               <Save className="w-3.5 h-3.5" />
               <span>Update Track</span>
             </button>

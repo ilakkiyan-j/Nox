@@ -7,15 +7,22 @@ const router = Router();
 router.get('/health', async (req: Request, res: Response) => {
   try {
     const startTime = Date.now();
-    await db.$queryRaw`SELECT 1`;
-    const dbLatency = Date.now() - startTime;
+    let dbConnected = true;
+    let dbLatency = 0;
+
+    try {
+      await db.$queryRaw`SELECT 1`;
+      dbLatency = Date.now() - startTime;
+    } catch (dbErr) {
+      dbConnected = false;
+    }
 
     return apiResponse(res, {
-      status: 'healthy',
+      status: dbConnected ? 'healthy' : 'degraded',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       database: {
-        connected: true,
+        connected: dbConnected,
         latencyMs: dbLatency,
       },
       environment: process.env.NODE_ENV || 'development',

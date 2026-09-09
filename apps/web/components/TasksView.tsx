@@ -60,8 +60,10 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
         body: JSON.stringify({
           title: editingTask.title,
           description: editingTask.description,
+          status: editingTask.status,
           priority: editingTask.priority,
-          dueDate: editingTask.dueDate,
+          dueDate: editingTask.dueDate || null,
+          goalId: editingTask.goalId || null,
         }),
       });
       setEditingTask(null);
@@ -205,24 +207,78 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
       {editingTask && (
         <form onSubmit={handleUpdateTask} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Action Item</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Action Item Details</h3>
             <button type="button" onClick={() => setEditingTask(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <input
-            type="text"
-            value={editingTask.title}
-            onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
-          />
-          <textarea
-            value={editingTask.description || ''}
-            onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
-          />
-          <div className="flex justify-end space-x-2">
-            <button type="submit" className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold flex items-center space-x-1">
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Task Title</label>
+            <input
+              type="text"
+              value={editingTask.title}
+              onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Description</label>
+            <textarea
+              value={editingTask.description || ''}
+              onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+              rows={3}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Priority Level</label>
+              <select
+                value={editingTask.priority || 'MEDIUM'}
+                onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+              >
+                <option value="LOW">LOW</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HIGH">HIGH</option>
+                <option value="URGENT">URGENT</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Due Date</label>
+              <input
+                type="date"
+                value={editingTask.dueDate ? new Date(editingTask.dueDate).toISOString().split('T')[0] : ''}
+                onChange={(e) => setEditingTask({ ...editingTask, dueDate: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Linked Goal</label>
+              <select
+                value={editingTask.goalId || ''}
+                onChange={(e) => setEditingTask({ ...editingTask, goalId: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+              >
+                <option value="">No linked goal</option>
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    🎯 {g.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-2">
+            <button type="button" onClick={() => setEditingTask(null)} className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+              Cancel
+            </button>
+            <button type="submit" className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs">
               <Save className="w-3.5 h-3.5" />
               <span>Update Task</span>
             </button>

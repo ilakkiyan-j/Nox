@@ -58,6 +58,7 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
           title: editingHabit.title,
           frequency: editingHabit.frequency,
           reminderTime: editingHabit.reminderTime,
+          targetCount: editingHabit.targetCount,
         }),
       });
       setEditingHabit(null);
@@ -166,19 +167,59 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
       {editingHabit && (
         <form onSubmit={handleUpdateHabit} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Habit</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Habit Details</h3>
             <button type="button" onClick={() => setEditingHabit(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <input
-            type="text"
-            value={editingHabit.title}
-            onChange={(e) => setEditingHabit({ ...editingHabit, title: e.target.value })}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
-          />
-          <div className="flex justify-end space-x-2">
-            <button type="submit" className="px-4 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold flex items-center space-x-1">
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Habit Title</label>
+            <input
+              type="text"
+              value={editingHabit.title}
+              onChange={(e) => setEditingHabit({ ...editingHabit, title: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Frequency</label>
+              <select
+                value={editingHabit.frequency || 'DAILY'}
+                onChange={(e) => setEditingHabit({ ...editingHabit, frequency: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
+              >
+                <option value="DAILY">DAILY</option>
+                <option value="WEEKLY">WEEKLY</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Target Count / Day</label>
+              <input
+                type="number"
+                min={1}
+                value={editingHabit.targetCount || 1}
+                onChange={(e) => setEditingHabit({ ...editingHabit, targetCount: parseInt(e.target.value) || 1 })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Reminder Time</label>
+              <input
+                type="text"
+                value={editingHabit.reminderTime || ''}
+                onChange={(e) => setEditingHabit({ ...editingHabit, reminderTime: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+                placeholder="08:00 AM"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2 pt-2">
+            <button type="button" onClick={() => setEditingHabit(null)} className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+              Cancel
+            </button>
+            <button type="submit" className="px-4 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs">
               <Save className="w-3.5 h-3.5" />
               <span>Update Habit</span>
             </button>

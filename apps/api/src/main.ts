@@ -331,14 +331,15 @@ app.post('/api/v1/goals', async (req: Request, res: Response) => {
 app.patch('/api/v1/goals/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, description, status, targetDate } = req.body;
+    const { title, description, status, targetDate, startDate } = req.body;
     const updated = await db.goal.update({
       where: { id },
       data: {
         title,
         description,
         status,
-        targetDate: targetDate ? new Date(targetDate) : undefined,
+        targetDate: targetDate !== undefined ? (targetDate ? new Date(targetDate) : null) : undefined,
+        startDate: startDate !== undefined ? (startDate ? new Date(startDate) : null) : undefined,
       },
     });
     return apiResponse(res, updated);
@@ -642,7 +643,7 @@ app.post('/api/v1/tasks', async (req: Request, res: Response) => {
 app.patch('/api/v1/tasks/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, description, status, priority, dueDate, goalId } = req.body;
+    const { title, description, status, priority, dueDate, estimatedMinutes, goalId } = req.body;
     const updated = await db.task.update({
       where: { id },
       data: {
@@ -650,8 +651,9 @@ app.patch('/api/v1/tasks/:id', async (req: Request, res: Response) => {
         description,
         status,
         priority,
-        dueDate: dueDate ? new Date(dueDate) : undefined,
-        goalId,
+        dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : undefined,
+        estimatedMinutes: estimatedMinutes !== undefined ? (estimatedMinutes ? parseInt(estimatedMinutes) : null) : undefined,
+        goalId: goalId !== undefined ? (goalId || null) : undefined,
       },
     });
     return apiResponse(res, updated);
@@ -955,11 +957,12 @@ app.post('/api/v1/habits', async (req: Request, res: Response) => {
 app.patch('/api/v1/habits/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, frequency, reminderTime } = req.body;
+    const { title, frequency, reminderTime, targetCount } = req.body;
     const dataToUpdate: any = {};
     if (title !== undefined) dataToUpdate.title = title;
     if (frequency !== undefined) dataToUpdate.frequency = frequency;
     if (reminderTime !== undefined) dataToUpdate.reminderTime = reminderTime;
+    if (targetCount !== undefined) dataToUpdate.targetCount = typeof targetCount === 'number' ? targetCount : parseInt(targetCount);
 
     const updated = await db.habit.update({
       where: { id },

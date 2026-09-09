@@ -145,19 +145,36 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
       {editingReminder && (
         <form onSubmit={handleUpdateReminder} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Reminder</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Reminder Prompt</h3>
             <button type="button" onClick={() => setEditingReminder(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <input
-            type="text"
-            value={editingReminder.title}
-            onChange={(e) => setEditingReminder({ ...editingReminder, title: e.target.value })}
-            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
-          />
-          <div className="flex justify-end space-x-2">
-            <button type="submit" className="px-4 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold flex items-center space-x-1">
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Title</label>
+            <input
+              type="text"
+              value={editingReminder.title}
+              onChange={(e) => setEditingReminder({ ...editingReminder, title: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Remind Date & Time</label>
+            <input
+              type="datetime-local"
+              value={editingReminder.remindAt ? new Date(editingReminder.remindAt).toISOString().slice(0, 16) : ''}
+              onChange={(e) => setEditingReminder({ ...editingReminder, remindAt: e.target.value })}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+              required
+            />
+          </div>
+          <div className="flex justify-end space-x-2 pt-2">
+            <button type="button" onClick={() => setEditingReminder(null)} className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+              Cancel
+            </button>
+            <button type="submit" className="px-4 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold flex items-center space-x-1 shadow-xs">
               <Save className="w-3.5 h-3.5" />
               <span>Update Reminder</span>
             </button>
