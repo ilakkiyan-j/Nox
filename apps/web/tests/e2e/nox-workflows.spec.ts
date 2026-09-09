@@ -25,7 +25,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     await openBtn.click();
 
     // Default theme is Dark Mode ('Switch to Light Mode' title displayed)
-    const themeToggleBtn = page.getByTitle(/Switch to Light Mode/i);
+    const themeToggleBtn = page.getByTitle(/Switch to Light Mode/i).first();
     await expect(themeToggleBtn).toBeVisible();
 
     // Toggle to Light Mode
@@ -34,7 +34,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     await expect(htmlElem).not.toHaveClass(/dark/);
 
     // Toggle back to Dark Mode
-    const darkToggleBtn = page.getByTitle(/Switch to Dark Mode/i);
+    const darkToggleBtn = page.getByTitle(/Switch to Dark Mode/i).first();
     await expect(darkToggleBtn).toBeVisible();
     await darkToggleBtn.click();
     await expect(htmlElem).toHaveClass(/dark/);

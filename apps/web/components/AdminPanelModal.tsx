@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Shield, Plus, X, User, Mail, Lock, Key, Copy, Check, Trash2, RefreshCw } from 'lucide-react';
+import { Shield, Plus, X, User, Mail, Lock, Key, Copy, Check, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { API_BASE_URL } from '../lib/api';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Form state
   const [name, setName] = useState('');
@@ -22,13 +24,17 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
 
   const fetchUsers = async () => {
     setLoading(true);
+    setErrorMsg('');
     try {
-      const res = await fetch('http://localhost:4000/api/v1/admin/users');
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users`);
       const data = await res.json();
       if (data.success) {
         setUsers(data.data);
+      } else {
+        setErrorMsg(data.error?.message || 'Failed to fetch user directory');
       }
     } catch (err) {
+      setErrorMsg('Cannot connect to backend API server');
       console.error(err);
     } finally {
       setLoading(false);
@@ -49,31 +55,44 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password.trim()) return;
+    setErrorMsg('');
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/admin/users', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, role }),
       });
 
-      if (res.ok) {
+      const data = await res.json();
+
+      if (res.ok && data.success) {
         setName('');
         setEmail('');
         setPassword('');
         setShowCreate(false);
         fetchUsers();
+      } else {
+        setErrorMsg(data.error?.message || 'Failed to provision account');
       }
     } catch (err) {
+      setErrorMsg('Server error during account creation');
       console.error(err);
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
+    setErrorMsg('');
     try {
-      await fetch(`http://localhost:4000/api/v1/admin/users/${userId}`, { method: 'DELETE' });
-      fetchUsers();
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchUsers();
+      } else {
+        const data = await res.json();
+        setErrorMsg(data.error?.message || 'Failed to delete user');
+      }
     } catch (err) {
+      setErrorMsg('Server connection error');
       console.error(err);
     }
   };
@@ -87,11 +106,11 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative max-h-[90vh] flex flex-col">
+      <div className="w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative max-h-[90vh] flex flex-col transition-colors">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
               <Shield className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -114,9 +133,16 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {/* Create User Form */}
         {showCreate && (
-          <form onSubmit={handleCreateUser} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-indigo-200 dark:border-indigo-800 space-y-3 shadow-xs">
+          <form onSubmit={handleCreateUser} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-indigo-200 dark:border-indigo-800 space-y-3 shadow-xs transition-colors">
             <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">Provision New Account</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -198,6 +224,8 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {loading ? (
             <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-6">Loading user directory...</p>
+          ) : users.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-6">No user accounts found.</p>
           ) : (
             users.map((u) => (
               <div
@@ -227,7 +255,7 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
 
                 <div className="flex items-center space-x-2">
                   <div className="text-right hidden sm:block">
-                    <span className="text-[10px] text-slate-500 block font-mono">Password:</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-mono">Password:</span>
                     <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                       {u.password}
                     </span>

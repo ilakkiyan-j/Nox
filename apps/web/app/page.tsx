@@ -22,12 +22,14 @@ import NotesView from '../components/NotesView';
 import NotificationsView from '../components/NotificationsView';
 import TimeView from '../components/TimeView';
 import RemindersView from '../components/RemindersView';
+import { API_BASE_URL } from '../lib/api';
 
-const API_BASE = 'http://localhost:4000/api/v1';
+const API_BASE = `${API_BASE_URL}/api/v1`;
 
 export default function Home() {
   const [viewMode, setViewMode] = useState<'landing' | 'app'>('landing');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [adminMode, setAdminMode] = useState(false);
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -89,6 +91,11 @@ export default function Home() {
 
   const handleLoginSuccess = (user: any) => {
     setCurrentUser(user);
+    if (user?.role === 'ADMIN') {
+      setAdminMode(true);
+    } else {
+      setAdminMode(false);
+    }
     setViewMode('app');
   };
 
@@ -155,12 +162,14 @@ export default function Home() {
             onLoginSuccess={handleLoginSuccess}
           />
         </>
-      ) : currentUser?.role === 'ADMIN' ? (
+      ) : currentUser?.role === 'ADMIN' && adminMode ? (
         <AdminDashboardView
           onSignOut={() => {
             setCurrentUser(null);
+            setAdminMode(false);
             setViewMode('landing');
           }}
+          onOpenWorkstation={() => setAdminMode(false)}
         />
       ) : (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex relative text-slate-900 dark:text-slate-100 transition-colors">
