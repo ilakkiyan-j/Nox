@@ -6,7 +6,11 @@
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "baseUrl": ".",
+    "paths": {
+      "@nox/database": ["../../packages/database/src/index.ts"]
+    }
   },
   "include": ["src/**/*", "tests/**/*"]
 }
