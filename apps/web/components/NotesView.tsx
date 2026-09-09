@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { StickyNote, Folder, Link as LinkIcon, Trash2, Edit2, ExternalLink, Plus, X, Save } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface NotesViewProps {
   notes: any[];
@@ -41,7 +42,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
     if (!editingNote) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/notes/${editingNote.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${editingNote.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -67,7 +68,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       initialValue: currentName,
       onSubmit: async (val: string) => {
         try {
-          await fetch(`http://localhost:4000/api/v1/folders/${folderId}`, {
+          await fetchWithUser(`${API_BASE_URL}/api/v1/folders/${folderId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
@@ -87,7 +88,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       message: 'Are you sure you want to delete this Note?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/notes/${noteId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${noteId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -104,7 +105,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       initialValue: '',
       onSubmit: async (val: string) => {
         try {
-          await fetch('http://localhost:4000/api/v1/folders', {
+          await fetchWithUser(`${API_BASE_URL}/api/v1/folders`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
@@ -125,7 +126,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       message: `Are you sure you want to delete folder "${folderName}"? Notes inside will be moved to Unsorted.`,
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/folders/${folderId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/folders/${folderId}`, { method: 'DELETE' });
           if (selectedFolderId === folderId) setSelectedFolderId(null);
           onRefresh();
         } catch (err) {

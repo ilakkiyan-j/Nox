@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Clipboard, Link as LinkIcon, Folder, Tag, Save } from 'lucide-react';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface QuickCaptureModalProps {
   isOpen: boolean;
@@ -25,7 +26,7 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved }: QuickCap
 
     setSaving(true);
     try {
-      const res = await fetch('http://localhost:4000/api/v1/notes', {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -14,6 +14,7 @@ import {
   Filter,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface NotificationsViewProps {
   notifications: any[];
@@ -36,7 +37,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      await fetch(`http://localhost:4000/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}/read`, { method: 'PATCH' });
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -45,7 +46,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
 
   const handleMarkAllRead = async () => {
     try {
-      await fetch('http://localhost:4000/api/v1/notifications/mark-all-read', { method: 'PATCH' });
+      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/mark-all-read`, { method: 'PATCH' });
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -59,7 +60,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
       message: 'Are you sure you want to delete this notification alert?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/notifications/${id}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -75,7 +76,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
       message: 'Are you sure you want to clear all notification history?',
       onConfirm: async () => {
         try {
-          await fetch('http://localhost:4000/api/v1/notifications', { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/notifications`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -89,7 +90,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
     if (!newTitle.trim() || !newMessage.trim()) return;
 
     try {
-      await fetch('http://localhost:4000/api/v1/notifications', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

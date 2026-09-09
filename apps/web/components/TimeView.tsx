@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Clock, Zap, ArrowRight, Calendar, CheckSquare, AlarmClock, Flame, Plus } from 'lucide-react';
 import { NavTab } from './Navigation';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface TimeViewProps {
   onNavigate?: (tab: NavTab) => void;
@@ -22,7 +23,7 @@ export default function TimeView({ onNavigate }: TimeViewProps) {
 
   const fetchTimeFeed = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/v1/time');
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/time`);
       const data = await res.json();
       if (data.success) {
         setTimeData(data.data);

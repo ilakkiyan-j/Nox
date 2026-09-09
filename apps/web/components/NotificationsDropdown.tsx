@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Bell, Trophy, Calendar, Flame, X, Check } from 'lucide-react';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface NotificationsDropdownProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ export default function NotificationsDropdown({
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      await fetch(`http://localhost:4000/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}/read`, { method: 'PATCH' });
       onRefresh();
     } catch (err) {
       console.error(err);

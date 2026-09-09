@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Target, CheckSquare, Calendar, Flame, StickyNote, ArrowRight, Zap, CheckCircle2, Trash2, Edit2 } from 'lucide-react';
 import { NavTab } from './Navigation';
 import ConfirmModal from './ConfirmModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface DashboardViewProps {
   data: any;
@@ -33,7 +34,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
 
   const handleHabitCheckin = async (habitId: string) => {
     try {
-      await fetch(`http://localhost:4000/api/v1/habits/${habitId}/log`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),
@@ -47,7 +48,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
   const handleTaskToggle = async (taskId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'TODO' : 'COMPLETED';
     try {
-      await fetch(`http://localhost:4000/api/v1/tasks/${taskId}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -65,7 +66,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
       message: `Are you sure you want to delete this ${name}?`,
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/${endpoint}/${id}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/${endpoint}/${id}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);

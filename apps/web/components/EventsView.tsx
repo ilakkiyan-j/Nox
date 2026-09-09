@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, Plus, MapPin, ExternalLink, Globe, Edit2, Trash2, X, Save } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface EventsViewProps {
   events: any[];
@@ -32,7 +33,7 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
     if (!title.trim() || !date) return;
 
     try {
-      await fetch('http://localhost:4000/api/v1/events', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,7 +67,7 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
     if (!editingEvent) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/events/${editingEvent.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/events/${editingEvent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,7 +91,7 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
       message: 'Are you sure you want to delete this Event?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/events/${eventId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/events/${eventId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);

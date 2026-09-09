@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface LearningViewProps {
   learning: any[];
@@ -43,7 +44,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       : [];
 
     try {
-      await fetch('http://localhost:4000/api/v1/learning', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/learning`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, type, modules }),
@@ -62,7 +63,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
     if (!editingLearning) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/learning/${editingLearning.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${editingLearning.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,7 +85,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       message: 'Are you sure you want to delete this Learning item and all modules?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/learning/${learningId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -96,7 +97,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
   const handleToggleModule = async (moduleId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'NOT_STARTED' : 'COMPLETED';
     try {
-      await fetch(`http://localhost:4000/api/v1/learning/modules/${moduleId}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -115,7 +116,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       initialValue: '',
       onSubmit: async (val: string) => {
         try {
-          await fetch(`http://localhost:4000/api/v1/learning/${learningId}/modules`, {
+          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}/modules`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: val }),
@@ -135,7 +136,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       message: 'Are you sure you want to delete this Module?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/learning/modules/${moduleId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -152,7 +153,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       initialValue: currentTitle,
       onSubmit: async (val: string) => {
         try {
-          await fetch(`http://localhost:4000/api/v1/learning/modules/${moduleId}`, {
+          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: val }),

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { CheckSquare, Plus, CheckCircle2, Clock, Edit2, Trash2, X, Save } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface TasksViewProps {
   tasks: any[];
@@ -26,7 +27,7 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
     if (!title.trim()) return;
 
     try {
-      await fetch('http://localhost:4000/api/v1/tasks', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -53,7 +54,7 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
     if (!editingTask) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/tasks/${editingTask.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${editingTask.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,7 +85,7 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
       message: 'Are you sure you want to delete this task?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/tasks/${taskId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -96,7 +97,7 @@ export default function TasksView({ tasks, goals, onRefresh }: TasksViewProps) {
   const handleToggleTask = async (taskId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'TODO' : 'COMPLETED';
     try {
-      await fetch(`http://localhost:4000/api/v1/tasks/${taskId}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, X, Target, CheckSquare, Calendar, StickyNote, GraduationCap } from 'lucide-react';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -43,7 +44,7 @@ export default function CommandPalette({ isOpen, onClose, onSelectEntity }: Comm
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:4000/api/v1/search?q=${encodeURIComponent(query)}`);
+        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/search?q=${encodeURIComponent(query)}`);
         const data = await res.json();
         if (data.success) {
           setResults(data.data);

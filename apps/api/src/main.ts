@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import { db } from '../../../packages/database/dist';
+import { db } from '@nox/database';
 import healthRouter from './routes/health';
 import { globalErrorHandler } from './middleware/error';
 
@@ -57,6 +57,22 @@ function apiError(res: Response, message: string, status = 400, details?: any) {
   });
 }
 
+// User Context Resolver: Resolves logged-in user from headers/params or falls back to first seed user
+async function getTargetUser(req: Request) {
+  const headerId = req.headers['x-user-id'] as string;
+  const queryId = req.query.userId as string;
+  const bodyId = req.body?.userId as string;
+  const requestedId = headerId || queryId || bodyId;
+
+  if (requestedId && typeof requestedId === 'string' && requestedId.trim().length > 0) {
+    const found = await db.user.findUnique({ where: { id: requestedId.trim() } });
+    if (found) return found;
+  }
+
+  const defaultUser = await db.user.findFirst();
+  return defaultUser;
+}
+
 // 1. Auth Login (Gmail & Password validation)
 app.post('/api/v1/auth/login', async (req: Request, res: Response) => {
   try {
@@ -81,7 +97,8 @@ app.post('/api/v1/auth/login', async (req: Request, res: Response) => {
 
 app.get('/api/v1/auth/me', async (req: Request, res: Response) => {
   try {
-    const user = (await db.user.findFirst({ where: { role: 'USER' } })) || (await db.user.findFirst());
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'No user found', 404);
     return apiResponse(res, user);
   } catch (err: any) {
     return apiError(res, err.message, 500);
@@ -173,17 +190,35 @@ app.patch('/api/v1/admin/users/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/admin/users/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.user.delete({ where: { id } });
+    
+    // Cascading delete for user data
+    await db.$transaction([
+      db.habitLog.deleteMany({ where: { habit: { userId: id } } }),
+      db.learningModule.deleteMany({ where: { learning: { userId: id } } }),
+      db.task.deleteMany({ where: { userId: id } }),
+      db.milestone.deleteMany({ where: { goal: { userId: id } } }),
+      db.roadmap.deleteMany({ where: { goal: { userId: id } } }),
+      db.goal.deleteMany({ where: { userId: id } }),
+      db.event.deleteMany({ where: { userId: id } }),
+      db.learning.deleteMany({ where: { userId: id } }),
+      db.habit.deleteMany({ where: { userId: id } }),
+      db.note.deleteMany({ where: { userId: id } }),
+      db.folder.deleteMany({ where: { userId: id } }),
+      db.reminder.deleteMany({ where: { userId: id } }),
+      db.notification.deleteMany({ where: { userId: id } }),
+      db.user.delete({ where: { id } }),
+    ]);
+
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
   }
 });
 
-// 3. Dashboard Aggregation Endpoint
+// 3. Dashboard Aggregation Endpoint (User Isolated)
 app.get('/api/v1/dashboard', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
     const [tasks, upcomingEvents, activeGoals, activeLearning, habits, reminders, unreadNotifications, recentNotes] = await Promise.all([
@@ -246,10 +281,14 @@ app.get('/api/v1/dashboard', async (req: Request, res: Response) => {
   }
 });
 
-// 4. Goals CRUD (GET, POST, PATCH, DELETE)
+// 4. Goals CRUD (User Isolated)
 app.get('/api/v1/goals', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const goals = await db.goal.findMany({
+      where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
       include: {
         roadmaps: { include: { milestones: true } },
@@ -268,7 +307,7 @@ app.get('/api/v1/goals', async (req: Request, res: Response) => {
 
 app.post('/api/v1/goals', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { title, description, targetDate, startDate, status } = req.body;
     if (!title) return apiError(res, 'Title is required');
@@ -311,17 +350,33 @@ app.patch('/api/v1/goals/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/goals/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.goal.delete({ where: { id } });
+    
+    // Safe cascading delete for Goal and child entities
+    await db.$transaction([
+      db.task.deleteMany({ where: { goalId: id } }),
+      db.milestone.deleteMany({ where: { goalId: id } }),
+      db.roadmap.deleteMany({ where: { goalId: id } }),
+      db.learning.deleteMany({ where: { goalId: id } }),
+      db.event.deleteMany({ where: { goalId: id } }),
+      db.note.deleteMany({ where: { goalId: id } }),
+      db.reminder.deleteMany({ where: { entityType: 'GOAL', entityId: id } }),
+      db.goal.delete({ where: { id } }),
+    ]);
+
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
   }
 });
 
-// 5. Roadmaps CRUD (GET, POST, PATCH, DELETE)
+// 5. Roadmaps CRUD (User Isolated)
 app.get('/api/v1/roadmaps', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const roadmaps = await db.roadmap.findMany({
+      where: { goal: { userId: user.id } },
       include: { goal: true, milestones: true, tasks: true, learnings: true },
     });
     return apiResponse(res, roadmaps);
@@ -344,7 +399,7 @@ app.post('/api/v1/roadmaps', async (req: Request, res: Response) => {
 
 app.post('/api/v1/roadmaps/import', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
     const { goalId, title, description, milestones } = req.body;
@@ -444,7 +499,11 @@ app.patch('/api/v1/roadmaps/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/roadmaps/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.roadmap.delete({ where: { id } });
+    await db.$transaction([
+      db.task.deleteMany({ where: { roadmapId: id } }),
+      db.milestone.deleteMany({ where: { roadmapId: id } }),
+      db.roadmap.delete({ where: { id } }),
+    ]);
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
@@ -453,7 +512,11 @@ app.delete('/api/v1/roadmaps/:id', async (req: Request, res: Response) => {
 
 app.get('/api/v1/milestones', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const milestones = await db.milestone.findMany({
+      where: { OR: [{ goal: { userId: user.id } }, { roadmap: { goal: { userId: user.id } } }] },
       include: { goal: true, roadmap: true, tasks: true },
       orderBy: { order: 'asc' },
     });
@@ -497,7 +560,7 @@ app.patch('/api/v1/milestones/:id', async (req: Request, res: Response) => {
     });
 
     if (status === 'COMPLETED') {
-      const user = await db.user.findFirst();
+      const user = await getTargetUser(req);
       if (user) {
         await db.notification.create({
           data: {
@@ -521,17 +584,24 @@ app.patch('/api/v1/milestones/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/milestones/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.milestone.delete({ where: { id } });
+    await db.$transaction([
+      db.task.deleteMany({ where: { milestoneId: id } }),
+      db.milestone.delete({ where: { id } }),
+    ]);
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
   }
 });
 
-// 6. Tasks CRUD (GET, POST, PATCH, DELETE)
+// 6. Tasks CRUD (User Isolated)
 app.get('/api/v1/tasks', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const tasks = await db.task.findMany({
+      where: { userId: user.id },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
       include: { goal: true, roadmap: true, milestone: true, learning: true, event: true },
     });
@@ -543,7 +613,7 @@ app.get('/api/v1/tasks', async (req: Request, res: Response) => {
 
 app.post('/api/v1/tasks', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { title, description, priority, dueDate, estimatedMinutes, goalId, roadmapId, milestoneId, learningId, eventId } = req.body;
     if (!title) return apiError(res, 'Task title required');
@@ -593,17 +663,24 @@ app.patch('/api/v1/tasks/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/tasks/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.task.delete({ where: { id } });
+    await db.$transaction([
+      db.note.deleteMany({ where: { taskId: id } }),
+      db.task.delete({ where: { id } }),
+    ]);
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
   }
 });
 
-// 7. Learning CRUD (GET, POST, PATCH, DELETE)
+// 7. Learning CRUD (User Isolated)
 app.get('/api/v1/learning', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const learning = await db.learning.findMany({
+      where: { userId: user.id },
       include: { modules: { orderBy: { order: 'asc' } }, goal: true, tasks: true, notes: true },
     });
     return apiResponse(res, learning);
@@ -614,7 +691,7 @@ app.get('/api/v1/learning', async (req: Request, res: Response) => {
 
 app.post('/api/v1/learning', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { title, type, goalId, modules } = req.body;
 
@@ -659,7 +736,12 @@ app.patch('/api/v1/learning/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/learning/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.learning.delete({ where: { id } });
+    await db.$transaction([
+      db.learningModule.deleteMany({ where: { learningId: id } }),
+      db.task.deleteMany({ where: { learningId: id } }),
+      db.note.deleteMany({ where: { learningId: id } }),
+      db.learning.delete({ where: { id } }),
+    ]);
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
@@ -753,10 +835,14 @@ app.delete('/api/v1/learning/modules/:id', async (req: Request, res: Response) =
   }
 });
 
-// 8. Events CRUD (GET, POST, PATCH, DELETE)
+// 8. Events CRUD (User Isolated)
 app.get('/api/v1/events', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const events = await db.event.findMany({
+      where: { userId: user.id },
       orderBy: { date: 'asc' },
       include: { goal: true, tasks: true, notes: true },
     });
@@ -768,7 +854,7 @@ app.get('/api/v1/events', async (req: Request, res: Response) => {
 
 app.post('/api/v1/events', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { title, description, date, startTime, endTime, location, url, isOnline, goalId } = req.body;
 
@@ -818,17 +904,25 @@ app.patch('/api/v1/events/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/events/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.event.delete({ where: { id } });
+    await db.$transaction([
+      db.task.deleteMany({ where: { eventId: id } }),
+      db.note.deleteMany({ where: { eventId: id } }),
+      db.event.delete({ where: { id } }),
+    ]);
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
   }
 });
 
-// 9. Habits CRUD & Check-in (GET, POST, PATCH, DELETE)
+// 9. Habits CRUD & Check-in (User Isolated)
 app.get('/api/v1/habits', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const habits = await db.habit.findMany({
+      where: { userId: user.id },
       include: { logs: { orderBy: { createdAt: 'desc' } } },
     });
     return apiResponse(res, habits);
@@ -839,7 +933,7 @@ app.get('/api/v1/habits', async (req: Request, res: Response) => {
 
 app.post('/api/v1/habits', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { title, frequency, targetCount, reminderTime } = req.body;
 
@@ -880,8 +974,10 @@ app.patch('/api/v1/habits/:id', async (req: Request, res: Response) => {
 app.delete('/api/v1/habits/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await db.habitLog.deleteMany({ where: { habitId: id } });
-    await db.habit.delete({ where: { id } });
+    await db.$transaction([
+      db.habitLog.deleteMany({ where: { habitId: id } }),
+      db.habit.delete({ where: { id } }),
+    ]);
     return apiResponse(res, { deleted: true, id });
   } catch (err: any) {
     return apiError(res, err.message, 500);
@@ -931,10 +1027,14 @@ app.post('/api/v1/habits/:id/log', async (req: Request, res: Response) => {
   }
 });
 
-// 10. Notes & Folders (GET, POST, PATCH, DELETE)
+// 10. Notes & Folders (User Isolated)
 app.get('/api/v1/folders', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const folders = await db.folder.findMany({
+      where: { userId: user.id },
       include: { _count: { select: { notes: true } } },
       orderBy: { createdAt: 'asc' },
     });
@@ -946,7 +1046,7 @@ app.get('/api/v1/folders', async (req: Request, res: Response) => {
 
 app.post('/api/v1/folders', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { name, icon, color } = req.body;
 
@@ -971,13 +1071,15 @@ app.delete('/api/v1/folders/:id', async (req: Request, res: Response) => {
     if (!folder) return apiError(res, 'Folder not found', 404);
     if (folder.isSystem) return apiError(res, 'Cannot delete system folders', 400);
 
-    // Reassign notes to Unsorted system folder
-    const unsorted = await db.folder.findFirst({ where: { isSystem: true, name: 'Unsorted' } });
-    if (unsorted) {
-      await db.note.updateMany({
-        where: { folderId: id },
-        data: { folderId: unsorted.id },
-      });
+    const user = await getTargetUser(req);
+    if (user) {
+      const unsorted = await db.folder.findFirst({ where: { userId: user.id, isSystem: true, name: 'Unsorted' } });
+      if (unsorted) {
+        await db.note.updateMany({
+          where: { folderId: id },
+          data: { folderId: unsorted.id },
+        });
+      }
     }
 
     await db.folder.delete({ where: { id } });
@@ -1003,8 +1105,11 @@ app.patch('/api/v1/folders/:id', async (req: Request, res: Response) => {
 
 app.get('/api/v1/notes', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const { folderId } = req.query;
-    const where: any = {};
+    const where: any = { userId: user.id };
     if (folderId) where.folderId = folderId as string;
 
     const notes = await db.note.findMany({
@@ -1020,13 +1125,13 @@ app.get('/api/v1/notes', async (req: Request, res: Response) => {
 
 app.post('/api/v1/notes', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { title, content, url, folderId, tags, goalId, taskId, eventId, learningId } = req.body;
 
     let targetFolderId = folderId;
     if (!targetFolderId) {
-      const unsorted = await db.folder.findFirst({ where: { isSystem: true, name: 'Unsorted' } });
+      const unsorted = await db.folder.findFirst({ where: { userId: user.id, isSystem: true, name: 'Unsorted' } });
       if (unsorted) targetFolderId = unsorted.id;
     }
 
@@ -1081,10 +1186,14 @@ app.delete('/api/v1/notes/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 11. Reminders (GET, POST, PATCH, DELETE)
+// 11. Reminders (User Isolated)
 app.get('/api/v1/reminders', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const reminders = await db.reminder.findMany({
+      where: { userId: user.id },
       orderBy: { remindAt: 'asc' },
     });
     return apiResponse(res, reminders);
@@ -1095,7 +1204,7 @@ app.get('/api/v1/reminders', async (req: Request, res: Response) => {
 
 app.post('/api/v1/reminders', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
     const { title, remindAt, entityType, entityId } = req.body;
 
@@ -1142,10 +1251,10 @@ app.delete('/api/v1/reminders/:id', async (req: Request, res: Response) => {
   }
 });
 
-// 12. Notifications Center API Endpoints
+// 12. Notifications Center API Endpoints (User Isolated)
 app.get('/api/v1/notifications', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
     const notifications = await db.notification.findMany({
@@ -1161,7 +1270,7 @@ app.get('/api/v1/notifications', async (req: Request, res: Response) => {
 
 app.post('/api/v1/notifications', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
     const { title, message, type, entityType, entityId } = req.body;
@@ -1187,7 +1296,7 @@ app.post('/api/v1/notifications', async (req: Request, res: Response) => {
 
 app.patch('/api/v1/notifications/mark-all-read', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
     await db.notification.updateMany({
@@ -1225,7 +1334,7 @@ app.delete('/api/v1/notifications/:id', async (req: Request, res: Response) => {
 
 app.delete('/api/v1/notifications', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
     await db.notification.deleteMany({ where: { userId: user.id } });
@@ -1235,10 +1344,10 @@ app.delete('/api/v1/notifications', async (req: Request, res: Response) => {
   }
 });
 
-// 13. Non-Grid Vertical Time Feed
+// 13. Non-Grid Vertical Time Feed (User Isolated)
 app.get('/api/v1/time', async (req: Request, res: Response) => {
   try {
-    const user = await db.user.findFirst();
+    const user = await getTargetUser(req);
     if (!user) return apiError(res, 'User not found', 404);
 
     const now = new Date();
@@ -1303,9 +1412,12 @@ app.get('/api/v1/time', async (req: Request, res: Response) => {
   }
 });
 
-// 14. Global Cross-Entity Search
+// 14. Global Cross-Entity Search (User Isolated)
 app.get('/api/v1/search', async (req: Request, res: Response) => {
   try {
+    const user = await getTargetUser(req);
+    if (!user) return apiError(res, 'User not found', 404);
+
     const query = (req.query.q as string) || '';
     if (!query || query.trim().length === 0) {
       return apiResponse(res, { goals: [], tasks: [], events: [], notes: [], learning: [] });
@@ -1315,24 +1427,24 @@ app.get('/api/v1/search', async (req: Request, res: Response) => {
 
     const [goals, tasks, events, notes, learning] = await Promise.all([
       db.goal.findMany({
-        where: { OR: [{ title: { contains: q } }, { description: { contains: q } }] },
+        where: { userId: user.id, OR: [{ title: { contains: q } }, { description: { contains: q } }] },
         take: 4,
       }),
       db.task.findMany({
-        where: { OR: [{ title: { contains: q } }, { description: { contains: q } }] },
+        where: { userId: user.id, OR: [{ title: { contains: q } }, { description: { contains: q } }] },
         take: 4,
       }),
       db.event.findMany({
-        where: { OR: [{ title: { contains: q } }, { description: { contains: q } }] },
+        where: { userId: user.id, OR: [{ title: { contains: q } }, { description: { contains: q } }] },
         take: 4,
       }),
       db.note.findMany({
-        where: { OR: [{ title: { contains: q } }, { content: { contains: q } }, { tags: { contains: q } }] },
+        where: { userId: user.id, OR: [{ title: { contains: q } }, { content: { contains: q } }, { tags: { contains: q } }] },
         take: 4,
         include: { folder: true },
       }),
       db.learning.findMany({
-        where: { title: { contains: q } },
+        where: { userId: user.id, title: { contains: q } },
         take: 4,
       }),
     ]);

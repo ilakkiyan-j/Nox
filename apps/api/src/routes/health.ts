@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { db } from '../../../../packages/database/dist';
+import { db } from '@nox/database';
 import { apiResponse, apiError } from '../middleware/error';
 
 const router = Router();

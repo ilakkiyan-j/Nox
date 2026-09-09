@@ -22,7 +22,7 @@ import NotesView from '../components/NotesView';
 import NotificationsView from '../components/NotificationsView';
 import TimeView from '../components/TimeView';
 import RemindersView from '../components/RemindersView';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
 
@@ -56,16 +56,16 @@ export default function Home() {
     try {
       const [dashRes, goalsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes] =
         await Promise.all([
-          fetch(`${API_BASE}/dashboard`).then((r) => r.json()),
-          fetch(`${API_BASE}/goals`).then((r) => r.json()),
-          fetch(`${API_BASE}/tasks`).then((r) => r.json()),
-          fetch(`${API_BASE}/learning`).then((r) => r.json()),
-          fetch(`${API_BASE}/events`).then((r) => r.json()),
-          fetch(`${API_BASE}/habits`).then((r) => r.json()),
-          fetch(`${API_BASE}/notes`).then((r) => r.json()),
-          fetch(`${API_BASE}/folders`).then((r) => r.json()),
-          fetch(`${API_BASE}/notifications`).then((r) => r.json()),
-          fetch(`${API_BASE}/reminders`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/dashboard`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/goals`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/tasks`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/learning`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/events`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/habits`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/notes`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/folders`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/notifications`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/reminders`).then((r) => r.json()),
         ]);
 
       if (dashRes.success) setDashboardData(dashRes.data);
@@ -86,17 +86,34 @@ export default function Home() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('nox_user');
+        if (stored) {
+          const user = JSON.parse(stored);
+          setCurrentUser(user);
+          if (user?.role === 'ADMIN') setAdminMode(true);
+          setViewMode('app');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
     fetchAllData();
   }, []);
 
   const handleLoginSuccess = (user: any) => {
     setCurrentUser(user);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nox_user', JSON.stringify(user));
+    }
     if (user?.role === 'ADMIN') {
       setAdminMode(true);
     } else {
       setAdminMode(false);
     }
     setViewMode('app');
+    setTimeout(() => fetchAllData(), 100);
   };
 
   const renderActiveView = () => {
@@ -166,6 +183,7 @@ export default function Home() {
         <AdminDashboardView
           onSignOut={() => {
             setCurrentUser(null);
+            if (typeof window !== 'undefined') localStorage.removeItem('nox_user');
             setAdminMode(false);
             setViewMode('landing');
           }}
@@ -191,6 +209,7 @@ export default function Home() {
               onRefreshNotifications={fetchAllData}
               onBackToLanding={() => {
                 setCurrentUser(null);
+                if (typeof window !== 'undefined') localStorage.removeItem('nox_user');
                 setViewMode('landing');
               }}
             />

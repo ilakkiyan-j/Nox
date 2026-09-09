@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlarmClock, Plus, CheckCircle2, Trash2, Edit2, X, Save } from 'lucide-react';
+import { Bell, Plus, CheckCircle2, Circle, Clock, Trash2, Edit2, X, Save, AlarmClock } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface RemindersViewProps {
   reminders: any[];
@@ -28,7 +29,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
     if (!title.trim() || !remindAt) return;
 
     try {
-      await fetch('http://localhost:4000/api/v1/reminders', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, remindAt }),
@@ -48,7 +49,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
     if (!editingReminder) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/reminders/${editingReminder.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${editingReminder.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -65,7 +66,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
 
   const handleToggleReminder = async (id: string, currentIsCompleted: boolean) => {
     try {
-      await fetch(`http://localhost:4000/api/v1/reminders/${id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isCompleted: !currentIsCompleted }),
@@ -83,7 +84,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
       message: 'Are you sure you want to delete this reminder?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/reminders/${id}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${id}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);

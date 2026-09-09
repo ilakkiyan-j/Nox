@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Flame, Plus, Check, Edit2, Trash2, X, Save } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface HabitsViewProps {
   habits: any[];
@@ -20,14 +21,14 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
 
   const [title, setTitle] = useState('');
   const [frequency, setFrequency] = useState('DAILY');
-  const [reminderTime, setReminderTime] = useState('08:00 PM');
+  const [reminderTime, setReminderTime] = useState('08:00 AM');
 
   const handleCreateHabit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
     try {
-      await fetch('http://localhost:4000/api/v1/habits', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/habits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -50,7 +51,7 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
     if (!editingHabit) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/habits/${editingHabit.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${editingHabit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,7 +74,7 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
       message: 'Are you sure you want to delete this Habit routine?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/habits/${habitId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -84,7 +85,7 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
 
   const handleCheckin = async (habitId: string) => {
     try {
-      await fetch(`http://localhost:4000/api/v1/habits/${habitId}/log`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),

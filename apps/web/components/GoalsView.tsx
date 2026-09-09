@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Target, Plus, CheckCircle2, Circle, Compass, Edit2, Trash2, X, Save, FileCode, Check, AlertCircle } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface GoalsViewProps {
   goals: any[];
@@ -79,7 +80,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
     if (!title.trim()) return;
 
     try {
-      await fetch('http://localhost:4000/api/v1/goals', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/goals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, description, targetDate }),
@@ -99,7 +100,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
     if (!editingGoal) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/goals/${editingGoal.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/goals/${editingGoal.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,7 +123,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
       message: 'Are you sure you want to delete this Goal and all linked roadmaps?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/goals/${goalId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/goals/${goalId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -136,7 +137,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
     if (!roadmapTitle.trim() || !selectedGoalId) return;
 
     try {
-      await fetch('http://localhost:4000/api/v1/roadmaps', {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -188,7 +189,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
     setImporting(true);
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/roadmaps/import', {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -222,7 +223,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
     if (!editingRoadmap) return;
 
     try {
-      await fetch(`http://localhost:4000/api/v1/roadmaps/${editingRoadmap.id}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/${editingRoadmap.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -244,7 +245,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
       message: 'Are you sure you want to delete this Roadmap?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/roadmaps/${roadmapId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/${roadmapId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -260,7 +261,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
       message: 'Are you sure you want to delete this Checkpoint / Milestone?',
       onConfirm: async () => {
         try {
-          await fetch(`http://localhost:4000/api/v1/milestones/${milestoneId}`, { method: 'DELETE' });
+          await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${milestoneId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
@@ -272,7 +273,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
   const handleToggleMilestone = async (milestoneId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'NOT_STARTED' : 'COMPLETED';
     try {
-      await fetch(`http://localhost:4000/api/v1/milestones/${milestoneId}`, {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${milestoneId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -291,7 +292,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
       initialValue: '',
       onSubmit: async (val: string) => {
         try {
-          await fetch('http://localhost:4000/api/v1/milestones', {
+          await fetchWithUser(`${API_BASE_URL}/api/v1/milestones`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -316,7 +317,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
       initialValue: currentTitle,
       onSubmit: async (val: string) => {
         try {
-          await fetch(`http://localhost:4000/api/v1/milestones/${milestoneId}`, {
+          await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${milestoneId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: val }),
