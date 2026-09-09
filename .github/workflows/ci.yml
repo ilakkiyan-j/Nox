@@ -59,6 +59,10 @@ jobs:
   e2e-tests:
     name: Playwright E2E Tests
     runs-on: ubuntu-latest
+    env:
+      # Placeholder DATABASE_URL — API will start and respond with status: degraded
+      # (DB unreachable), which the health check test accepts via toContain.
+      DATABASE_URL: postgresql://nox:nox@localhost:5432/noxdb?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
@@ -82,5 +86,11 @@ jobs:
       - name: Build Web Application
         run: npm run build --workspace=apps/web
 
+      - name: Build API Service
+        run: npm run build:api
+
       - name: Run E2E Tests
         run: npm run test:e2e
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+

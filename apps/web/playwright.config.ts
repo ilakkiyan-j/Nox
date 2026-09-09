@@ -1,11 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  forbidOnly: isCI,
+  retries: isCI ? 2 : 0,
+  workers: isCI ? 1 : undefined,
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:3000',
@@ -13,17 +15,28 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npm run dev:api',
+      // In CI, run the pre-built API; locally use dev server
+      command: isCI
+        ? 'node ../../apps/api/dist/main.js'
+        : 'npm run dev:api',
       url: 'http://localhost:4000/api/v1/health',
-      reuseExistingServer: !process.env.CI,
-      cwd: '../../',
+      reuseExistingServer: !isCI,
+      cwd: isCI ? '.' : '../../',
       timeout: 120 * 1000,
+      env: {
+        PORT: '4000',
+        NODE_ENV: 'test',
+        DATABASE_URL: process.env.DATABASE_URL || 'postgresql://nox:nox@localhost:5432/noxdb?sslmode=disable',
+      },
     },
     {
-      command: 'npm run dev:web',
+      // In CI, run the pre-built Next.js app; locally use dev server
+      command: isCI
+        ? 'npx next start -p 3000'
+        : 'npm run dev:web',
       url: 'http://localhost:3000',
-      reuseExistingServer: !process.env.CI,
-      cwd: '../../',
+      reuseExistingServer: !isCI,
+      cwd: isCI ? '.' : '../../',
       timeout: 120 * 1000,
     },
   ],
@@ -34,3 +47,4 @@ export default defineConfig({
     },
   ],
 });
+
