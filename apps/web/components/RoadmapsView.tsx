@@ -88,6 +88,9 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   // Editing a phase
   const [editingPhase, setEditingPhase] = useState<any | null>(null);
 
+  // Global error banner
+  const [globalError, setGlobalError] = useState<string | null>(null);
+
   // Confirm modal
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean; title: string; message: string; onConfirm: () => void;
@@ -107,29 +110,42 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
     e.preventDefault();
     if (!rmTitle.trim()) return;
     setSaving(true);
+    setGlobalError(null);
     try {
       // 1. Create the roadmap
       const rmRes = await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: rmTitle, description: rmDescription, goalId: rmGoalId || undefined }),
+        body: JSON.stringify({
+          title: rmTitle,
+          description: rmDescription || null,
+          goalId: rmGoalId || null,
+        }),
       });
       const rmData = await rmRes.json();
+      if (!rmData.success) {
+        setGlobalError(rmData.error?.message || 'Failed to create roadmap');
+        return;
+      }
       const roadmapId = rmData.data?.id;
 
       // 2. Create each valid phase as a milestone
       const validPhases = phases.filter((p) => p.title.trim());
       for (let i = 0; i < validPhases.length; i++) {
-        await fetchWithUser(`${API_BASE_URL}/api/v1/milestones`, {
+        const msRes = await fetchWithUser(`${API_BASE_URL}/api/v1/milestones`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             roadmapId,
-            goalId: rmGoalId || undefined,
+            goalId: rmGoalId || null,
             title: validPhases[i].title,
-            description: validPhases[i].description || undefined,
+            description: validPhases[i].description || null,
           }),
         });
+        const msData = await msRes.json();
+        if (!msData.success) {
+          setGlobalError(`Phase ${i + 1} failed: ${msData.error?.message || 'Unknown error'}`);
+        }
       }
 
       setRmTitle(''); setRmDescription(''); setRmGoalId('');

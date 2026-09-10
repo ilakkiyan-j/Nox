@@ -187,7 +187,7 @@ router.delete('/roadmaps/:id', async (req: Request, res: Response) => {
 router.get('/milestones', async (req: Request, res: Response) => {
   try {
     const milestones = await db.milestone.findMany({
-      where: { OR: [{ goal: { userId: req.user!.id } }, { roadmap: { goal: { userId: req.user!.id } } }] },
+      where: { OR: [{ goal: { userId: req.user!.id } }, { roadmap: { userId: req.user!.id } }] },
       include: { goal: true, roadmap: true, tasks: true },
       orderBy: { order: 'asc' },
     });

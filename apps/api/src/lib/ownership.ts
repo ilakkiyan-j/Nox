@@ -91,9 +91,9 @@ async function assertRelationOwner(model: 'goal' | 'roadmap' | 'milestone' | 'le
     case 'milestone': {
       const m = await db.milestone.findUnique({
         where: { id },
-        select: { id: true, goal: { select: { userId: true } }, roadmap: { select: { goal: { select: { userId: true } } } } },
+        select: { id: true, goal: { select: { userId: true } }, roadmap: { select: { userId: true } } },
       });
-      const owner = m?.goal?.userId ?? m?.roadmap?.goal?.userId ?? null;
+      const owner = m?.goal?.userId ?? m?.roadmap?.userId ?? null;
       if (!m || owner !== userId) throw new HttpError('Resource not found', 404);
       return;
     }

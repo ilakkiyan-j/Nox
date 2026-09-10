@@ -110,6 +110,7 @@ async function main() {
   // 5. Create Roadmaps & Milestones
   const fdeRoadmap = await prisma.roadmap.create({
     data: {
+      userId: user.id,
       goalId: sdeGoal.id,
       title: 'FDE Mastery Roadmap',
       description: 'Structured 5-phase engineering progression',
