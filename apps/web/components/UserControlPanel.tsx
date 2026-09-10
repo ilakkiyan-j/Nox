@@ -120,9 +120,7 @@ export default function UserControlPanel({
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block" />
 
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
+            <img src="/Nox_logo.png" alt="NOX Logo" className="w-9 h-9 object-contain rounded-2xl shadow-md shadow-indigo-500/20" />
             <div>
               <h1 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 leading-tight">User Control Center</h1>
               <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono uppercase tracking-wider font-semibold">NOX Personal OS · Command Hub</p>
