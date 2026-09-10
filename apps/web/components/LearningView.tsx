@@ -34,6 +34,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
   const [title, setTitle] = useState('');
   const [type, setType] = useState('COURSE');
   const [url, setUrl] = useState('');
+  const [description, setDescription] = useState('');
   const [moduleInputs, setModuleInputs] = useState('');
 
   const handleCreateLearning = async (e: React.FormEvent) => {
@@ -48,10 +49,17 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       await fetchWithUser(`${API_BASE_URL}/api/v1/learning`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, type, url: url.trim() || undefined, modules }),
+        body: JSON.stringify({
+          title,
+          type,
+          url: url.trim() || undefined,
+          description: description.trim() || undefined,
+          modules,
+        }),
       });
       setTitle('');
       setUrl('');
+      setDescription('');
       setModuleInputs('');
       setShowCreate(false);
       onRefresh();
@@ -72,6 +80,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           title: editingLearning.title,
           type: editingLearning.type,
           url: editingLearning.url?.trim() || null,
+          description: editingLearning.description?.trim() || null,
           status: editingLearning.status,
         }),
       });
@@ -247,6 +256,17 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           </div>
 
           <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Description & Notes (optional)</label>
+            <textarea
+              rows={2}
+              placeholder="Key notes, prerequisites, exam format, or course goals..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
+            />
+          </div>
+
+          <div>
             <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Initial Modules / Chapters (One per line)</label>
             <textarea
               rows={3}
@@ -297,6 +317,17 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
               value={editingLearning.url || ''}
               onChange={(e) => setEditingLearning({ ...editingLearning, url: e.target.value })}
               className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Description & Notes</label>
+            <textarea
+              rows={3}
+              placeholder="Course description, notes, or objectives..."
+              value={editingLearning.description || ''}
+              onChange={(e) => setEditingLearning({ ...editingLearning, description: e.target.value })}
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 leading-relaxed"
             />
           </div>
 
@@ -425,6 +456,11 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
                         <ExternalLink className="w-3.5 h-3.5" />
                         <span>Visit Course / Website</span>
                       </a>
+                    )}
+                    {item.description && (
+                      <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 mt-2">
+                        {item.description}
+                      </p>
                     )}
                   </div>
                 </div>

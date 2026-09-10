@@ -21,7 +21,7 @@ router.get('/learning', async (req: Request, res: Response) => {
 
 router.post('/learning', async (req: Request, res: Response) => {
   try {
-    const { title, type, url, goalId, roadmapId, modules } = (req.body ?? {}) as Record<string, unknown>;
+    const { title, description, type, url, goalId, roadmapId, modules } = (req.body ?? {}) as Record<string, unknown>;
 
     if (!isSafeString(title)) return apiError(res, 'Title is required');
     if (type !== undefined && !LEARNING_TYPES.includes(type as any)) {
@@ -42,6 +42,7 @@ router.post('/learning', async (req: Request, res: Response) => {
       data: {
         userId: req.user!.id,
         title: limitString(title.trim(), 200),
+        description: typeof description === 'string' && description.trim() ? limitString(description.trim(), 2000) : null,
         type: (type as string) || 'COURSE',
         url: urlCheck.value,
         goalId: (goalId as string) || null,
@@ -74,11 +75,14 @@ router.patch('/learning/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     await getOwnedLearning(id, req.user!.id);
 
-    const { title, type, status, url } = (req.body ?? {}) as Record<string, unknown>;
+    const { title, description, type, status, url } = (req.body ?? {}) as Record<string, unknown>;
     const data: Record<string, unknown> = {};
     if (title !== undefined) {
       if (!isSafeString(title)) return apiError(res, 'Title must be a non-empty string');
       data.title = limitString(title.trim(), 200);
+    }
+    if (description !== undefined) {
+      data.description = typeof description === 'string' && description.trim() ? limitString(description.trim(), 2000) : null;
     }
     if (type !== undefined) {
       if (!LEARNING_TYPES.includes(type as any)) return apiError(res, `Type must be one of ${LEARNING_TYPES.join(', ')}`);

@@ -112,6 +112,7 @@ model Learning {
   userId           String
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   title            String
+  description      String?          // Course description / notes
   type             String           @default("COURSE") // COURSE, BOOK, CERTIFICATION, TUTORIAL, PRACTICE
   status           String           @default("IN_PROGRESS") // NOT_STARTED, IN_PROGRESS, COMPLETED
   url              String?          // Course / Certification website URL
