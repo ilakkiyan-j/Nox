@@ -39,7 +39,7 @@ export default function LandingPage({ onEnterApp, onOpenLogin }: LandingPageProp
       {/* Top Header Bar */}
       <header className="sticky top-0 z-40 glass-panel bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-6 py-4 max-w-7xl mx-auto flex items-center justify-between shadow-xs transition-colors">
         <div className="flex items-center space-x-3 cursor-pointer" onClick={onEnterApp}>
-          <img src="/Nox_logo.png" alt="NOX Logo" className="w-10 h-10 object-contain rounded-xl shadow-md shadow-indigo-500/20" />
+          <img src="/Nox_logo.png" alt="NOX Logo" className="w-10 h-10 object-contain" />
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="font-display text-xl font-bold tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>

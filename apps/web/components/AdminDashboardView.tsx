@@ -113,7 +113,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
       {/* Header */}
       <header className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs transition-colors">
         <div className="flex items-center space-x-3.5 min-w-0">
-          <img src="/Nox_logo.png" alt="NOX Logo" className="w-12 h-12 object-contain rounded-2xl shadow-md shrink-0" />
+          <img src="/Nox_logo.png" alt="NOX Logo" className="w-12 h-12 object-contain shrink-0" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">NOX Admin Control Panel</h1>

@@ -109,7 +109,7 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-4">
           <div className="flex items-center space-x-3 min-w-0">
-            <img src="/Nox_logo.png" alt="NOX Logo" className="w-10 h-10 object-contain rounded-2xl shadow-lg shadow-indigo-500/20 shrink-0" />
+            <img src="/Nox_logo.png" alt="NOX Logo" className="w-10 h-10 object-contain shrink-0" />
             <div className="min-w-0">
               <h3 className="font-display font-bold text-xl text-slate-900 dark:text-slate-100 truncate">Admin Account Manager</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Provision user accounts and serve credentials (No self signup)</p>
