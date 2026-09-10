@@ -35,12 +35,12 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
     if (!title.trim() || !date) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/events`, {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title,
-          description,
+          title: title.trim(),
+          description: description.trim(),
           date,
           endDate: hasEndDate && endDate ? endDate : null,
           startTime,
@@ -50,20 +50,25 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
           isOnline,
         }),
       });
+      const data = await res.json();
 
-      setTitle('');
-      setDescription('');
-      setDate('');
-      setHasEndDate(false);
-      setEndDate('');
-      setStartTime('');
-      setEndTime('');
-      setLocation('');
-      setUrl('');
-      setShowCreate(false);
-      onRefresh();
+      if (res.ok && data.success) {
+        setTitle('');
+        setDescription('');
+        setDate('');
+        setHasEndDate(false);
+        setEndDate('');
+        setStartTime('');
+        setEndTime('');
+        setLocation('');
+        setUrl('');
+        setShowCreate(false);
+        onRefresh();
+      } else {
+        alert(data.error?.message || 'Failed to create event. Please check inputs.');
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error creating event:', err);
     }
   };
 
@@ -72,7 +77,7 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
     if (!editingEvent) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/events/${editingEvent.id}`, {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/events/${editingEvent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -87,10 +92,16 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
           isOnline: editingEvent.isOnline,
         }),
       });
-      setEditingEvent(null);
-      onRefresh();
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setEditingEvent(null);
+        onRefresh();
+      } else {
+        alert(data.error?.message || 'Failed to update event details.');
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error updating event:', err);
     }
   };
 

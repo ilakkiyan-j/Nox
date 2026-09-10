@@ -29,18 +29,23 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
     if (!title.trim() || !remindAt) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders`, {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/reminders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, remindAt }),
+        body: JSON.stringify({ title: title.trim(), remindAt }),
       });
+      const data = await res.json();
 
-      setTitle('');
-      setRemindAt('');
-      setShowCreate(false);
-      onRefresh();
+      if (res.ok && data.success) {
+        setTitle('');
+        setRemindAt('');
+        setShowCreate(false);
+        onRefresh();
+      } else {
+        alert(data.error?.message || 'Failed to create reminder.');
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error creating reminder:', err);
     }
   };
 
@@ -62,7 +67,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
     if (!editingReminder) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${editingReminder.id}`, {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${editingReminder.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -70,10 +75,16 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
           remindAt: editingReminder.remindAt,
         }),
       });
-      setEditingReminder(null);
-      onRefresh();
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setEditingReminder(null);
+        onRefresh();
+      } else {
+        alert(data.error?.message || 'Failed to update reminder.');
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error updating reminder:', err);
     }
   };
 
