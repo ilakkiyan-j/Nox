@@ -111,15 +111,15 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
 
   // Global expand/collapse toggle
   const allCollapsed = useMemo(() => {
-    if (roadmaps.length === 0) return false;
-    return roadmaps.every((rm) => expandedCards[rm.id] === false);
+    if (roadmaps.length === 0) return true;
+    return roadmaps.every((rm) => expandedCards[rm.id] !== true);
   }, [roadmaps, expandedCards]);
 
   const toggleAllExpanded = () => {
-    const nextState = !allCollapsed;
+    const shouldExpand = allCollapsed;
     const updated: Record<string, boolean> = {};
     roadmaps.forEach((rm) => {
-      updated[rm.id] = !nextState; // if currently all collapsed, set true (expanded)
+      updated[rm.id] = shouldExpand;
     });
     setExpandedCards(updated);
   };
@@ -716,8 +716,8 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
             const total = allMilestones.length;
             const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
             
-            const isExpanded = expandedCards[rm.id] !== false; // default expanded
-            const isShowingAllPhases = showAllPhases[rm.id] !== false; // default all phases expanded
+            const isExpanded = expandedCards[rm.id] === true; // default collapsed so cards fit cleanly at a glance
+            const isShowingAllPhases = showAllPhases[rm.id] !== false; // default all phases when expanded
 
             // Phase preview slicing: show all phases by default unless user explicitly chose brief view
             const visiblePhases = isShowingAllPhases
