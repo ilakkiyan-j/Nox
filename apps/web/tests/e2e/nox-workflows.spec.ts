@@ -1,22 +1,85 @@
 import { test, expect } from '@playwright/test';
 
 async function enterWorkstation(page: any) {
-  await page.goto('/');
-  const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
-  await openBtn.click();
+  await page.route('**/api/v1/**', async (route: any) => {
+    const url = route.request().url();
+    if (url.includes('/api/v1/auth/login')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            token: 'mock-e2e-valid-jwt-token',
+            user: {
+              id: 'e2e-user-id',
+              email: 'user@nox.internal',
+              name: 'Nox Architect',
+              role: 'USER',
+            },
+          },
+        }),
+      });
+      return;
+    }
 
-  // If Auth Modal opens (when unauthenticated), sign in with test user credentials
-  const authTitle = page.locator('text=Sign In to NOX');
-  if (await authTitle.isVisible({ timeout: 1500 }).catch(() => false)) {
-    const emailInput = page.locator('input[type="email"]');
-    const passwordInput = page.locator('input[type="password"]');
-    await emailInput.fill('user@nox.internal');
-    await passwordInput.fill('user123password');
-    await page.getByRole('button', { name: /Sign In/i }).first().click();
-  }
+    if (url.includes('/api/v1/dashboard')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            tasks: [],
+            activeGoals: [],
+            habits: [],
+            upcomingEvents: [],
+            recentNotes: [],
+          },
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: [],
+      }),
+    });
+  });
+
+  await page.goto('/');
+
+  const signInBtn = page.getByRole('button', { name: 'Sign In', exact: true });
+  await signInBtn.click();
+
+  await page.locator('input[type="email"]').fill('user@nox.internal');
+  await page.locator('input[type="password"]').fill('user123password');
+
+  const submitBtn = page.locator('form button[type="submit"]');
+  await submitBtn.click();
+
+  await expect(page.getByRole('button', { name: /Quick Capture/i })).toBeVisible({ timeout: 10000 });
 }
 
 test.describe('NOX Production Workflows & Theme Parity', () => {
+  test('should prompt for sign in modal when clicking Open Workstation without session', async ({ page }) => {
+    await page.goto('/');
+    await expect(page).toHaveTitle(/NOX/);
+
+    const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
+    await openBtn.click();
+
+    const authModalTitle = page.getByRole('heading', { name: /Sign In to NOX/i });
+    await expect(authModalTitle).toBeVisible();
+
+    const quickCaptureBtn = page.getByRole('button', { name: /Quick Capture/i });
+    await expect(quickCaptureBtn).not.toBeVisible();
+  });
+
   test('should load landing page and enter workstation via authentication', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveTitle(/NOX/);

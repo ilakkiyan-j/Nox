@@ -62,8 +62,17 @@ export async function fetchWithUser(url: string, options: RequestInit = {}) {
     ...(options.headers || {}),
   };
 
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers: mergedHeaders,
   });
+
+  if (response.status === 401) {
+    clearAuth();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('nox-unauthorized'));
+    }
+  }
+
+  return response;
 }

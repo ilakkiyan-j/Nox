@@ -64,6 +64,9 @@ export default function Home() {
       setViewMode('app');
       fetchAllData();
     } else {
+      setCurrentUser(null);
+      clearAuth();
+      setViewMode('landing');
       setIsAuthOpen(true);
     }
   };
@@ -71,43 +74,58 @@ export default function Home() {
   const fetchAllData = async () => {
     const token = getToken();
     if (!token) {
+      handleSignOut();
+      setIsAuthOpen(true);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const [dashRes, goalsRes, roadmapsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes] =
-        await Promise.all([
-          fetchWithUser(`${API_BASE}/dashboard`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/goals`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/roadmaps`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/tasks`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/learning`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/events`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/habits`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/notes`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/folders`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/notifications`).then((r) => r.json()),
-          fetchWithUser(`${API_BASE}/reminders`).then((r) => r.json()),
-        ]);
+      const responses = await Promise.all([
+        fetchWithUser(`${API_BASE}/dashboard`),
+        fetchWithUser(`${API_BASE}/goals`),
+        fetchWithUser(`${API_BASE}/roadmaps`),
+        fetchWithUser(`${API_BASE}/tasks`),
+        fetchWithUser(`${API_BASE}/learning`),
+        fetchWithUser(`${API_BASE}/events`),
+        fetchWithUser(`${API_BASE}/habits`),
+        fetchWithUser(`${API_BASE}/notes`),
+        fetchWithUser(`${API_BASE}/folders`),
+        fetchWithUser(`${API_BASE}/notifications`),
+        fetchWithUser(`${API_BASE}/reminders`),
+      ]);
 
-      if (dashRes.statusCode === 401 || goalsRes.statusCode === 401) {
+      if (responses.some((r) => r.status === 401)) {
         handleSignOut();
         setIsAuthOpen(true);
         return;
       }
 
-      if (dashRes.success) setDashboardData(dashRes.data);
-      if (goalsRes.success) setGoals(goalsRes.data);
-      if (roadmapsRes.success) setRoadmaps(roadmapsRes.data);
-      if (tasksRes.success) setTasks(tasksRes.data);
-      if (learningRes.success) setLearning(learningRes.data);
-      if (eventsRes.success) setEvents(eventsRes.data);
-      if (habitsRes.success) setHabits(habitsRes.data);
-      if (notesRes.success) setNotes(notesRes.data);
-      if (foldersRes.success) setFolders(foldersRes.data);
-      if (notifRes.success) setNotifications(notifRes.data);
-      if (remindRes.success) setReminders(remindRes.data);
+      const [dashRes, goalsRes, roadmapsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes] =
+        await Promise.all(responses.map((r) => r.json()));
+
+      if (
+        dashRes?.error?.statusCode === 401 ||
+        goalsRes?.error?.statusCode === 401 ||
+        dashRes?.statusCode === 401 ||
+        goalsRes?.statusCode === 401
+      ) {
+        handleSignOut();
+        setIsAuthOpen(true);
+        return;
+      }
+
+      if (dashRes?.success) setDashboardData(dashRes.data);
+      if (goalsRes?.success) setGoals(goalsRes.data);
+      if (roadmapsRes?.success) setRoadmaps(roadmapsRes.data);
+      if (tasksRes?.success) setTasks(tasksRes.data);
+      if (learningRes?.success) setLearning(learningRes.data);
+      if (eventsRes?.success) setEvents(eventsRes.data);
+      if (habitsRes?.success) setHabits(habitsRes.data);
+      if (notesRes?.success) setNotes(notesRes.data);
+      if (foldersRes?.success) setFolders(foldersRes.data);
+      if (notifRes?.success) setNotifications(notifRes.data);
+      if (remindRes?.success) setReminders(remindRes.data);
     } catch (err) {
       console.error('API Fetch error:', err);
     } finally {
@@ -117,6 +135,12 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const handleUnauthorized = () => {
+        handleSignOut();
+        setIsAuthOpen(true);
+      };
+      window.addEventListener('nox-unauthorized', handleUnauthorized);
+
       const user = getStoredUser();
       const token = getToken();
       if (user && token) {
@@ -128,6 +152,10 @@ export default function Home() {
         setViewMode('landing');
         setLoading(false);
       }
+
+      return () => {
+        window.removeEventListener('nox-unauthorized', handleUnauthorized);
+      };
     }
   }, []);
 
@@ -202,7 +230,7 @@ export default function Home() {
 
   return (
     <ThemeProvider>
-      {viewMode === 'landing' || (!currentUser && !getToken()) ? (
+      {viewMode === 'landing' || !currentUser || !getToken() ? (
         <>
           <LandingPage
             onEnterApp={handleEnterApp}
