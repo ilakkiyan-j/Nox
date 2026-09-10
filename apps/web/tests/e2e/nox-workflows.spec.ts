@@ -61,9 +61,9 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
     await openBtn.click();
 
-    // Navigate to Goals & Roadmaps
-    const goalsTab = page.getByRole('button', { name: 'Goals' }).first();
-    await goalsTab.click();
+    // Navigate to Roadmaps
+    const roadmapsTab = page.getByRole('button', { name: 'Roadmaps' }).first();
+    await roadmapsTab.click();
 
     // Click New Roadmap button
     const newRoadmapBtn = page.getByRole('button', { name: /New Roadmap/i });
@@ -71,12 +71,12 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     await newRoadmapBtn.click();
 
     // Switch to Import JSON tab
-    const jsonTabBtn = page.getByRole('button', { name: /Import JSON /i });
+    const jsonTabBtn = page.getByRole('button', { name: /Import JSON/i });
     await expect(jsonTabBtn).toBeVisible();
     await jsonTabBtn.click();
 
-    // Click Load Example Plan button
-    const loadExampleBtn = page.getByRole('button', { name: /Load Example Plan/i });
+    // Click Load Example button
+    const loadExampleBtn = page.getByRole('button', { name: /Load Example/i });
     await expect(loadExampleBtn).toBeVisible();
     await loadExampleBtn.click();
 
@@ -85,7 +85,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     await expect(previewHeader).toBeVisible();
 
     // Submit import
-    const importSubmitBtn = page.getByRole('button', { name: /Import Roadmap Plan/i });
+    const importSubmitBtn = page.getByRole('button', { name: /Import Roadmap/i });
     await expect(importSubmitBtn).toBeEnabled();
     await importSubmitBtn.click();
   });
