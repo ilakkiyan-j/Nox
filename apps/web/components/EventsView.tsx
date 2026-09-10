@@ -110,6 +110,18 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
     });
   };
 
+  const formatDateForInput = (val?: string | Date | null) => {
+    if (!val) return '';
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
   const formatDateRange = (startDateStr: string, endDateStr?: string) => {
     const start = new Date(startDateStr);
     const startFormatted = start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -308,16 +320,16 @@ export default function EventsView({ events, onRefresh }: EventsViewProps) {
                 <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">From Date</label>
                 <input
                   type="date"
-                  value={editingEvent.date ? new Date(editingEvent.date).toISOString().split('T')[0] : ''}
+                  value={formatDateForInput(editingEvent.date)}
                   onChange={(e) => setEditingEvent({ ...editingEvent, date: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium font-medium">To Date (Optional)</label>
+                <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">To Date (Optional)</label>
                 <input
                   type="date"
-                  value={editingEvent.endDate ? new Date(editingEvent.endDate).toISOString().split('T')[0] : ''}
+                  value={formatDateForInput(editingEvent.endDate)}
                   onChange={(e) => setEditingEvent({ ...editingEvent, endDate: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
                 />

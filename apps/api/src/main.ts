@@ -911,6 +911,8 @@ app.delete('/api/v1/events/:id', async (req: Request, res: Response) => {
     await db.$transaction([
       db.task.deleteMany({ where: { eventId: id } }),
       db.note.deleteMany({ where: { eventId: id } }),
+      db.reminder.deleteMany({ where: { entityType: 'EVENT', entityId: id } }),
+      db.notification.deleteMany({ where: { entityType: 'EVENT', entityId: id } }),
       db.event.delete({ where: { id } }),
     ]);
     return apiResponse(res, { deleted: true, id });

@@ -44,6 +44,19 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
     }
   };
 
+  const formatDateTimeForInput = (val?: string | Date | null) => {
+    if (!val) return '';
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val)) return val;
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '';
+      const pad = (n: number) => (n < 10 ? '0' + n : n);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+      return '';
+    }
+  };
+
   const handleUpdateReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingReminder) return;
@@ -175,7 +188,7 @@ export default function RemindersView({ reminders, onRefresh }: RemindersViewPro
             <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Remind Date & Time</label>
             <input
               type="datetime-local"
-              value={editingReminder.remindAt ? new Date(editingReminder.remindAt).toISOString().slice(0, 16) : ''}
+              value={formatDateTimeForInput(editingReminder.remindAt)}
               onChange={(e) => setEditingReminder({ ...editingReminder, remindAt: e.target.value })}
               className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-600 [color-scheme:light] dark:[color-scheme:dark]"
               required
