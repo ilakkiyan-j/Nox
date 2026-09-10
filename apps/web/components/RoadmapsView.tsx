@@ -104,7 +104,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const toggleExpand = (id: string) =>
-    setExpandedCards((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpandedCards((prev) => ({ ...prev, [id]: prev[id] === false ? true : false }));
 
   const toggleShowAllPhases = (id: string) =>
     setShowAllPhases((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -112,7 +112,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   // Global expand/collapse toggle
   const allCollapsed = useMemo(() => {
     if (roadmaps.length === 0) return true;
-    return roadmaps.every((rm) => expandedCards[rm.id] !== true);
+    return roadmaps.every((rm) => expandedCards[rm.id] === false);
   }, [roadmaps, expandedCards]);
 
   const toggleAllExpanded = () => {
@@ -716,77 +716,78 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
             const total = allMilestones.length;
             const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
             
-            const isExpanded = expandedCards[rm.id] === true; // default collapsed so cards fit cleanly at a glance
+            const isExpanded = expandedCards[rm.id] !== false; // default expanded so phases are visible at a glance
             const isShowingAllPhases = showAllPhases[rm.id] !== false; // default all phases when expanded
 
             // Phase preview slicing: show all phases by default unless user explicitly chose brief view
             const visiblePhases = isShowingAllPhases
               ? allMilestones
               : allMilestones.slice(0, PREVIEW_PHASE_COUNT);
-            const remainingCount = total - visiblePhases.length;
 
             return (
-              <div key={rm.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all overflow-hidden">
+              <div key={rm.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800/90 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700/80 transition-all overflow-hidden">
                 {/* Card Header */}
-                <div className="p-5 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded uppercase font-mono ${STATUS_COLORS[rm.status] || STATUS_COLORS.IN_PROGRESS}`}>
+                <div className="p-5 md:p-6 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
+                        <span className={`inline-flex items-center text-[10px] font-bold tracking-wider px-2.5 py-1 rounded-lg uppercase font-mono shadow-xs border ${STATUS_COLORS[rm.status] || STATUS_COLORS.IN_PROGRESS}`}>
                           {rm.status?.replace('_', ' ')}
                         </span>
                         {rm.goal && (
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 truncate max-w-[180px]">
-                            ↗ {rm.goal.title}
+                          <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 border border-violet-200/70 dark:border-violet-800/60 text-violet-700 dark:text-violet-300 truncate max-w-[220px]">
+                            <span className="mr-1 text-violet-500">↗</span> Goal: {rm.goal.title}
                           </span>
                         )}
                       </div>
-                      <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 mt-1.5 leading-tight">{rm.title}</h3>
+                      <h3 className="font-display font-bold text-xl text-slate-900 dark:text-slate-100 tracking-tight leading-snug">{rm.title}</h3>
                       {rm.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed line-clamp-2">{rm.description}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-w-3xl">{rm.description}</p>
                       )}
                     </div>
 
-                    <div className="flex items-center space-x-1 shrink-0">
+                    <div className="flex items-center space-x-1 shrink-0 bg-slate-50 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/50">
                       {/* Focus View Dedicated Modal Button */}
                       <button
                         onClick={() => setFocusedRoadmapId(rm.id)}
-                        className="p-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/60 text-violet-600 dark:text-violet-400 hover:bg-violet-100 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-violet-600 hover:text-white transition-all cursor-pointer"
                         title="Open Focus Workspace"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-4 h-4" />
                       </button>
                       <button onClick={() => setEditingRoadmap(rm)}
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
                         title="Edit Roadmap">
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-4 h-4" />
                       </button>
                       <button onClick={() => handleDeleteRoadmap(rm.id, rm.title)}
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-rose-500 hover:text-white transition-all cursor-pointer"
                         title="Delete Roadmap">
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                       <button onClick={() => toggleExpand(rm.id)}
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
                         title={isExpanded ? 'Collapse card' : 'Expand card'}>
-                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
 
-                  {/* Progress bar */}
+                  {/* Progress bar section */}
                   {total > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                        <span className="flex items-center space-x-1">
-                          <Layers className="w-3 h-3" />
-                          <span>{total} phase{total !== 1 ? 's' : ''}</span>
+                    <div className="pt-1 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-medium text-slate-600 dark:text-slate-300">
+                        <span className="flex items-center space-x-1.5">
+                          <Layers className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                          <span className="font-mono font-semibold">{total} phase{total !== 1 ? 's' : ''}</span>
                         </span>
-                        <span>{completed}/{total} complete · {progress}%</span>
+                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                          {completed}/{total} complete · {progress}%
+                        </span>
                       </div>
-                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-violet-500 to-purple-500 transition-all duration-500"
+                          className="h-full rounded-full bg-gradient-to-r from-violet-600 via-indigo-500 to-purple-500 shadow-xs transition-all duration-500"
                           style={{ width: `${progress}%` }}
                         />
                       </div>
