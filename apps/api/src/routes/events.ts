@@ -13,15 +13,12 @@ function parseDate(value: unknown): Date | null | undefined {
   return isNaN(d.getTime()) ? null : d;
 }
 
-const TIME_PATTERN = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s?(AM|PM)$/i;
-const TIME_PATTERN_24 = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-
 function normalizeTime(value: unknown): string | null {
-  if (value === undefined || value === null || value === '') return null;
-  if (typeof value !== 'string' || value.trim().length > 20) return null;
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') return null;
   const t = value.trim();
-  if (TIME_PATTERN.test(t) || TIME_PATTERN_24.test(t)) return t;
-  return null;
+  if (!t) return null;
+  return limitString(t, 50);
 }
 
 router.get('/events', async (req: Request, res: Response) => {
@@ -98,16 +95,8 @@ router.patch('/events/:id', async (req: Request, res: Response) => {
       data.date = parsed;
     }
     if (endDate !== undefined) data.endDate = (parseDate(endDate) ?? null) as Date | null;
-    if (startTime !== undefined) {
-      const t = normalizeTime(startTime);
-      if (startTime !== '' && !t) return apiError(res, 'Start time must be a valid time (e.g. 09:00 AM)');
-      data.startTime = t;
-    }
-    if (endTime !== undefined) {
-      const t = normalizeTime(endTime);
-      if (endTime !== '' && !t) return apiError(res, 'End time must be a valid time (e.g. 06:00 PM)');
-      data.endTime = t;
-    }
+    if (startTime !== undefined) data.startTime = normalizeTime(startTime);
+    if (endTime !== undefined) data.endTime = normalizeTime(endTime);
     if (location !== undefined) data.location = typeof location === 'string' && location.trim() ? limitString(location.trim(), 300) : null;
     if (url !== undefined) {
       const urlCheck = parseSafeUrl(url);
