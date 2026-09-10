@@ -1,15 +1,30 @@
 import { test, expect } from '@playwright/test';
 
+async function enterWorkstation(page: any) {
+  await page.goto('/');
+  const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
+  await openBtn.click();
+
+  // If Auth Modal opens (when unauthenticated), sign in with test user credentials
+  const authTitle = page.locator('text=Sign In to NOX');
+  if (await authTitle.isVisible({ timeout: 1500 }).catch(() => false)) {
+    const emailInput = page.locator('input[type="email"]');
+    const passwordInput = page.locator('input[type="password"]');
+    await emailInput.fill('user@nox.internal');
+    await passwordInput.fill('user123password');
+    await page.getByRole('button', { name: /Sign In/i }).first().click();
+  }
+}
+
 test.describe('NOX Production Workflows & Theme Parity', () => {
-  test('should load landing page and enter workstation', async ({ page }) => {
+  test('should load landing page and enter workstation via authentication', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveTitle(/NOX/);
 
     const heroHeading = page.locator('text=An External Representation');
     await expect(heroHeading).toBeVisible();
 
-    const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
-    await openBtn.click();
+    await enterWorkstation(page);
 
     const brand = page.locator('h1:has-text("NOX")');
     await expect(brand.first()).toBeVisible();
@@ -19,10 +34,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
   });
 
   test('should toggle interface theme between Light and Dark modes', async ({ page }) => {
-    await page.goto('/');
-
-    const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
-    await openBtn.click();
+    await enterWorkstation(page);
 
     // Default theme is Dark Mode ('Switch to Light Mode' title displayed)
     const themeToggleBtn = page.getByTitle(/Switch to Light Mode/i).first();
@@ -41,10 +53,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
   });
 
   test('should navigate across primary workstation tabs', async ({ page }) => {
-    await page.goto('/');
-
-    const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
-    await openBtn.click();
+    await enterWorkstation(page);
 
     const tabs = ['Goals', 'Tasks', 'Learning', 'Events', 'Habits', 'Notes', 'Notifications', 'Time'];
 
@@ -56,10 +65,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
   });
 
   test('should import JSON roadmap plan with live tree preview', async ({ page }) => {
-    await page.goto('/');
-
-    const openBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
-    await openBtn.click();
+    await enterWorkstation(page);
 
     // Navigate to Roadmaps
     const roadmapsTab = page.getByRole('button', { name: 'Roadmaps' }).first();

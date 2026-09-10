@@ -55,7 +55,26 @@ export default function Home() {
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  const handleEnterApp = () => {
+    const user = getStoredUser();
+    const token = getToken();
+    if (user && token) {
+      setCurrentUser(user);
+      if (user?.role === 'ADMIN') setAdminMode(true);
+      setViewMode('app');
+      fetchAllData();
+    } else {
+      setIsAuthOpen(true);
+    }
+  };
+
   const fetchAllData = async () => {
+    const token = getToken();
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
       const [dashRes, goalsRes, roadmapsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes] =
         await Promise.all([
@@ -71,6 +90,12 @@ export default function Home() {
           fetchWithUser(`${API_BASE}/notifications`).then((r) => r.json()),
           fetchWithUser(`${API_BASE}/reminders`).then((r) => r.json()),
         ]);
+
+      if (dashRes.statusCode === 401 || goalsRes.statusCode === 401) {
+        handleSignOut();
+        setIsAuthOpen(true);
+        return;
+      }
 
       if (dashRes.success) setDashboardData(dashRes.data);
       if (goalsRes.success) setGoals(goalsRes.data);
@@ -98,9 +123,12 @@ export default function Home() {
         setCurrentUser(user);
         if (user?.role === 'ADMIN') setAdminMode(true);
         setViewMode('app');
+        fetchAllData();
+      } else {
+        setViewMode('landing');
+        setLoading(false);
       }
     }
-    fetchAllData();
   }, []);
 
   const handleSignOut = () => {
@@ -174,10 +202,10 @@ export default function Home() {
 
   return (
     <ThemeProvider>
-      {viewMode === 'landing' ? (
+      {viewMode === 'landing' || (!currentUser && !getToken()) ? (
         <>
           <LandingPage
-            onEnterApp={() => setViewMode('app')}
+            onEnterApp={handleEnterApp}
             onOpenLogin={() => setIsAuthOpen(true)}
           />
           <AuthModal
