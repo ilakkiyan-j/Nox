@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Compass, Plus, X, Save, Edit2, Trash2, CheckCircle2, Circle,
   ChevronDown, ChevronRight, FileCode, Check, AlertCircle, Layers,
+  Search, Filter, Maximize2, Minimize2, Eye, LayoutGrid, ListFilter,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -28,14 +29,10 @@ const STATUS_COLORS: Record<string, string> = {
   ON_HOLD: 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300',
 };
 
-const MILESTONE_STATUS_COLORS: Record<string, string> = {
-  COMPLETED: 'text-emerald-600 dark:text-emerald-400',
-  IN_PROGRESS: 'text-indigo-600 dark:text-indigo-400',
-  NOT_STARTED: 'text-slate-400 dark:text-slate-500',
-};
-
 const inputCls = 'w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-violet-500 dark:focus:border-violet-500 transition-colors';
 const labelCls = 'block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5';
+
+const PREVIEW_PHASE_COUNT = 3;
 
 // JSON import example
 const EXAMPLE_JSON = JSON.stringify({
@@ -67,6 +64,11 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   const [phases, setPhases] = useState<PhaseRow[]>([newPhaseRow()]);
   const [saving, setSaving] = useState(false);
 
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [goalFilter, setGoalFilter] = useState('ALL');
+
   // JSON import state
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -74,8 +76,13 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   const [jsonGoalId, setJsonGoalId] = useState('');
   const [importing, setImporting] = useState(false);
 
-  // Expanded roadmap cards (show phases)
+  // Card view state: expansion of roadmap cards
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  // Card view state: full phase list vs preview top 3
+  const [showAllPhases, setShowAllPhases] = useState<Record<string, boolean>>({});
+
+  // Focus View Modal for dedicated roadmap inspection
+  const [focusedRoadmapId, setFocusedRoadmapId] = useState<string | null>(null);
 
   // Editing roadmap
   const [editingRoadmap, setEditingRoadmap] = useState<any | null>(null);
@@ -98,6 +105,54 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
 
   const toggleExpand = (id: string) =>
     setExpandedCards((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const toggleShowAllPhases = (id: string) =>
+    setShowAllPhases((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  // Global expand/collapse toggle
+  const allCollapsed = useMemo(() => {
+    if (roadmaps.length === 0) return false;
+    return roadmaps.every((rm) => expandedCards[rm.id] === false);
+  }, [roadmaps, expandedCards]);
+
+  const toggleAllExpanded = () => {
+    const nextState = !allCollapsed;
+    const updated: Record<string, boolean> = {};
+    roadmaps.forEach((rm) => {
+      updated[rm.id] = !nextState; // if currently all collapsed, set true (expanded)
+    });
+    setExpandedCards(updated);
+  };
+
+  // Filtered roadmaps calculation
+  const filteredRoadmaps = useMemo(() => {
+    return roadmaps.filter((rm) => {
+      // Search text filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = rm.title.toLowerCase().includes(q);
+        const matchesDesc = rm.description?.toLowerCase().includes(q);
+        const matchesPhase = rm.milestones?.some((m: any) => m.title.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesDesc && !matchesPhase) return false;
+      }
+      // Status filter
+      if (statusFilter !== 'ALL' && rm.status !== statusFilter) {
+        return false;
+      }
+      // Goal filter
+      if (goalFilter !== 'ALL') {
+        if (goalFilter === 'NONE' && rm.goalId) return false;
+        if (goalFilter !== 'NONE' && rm.goalId !== goalFilter) return false;
+      }
+      return true;
+    });
+  }, [roadmaps, searchQuery, statusFilter, goalFilter]);
+
+  // Dynamic focused roadmap record
+  const currentFocusedRoadmap = useMemo(() => {
+    if (!focusedRoadmapId) return null;
+    return roadmaps.find((rm) => rm.id === focusedRoadmapId) || null;
+  }, [roadmaps, focusedRoadmapId]);
 
   // ── Phase rows helpers ────────────────────────────────────────────────────────
   const addPhaseRow = () => setPhases((p) => [...p, newPhaseRow()]);
@@ -223,6 +278,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
       onConfirm: async () => {
         try {
           await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/${id}`, { method: 'DELETE' });
+          if (focusedRoadmapId === id) setFocusedRoadmapId(null);
           onRefresh();
         } catch (err) { console.error(err); }
       },
@@ -306,14 +362,90 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
             Structured phase-by-phase progression plans linked to your goals.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-violet-500/20 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Roadmap</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {roadmaps.length > 0 && (
+            <button
+              onClick={toggleAllExpanded}
+              className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
+              title={allCollapsed ? 'Expand All Roadmaps' : 'Collapse All Roadmaps'}
+            >
+              {allCollapsed ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+              <span>{allCollapsed ? 'Expand All' : 'Collapse All'}</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-violet-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Roadmap</span>
+          </button>
+        </div>
       </div>
+
+      {/* Global Error Banner */}
+      {globalError && (
+        <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{globalError}</span>
+          </div>
+          <button onClick={() => setGlobalError(null)} className="text-rose-400 hover:text-rose-700 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ── Search & Filter Controls Bar ── */}
+      {roadmaps.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex-1 min-w-[200px] relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search roadmaps or phases..."
+              className="w-full pl-9 pr-3.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-violet-500 transition-colors"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+            {/* Status Filter */}
+            <div className="flex items-center space-x-1.5">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-violet-500 cursor-pointer"
+              >
+                <option value="ALL">All Statuses</option>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Goal Filter */}
+            <select
+              value={goalFilter}
+              onChange={(e) => setGoalFilter(e.target.value)}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-violet-500 cursor-pointer"
+            >
+              <option value="ALL">All Linked Goals</option>
+              <option value="NONE">Standalone (No Goal)</option>
+              {goals.map((g) => (
+                <option key={g.id} value={g.id}>{g.title}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* ── Create Form ── */}
       {showCreate && (
@@ -553,26 +685,45 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
       )}
 
       {/* ── Roadmaps List ── */}
-      {roadmaps.length === 0 ? (
+      {filteredRoadmaps.length === 0 ? (
         <div className="p-12 rounded-2xl bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-3">
           <Compass className="w-10 h-10 mx-auto text-violet-300 dark:text-violet-700" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">No roadmaps yet</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            {roadmaps.length === 0 ? 'No roadmaps yet' : 'No matching roadmaps'}
+          </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-            Create a roadmap with structured phases to plan how you'll achieve your goals.
+            {roadmaps.length === 0
+              ? 'Create a roadmap with structured phases to plan how you\'ll achieve your goals.'
+              : 'Try clearing your search or filter options.'}
           </p>
-          <button onClick={() => setShowCreate(true)}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold cursor-pointer">
-            <Plus className="w-4 h-4" /><span>New Roadmap</span>
-          </button>
+          {roadmaps.length === 0 ? (
+            <button onClick={() => setShowCreate(true)}
+              className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold cursor-pointer">
+              <Plus className="w-4 h-4" /><span>New Roadmap</span>
+            </button>
+          ) : (
+            <button onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); setGoalFilter('ALL'); }}
+              className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer">
+              <span>Reset Filters</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-5">
-          {roadmaps.map((rm) => {
-            const phases = rm.milestones ?? [];
-            const completed = phases.filter((m: any) => m.status === 'COMPLETED').length;
-            const total = phases.length;
+          {filteredRoadmaps.map((rm) => {
+            const allMilestones = rm.milestones ?? [];
+            const completed = allMilestones.filter((m: any) => m.status === 'COMPLETED').length;
+            const total = allMilestones.length;
             const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+            
             const isExpanded = expandedCards[rm.id] !== false; // default expanded
+            const isShowingAllPhases = showAllPhases[rm.id] === true;
+
+            // Phase preview slicing: limit to PREVIEW_PHASE_COUNT if not expanded fully
+            const visiblePhases = isShowingAllPhases
+              ? allMilestones
+              : allMilestones.slice(0, PREVIEW_PHASE_COUNT);
+            const remainingCount = total - visiblePhases.length;
 
             return (
               <div key={rm.id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all overflow-hidden">
@@ -592,10 +743,19 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
                       </div>
                       <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 mt-1.5 leading-tight">{rm.title}</h3>
                       {rm.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{rm.description}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed line-clamp-2">{rm.description}</p>
                       )}
                     </div>
+
                     <div className="flex items-center space-x-1 shrink-0">
+                      {/* Focus View Dedicated Modal Button */}
+                      <button
+                        onClick={() => setFocusedRoadmapId(rm.id)}
+                        className="p-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/60 text-violet-600 dark:text-violet-400 hover:bg-violet-100 transition-colors cursor-pointer"
+                        title="Open Focus Workspace"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
                       <button onClick={() => setEditingRoadmap(rm)}
                         className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors cursor-pointer"
                         title="Edit Roadmap">
@@ -608,7 +768,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
                       </button>
                       <button onClick={() => toggleExpand(rm.id)}
                         className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors cursor-pointer"
-                        title={isExpanded ? 'Collapse phases' : 'Expand phases'}>
+                        title={isExpanded ? 'Collapse card' : 'Expand card'}>
                         {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                       </button>
                     </div>
@@ -634,17 +794,17 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
                   )}
                 </div>
 
-                {/* Phases List */}
+                {/* Phases Preview List */}
                 {isExpanded && (
                   <div className="border-t border-slate-100 dark:border-slate-800">
-                    {phases.length === 0 && addingPhaseFor !== rm.id && (
+                    {allMilestones.length === 0 && addingPhaseFor !== rm.id && (
                       <div className="px-5 py-4 text-xs text-slate-400 dark:text-slate-500 italic flex items-center space-x-2">
                         <Circle className="w-3.5 h-3.5" />
                         <span>No phases yet — add one below to start planning.</span>
                       </div>
                     )}
 
-                    {phases.map((phase: any, idx: number) => (
+                    {visiblePhases.map((phase: any, idx: number) => (
                       <div key={phase.id}>
                         {/* Editing this phase inline */}
                         {editingPhase?.id === phase.id ? (
@@ -723,6 +883,29 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
                       </div>
                     ))}
 
+                    {/* Phase expander toggle button */}
+                    {allMilestones.length > PREVIEW_PHASE_COUNT && (
+                      <div className="px-5 py-2.5 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                        <button
+                          onClick={() => toggleShowAllPhases(rm.id)}
+                          className="text-violet-600 dark:text-violet-400 font-semibold hover:underline flex items-center space-x-1 cursor-pointer"
+                        >
+                          {isShowingAllPhases ? (
+                            <><span>Show Top 3 Phases</span><ChevronDown className="w-3.5 h-3.5 rotate-180 transition-transform" /></>
+                          ) : (
+                            <><span>Show all {total} phases (+{remainingCount} more)</span><ChevronDown className="w-3.5 h-3.5" /></>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setFocusedRoadmapId(rm.id)}
+                          className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-[11px] font-medium flex items-center space-x-1 cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>Open Focus View</span>
+                        </button>
+                      </div>
+                    )}
+
                     {/* Add phase inline form */}
                     {addingPhaseFor === rm.id ? (
                       <div className="px-5 py-4 bg-slate-50/80 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-3">
@@ -764,6 +947,110 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Focus View Workspace Modal ── */}
+      {currentFocusedRoadmap && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 md:p-6 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/50">
+              <div>
+                <div className="flex items-center space-x-2 mb-1.5">
+                  <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded uppercase font-mono ${STATUS_COLORS[currentFocusedRoadmap.status] || STATUS_COLORS.IN_PROGRESS}`}>
+                    {currentFocusedRoadmap.status?.replace('_', ' ')}
+                  </span>
+                  {currentFocusedRoadmap.goal && (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                      ↗ {currentFocusedRoadmap.goal.title}
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                  <Compass className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                  <span>{currentFocusedRoadmap.title}</span>
+                </h2>
+                {currentFocusedRoadmap.description && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    {currentFocusedRoadmap.description}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setFocusedRoadmapId(null)}
+                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content / All Phases */}
+            <div className="p-6 flex-1 overflow-y-auto space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+                  Phases Timeline ({(currentFocusedRoadmap.milestones || []).length})
+                </h3>
+                <button
+                  onClick={() => setAddingPhaseFor(currentFocusedRoadmap.id)}
+                  className="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold flex items-center space-x-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Phase</span>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {(currentFocusedRoadmap.milestones || []).map((phase: any, idx: number) => (
+                  <div key={phase.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 flex items-start gap-3 group">
+                    <button
+                      onClick={() => handleTogglePhase(phase.id, phase.status)}
+                      className="mt-0.5 shrink-0 cursor-pointer hover:scale-110 transition-transform"
+                    >
+                      {phase.status === 'COMPLETED' ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                      ) : (
+                        <Circle className="w-5 h-5 text-slate-300 dark:text-slate-600 hover:text-violet-500" />
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-5 h-5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 text-[10px] font-bold flex items-center justify-center font-mono">
+                          {idx + 1}
+                        </span>
+                        <h4 className={`text-sm font-bold ${phase.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                          {phase.title}
+                        </h4>
+                      </div>
+                      {phase.description && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-7 leading-relaxed">
+                          {phase.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setEditingPhase(phase)} className="p-1 text-slate-400 hover:text-violet-500">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDeletePhase(phase.id, phase.title)} className="p-1 text-slate-400 hover:text-rose-500">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex justify-end">
+              <button
+                onClick={() => setFocusedRoadmapId(null)}
+                className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Close Focus View
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
