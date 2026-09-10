@@ -66,7 +66,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     await roadmapsTab.click();
 
     // Click New Roadmap button
-    const newRoadmapBtn = page.getByRole('button', { name: /New Roadmap/i });
+    const newRoadmapBtn = page.getByRole('button', { name: /New Roadmap/i }).first();
     await expect(newRoadmapBtn).toBeVisible();
     await newRoadmapBtn.click();
 
