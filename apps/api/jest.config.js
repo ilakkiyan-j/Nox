@@ -8,4 +8,7 @@ module.exports = {
   moduleNameMapper: {
     '^@nox/database$': path.resolve(__dirname, '../../packages/database/src/index.ts'),
   },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }],
+  },
 };

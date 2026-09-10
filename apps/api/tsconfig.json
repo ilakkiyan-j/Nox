@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "CommonJS",
+    "rootDir": "./src",
     "outDir": "./dist",
     "strict": false,
     "esModuleInterop": true,
@@ -9,7 +10,7 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@nox/database": ["../../packages/database/src/index.ts"]
+      "@nox/database": ["../../packages/database/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"],
