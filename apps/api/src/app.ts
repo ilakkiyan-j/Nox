@@ -42,20 +42,28 @@ export function createApp() {
     next();
   });
 
-  // ---- CORS (restricted to configured origin when available) -------------------
+  // ---- CORS (allow configured origins, Vercel deployments, and local dev) --------
   const corsOrigin = process.env.CORS_ORIGIN;
   app.use(
     cors({
-      origin: corsOrigin
-        ? corsOrigin.split(',').map((o) => o.trim())
-        : function (origin, cb) {
-            // Default: allow same-origin / no-origin requests (curl, server-to-server).
-            if (!origin) return cb(null, true);
-            const localDevOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-            return cb(null, localDevOrigin || !isProduction);
-          },
+      origin: function (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) {
+        if (!origin) return cb(null, true);
+        if (corsOrigin) {
+          const allowedOrigins = corsOrigin.split(',').map((o) => o.trim());
+          if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+            return cb(null, true);
+          }
+        }
+        const localDevOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+        const isVercelDomain = /^https:\/\/.*\.vercel\.app$/.test(origin);
+        if (localDevOrigin || isVercelDomain) {
+          return cb(null, true);
+        }
+        return cb(null, !isProduction);
+      },
+      credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'x-user-id'],
       maxAge: 86400,
     }),
   );
