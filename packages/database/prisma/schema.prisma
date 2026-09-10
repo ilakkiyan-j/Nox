@@ -114,6 +114,7 @@ model Learning {
   title            String
   type             String           @default("COURSE") // COURSE, BOOK, CERTIFICATION, TUTORIAL, PRACTICE
   status           String           @default("IN_PROGRESS") // NOT_STARTED, IN_PROGRESS, COMPLETED
+  url              String?          // Course / Certification website URL
   totalModules     Int              @default(0)
   completedModules Int              @default(0)
   goalId           String?

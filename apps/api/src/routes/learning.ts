@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
 import { getOwnedLearning, getOwnedLearningModule, validateGoalRelation, validateLearningRelation, validateRoadmapRelation } from '../lib/ownership';
-import { isSafeString, LEARNING_STATUSES, LEARNING_TYPES, limitString } from '../lib/validate';
+import { isSafeString, LEARNING_STATUSES, LEARNING_TYPES, limitString, parseSafeUrl } from '../lib/validate';
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.get('/learning', async (req: Request, res: Response) => {
 
 router.post('/learning', async (req: Request, res: Response) => {
   try {
-    const { title, type, goalId, roadmapId, modules } = (req.body ?? {}) as Record<string, unknown>;
+    const { title, type, url, goalId, roadmapId, modules } = (req.body ?? {}) as Record<string, unknown>;
 
     if (!isSafeString(title)) return apiError(res, 'Title is required');
     if (type !== undefined && !LEARNING_TYPES.includes(type as any)) {
@@ -32,6 +32,9 @@ router.post('/learning', async (req: Request, res: Response) => {
       validateRoadmapRelation(roadmapId as string | undefined, req.user!.id),
     ]);
 
+    const urlCheck = parseSafeUrl(url);
+    if (!urlCheck.ok) return apiError(res, urlCheck.error, 400);
+
     const rawModules = Array.isArray(modules) ? modules : [];
     if (rawModules.length > 100) return apiError(res, 'Too many modules (max 100)');
 
@@ -40,6 +43,7 @@ router.post('/learning', async (req: Request, res: Response) => {
         userId: req.user!.id,
         title: limitString(title.trim(), 200),
         type: (type as string) || 'COURSE',
+        url: urlCheck.value,
         goalId: (goalId as string) || null,
         roadmapId: (roadmapId as string) || null,
         totalModules: rawModules.length,
@@ -70,7 +74,7 @@ router.patch('/learning/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     await getOwnedLearning(id, req.user!.id);
 
-    const { title, type, status } = (req.body ?? {}) as Record<string, unknown>;
+    const { title, type, status, url } = (req.body ?? {}) as Record<string, unknown>;
     const data: Record<string, unknown> = {};
     if (title !== undefined) {
       if (!isSafeString(title)) return apiError(res, 'Title must be a non-empty string');
@@ -83,6 +87,11 @@ router.patch('/learning/:id', async (req: Request, res: Response) => {
     if (status !== undefined) {
       if (!LEARNING_STATUSES.includes(status as any)) return apiError(res, `Status must be one of ${LEARNING_STATUSES.join(', ')}`);
       data.status = status;
+    }
+    if (url !== undefined) {
+      const urlCheck = parseSafeUrl(url);
+      if (!urlCheck.ok) return apiError(res, urlCheck.error, 400);
+      data.url = urlCheck.value;
     }
 
     const updated = await db.learning.update({ where: { id }, data });

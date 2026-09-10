@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save } from 'lucide-react';
+import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save, ExternalLink } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -33,6 +33,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
 
   const [title, setTitle] = useState('');
   const [type, setType] = useState('COURSE');
+  const [url, setUrl] = useState('');
   const [moduleInputs, setModuleInputs] = useState('');
 
   const handleCreateLearning = async (e: React.FormEvent) => {
@@ -47,9 +48,10 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       await fetchWithUser(`${API_BASE_URL}/api/v1/learning`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, type, modules }),
+        body: JSON.stringify({ title, type, url: url.trim() || undefined, modules }),
       });
       setTitle('');
+      setUrl('');
       setModuleInputs('');
       setShowCreate(false);
       onRefresh();
@@ -69,6 +71,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
         body: JSON.stringify({
           title: editingLearning.title,
           type: editingLearning.type,
+          url: editingLearning.url?.trim() || null,
           status: editingLearning.status,
         }),
       });
@@ -233,6 +236,17 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           </div>
 
           <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Website / Certification Link (optional)</label>
+            <input
+              type="url"
+              placeholder="https://coursera.org/learn/... or https://aws.amazon.com/certification/..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
+            />
+          </div>
+
+          <div>
             <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Initial Modules / Chapters (One per line)</label>
             <textarea
               rows={3}
@@ -272,6 +286,17 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
               onChange={(e) => setEditingLearning({ ...editingLearning, title: e.target.value })}
               className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
               required
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Website / Certification Link</label>
+            <input
+              type="url"
+              placeholder="https://..."
+              value={editingLearning.url || ''}
+              onChange={(e) => setEditingLearning({ ...editingLearning, url: e.target.value })}
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -390,6 +415,17 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
                     <h3 className={`font-display font-bold text-lg mt-0.5 ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
                       {item.title}
                     </h3>
+                    {item.url && (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center space-x-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-1 font-medium"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Visit Course / Website</span>
+                      </a>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center space-x-1">
