@@ -23,7 +23,7 @@ import NotesView from '../components/NotesView';
 import NotificationsView from '../components/NotificationsView';
 import TimeView from '../components/TimeView';
 import RemindersView from '../components/RemindersView';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { API_BASE_URL, fetchWithUser, clearAuth, getToken, getStoredUser } from '../lib/api';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
 
@@ -88,26 +88,27 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('nox_user');
-        if (stored) {
-          const user = JSON.parse(stored);
-          setCurrentUser(user);
-          if (user?.role === 'ADMIN') setAdminMode(true);
-          setViewMode('app');
-        }
-      } catch (e) {
-        console.error(e);
+      const user = getStoredUser();
+      const token = getToken();
+      if (user && token) {
+        setCurrentUser(user);
+        if (user?.role === 'ADMIN') setAdminMode(true);
+        setViewMode('app');
       }
     }
     fetchAllData();
   }, []);
 
+  const handleSignOut = () => {
+    setCurrentUser(null);
+    clearAuth();
+    setAdminMode(false);
+    setViewMode('landing');
+    setActiveTab('dashboard');
+  };
+
   const handleLoginSuccess = (user: any) => {
     setCurrentUser(user);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nox_user', JSON.stringify(user));
-    }
     if (user?.role === 'ADMIN') {
       setAdminMode(true);
     } else {
@@ -182,12 +183,7 @@ export default function Home() {
         </>
       ) : currentUser?.role === 'ADMIN' ? (
         <AdminDashboardView
-          onSignOut={() => {
-            setCurrentUser(null);
-            if (typeof window !== 'undefined') localStorage.removeItem('nox_user');
-            setAdminMode(false);
-            setViewMode('landing');
-          }}
+          onSignOut={handleSignOut}
         />
       ) : (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex relative text-slate-900 dark:text-slate-100 transition-colors">
@@ -208,11 +204,7 @@ export default function Home() {
               onOpenQuickCapture={() => setIsQuickCaptureOpen(true)}
               notifications={notifications}
               onRefreshNotifications={fetchAllData}
-              onBackToLanding={() => {
-                setCurrentUser(null);
-                if (typeof window !== 'undefined') localStorage.removeItem('nox_user');
-                setViewMode('landing');
-              }}
+              onBackToLanding={handleSignOut}
             />
 
             {/* View Workstation Content Container with Animated Entrance */}
@@ -260,11 +252,7 @@ export default function Home() {
           <UserControlPanel
             isOpen={isProfileOpen}
             onClose={() => setIsProfileOpen(false)}
-            onSignOut={() => {
-              setCurrentUser(null);
-              if (typeof window !== 'undefined') localStorage.removeItem('nox_user');
-              setViewMode('landing');
-            }}
+            onSignOut={handleSignOut}
             onOpenAdmin={() => setIsAdminOpen(true)}
             currentUser={currentUser}
             stats={{

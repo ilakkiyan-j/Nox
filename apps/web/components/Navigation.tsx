@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
   Target,
@@ -16,6 +16,7 @@ import {
   Bell,
   Layers,
   Settings,
+  MoreHorizontal,
 } from 'lucide-react';
 
 export type NavTab =
@@ -53,9 +54,17 @@ export const navItems: { id: NavTab; label: string; icon: any }[] = [
 ];
 
 export default function Navigation({ activeTab, setActiveTab, onOpenProfile, currentUser }: NavigationProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
   const initials = currentUser?.name
     ? currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
     : 'NA';
+  const mobileVisible = navItems.slice(0, 5);
+  const mobileHidden = navItems.slice(5);
+  const hasHiddenActive = mobileHidden.some((i) => i.id === activeTab);
+  const selectTab = (tab: NavTab) => {
+    setActiveTab(tab);
+    setMoreOpen(false);
+  };
   return (
     <>
       {/* Desktop & Laptop Left Navigation Sidebar (Light/Dark Theme Parity) */}
@@ -125,13 +134,13 @@ export default function Navigation({ activeTab, setActiveTab, onOpenProfile, cur
 
       {/* Mobile Glassmorphism Bottom Navigation Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 glass-nav bg-white/95 dark:bg-slate-900/95 z-40 px-2 py-2 flex items-center justify-around border-t border-slate-200 dark:border-slate-800 shadow-lg transition-colors">
-        {navItems.slice(0, 5).map((item) => {
+        {mobileVisible.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => selectTab(item.id)}
               className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all ${
                 isActive
                   ? 'text-indigo-600 dark:text-indigo-400 font-bold scale-105'
@@ -143,7 +152,55 @@ export default function Navigation({ activeTab, setActiveTab, onOpenProfile, cur
             </button>
           );
         })}
+
+        <button
+          onClick={() => setMoreOpen(!moreOpen)}
+          aria-expanded={moreOpen}
+          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all ${
+            hasHiddenActive
+              ? 'text-indigo-600 dark:text-indigo-400 font-bold scale-105'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <MoreHorizontal className="w-5 h-5" />
+          <span className="text-[10px] mt-1">More</span>
+        </button>
       </div>
+
+      {/* Mobile "More" tab sheet */}
+      <AnimatePresence>
+        {moreOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.15 }}
+            className="md:hidden fixed bottom-20 left-3 right-3 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-3 grid grid-cols-3 gap-1 max-h-[50vh] overflow-y-auto"
+            role="menu"
+            aria-label="More sections"
+          >
+            {mobileHidden.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  role="menuitem"
+                  onClick={() => selectTab(item.id)}
+                  className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl transition-colors ${
+                    isActive
+                      ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-400 font-semibold'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="text-[10px] mt-1.5">{item.label}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Edit3, X } from 'lucide-react';
+import DialogShell from './ui/Dialog';
 
 interface PromptModalProps {
   isOpen: boolean;
@@ -40,15 +41,13 @@ export default function PromptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-150">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 relative transition-colors"
-      >
+    <DialogShell isOpen={isOpen} onClose={onClose} label={title} className="max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 transition-colors">
+      <form onSubmit={handleSubmit}>
         <button
           type="button"
           onClick={onClose}
           className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg transition-colors"
+          aria-label="Close"
         >
           <X className="w-4 h-4" />
         </button>
@@ -62,17 +61,18 @@ export default function PromptModal({
           </div>
         </div>
 
-        <input
-          type="text"
-          value={value}
-          placeholder={placeholder}
-          onChange={(e) => setValue(e.target.value)}
-          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
-          autoFocus
-          required
-        />
+        <div className="mt-4">
+          <input
+            type="text"
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
+            required
+          />
+        </div>
 
-        <div className="flex justify-end space-x-2 pt-2">
+        <div className="flex justify-end space-x-2 pt-4">
           <button
             type="button"
             onClick={onClose}
@@ -88,6 +88,6 @@ export default function PromptModal({
           </button>
         </div>
       </form>
-    </div>
+    </DialogShell>
   );
 }

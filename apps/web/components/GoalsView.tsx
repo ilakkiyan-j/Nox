@@ -377,7 +377,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
               <Target className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>Create New Outcome Goal</span>
             </h3>
-            <button type="button" onClick={() => setShowCreateGoal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+            <button type="button" onClick={() => setShowCreateGoal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Close goal form">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -465,6 +465,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                 type="button"
                 onClick={() => setShowCreateRoadmap(false)}
                 className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg"
+                aria-label="Close roadmap form"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -541,7 +542,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                 placeholder="Paste JSON plan here..."
                 value={jsonInput}
                 onChange={(e) => handleJsonInputChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 text-emerald-400 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-inner"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-inner"
               />
 
               {/* Validation Status / Error Message */}
@@ -619,7 +620,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
         <form onSubmit={handleUpdateGoal} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Goal Details</h3>
-            <button type="button" onClick={() => setEditingGoal(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+            <button type="button" onClick={() => setEditingGoal(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Close edit goal form">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -683,7 +684,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
         <form onSubmit={handleUpdateRoadmap} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Roadmap</h3>
-            <button type="button" onClick={() => setEditingRoadmap(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+            <button type="button" onClick={() => setEditingRoadmap(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Close edit roadmap form">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -708,6 +709,25 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
       )}
 
       {/* Goals & Roadmaps Feed */}
+      {goals.length === 0 ? (
+        <div className="p-10 rounded-2xl bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-3">
+          <Target className="w-10 h-10 mx-auto text-indigo-300 dark:text-indigo-700" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">No goals yet</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+            Create your first outcome goal, then link structured roadmaps with checkpoints and tasks to track progress over time.
+          </p>
+          <button
+            onClick={() => {
+              setShowCreateGoal(true);
+              setShowCreateRoadmap(false);
+            }}
+            className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Goal</span>
+          </button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {goals.map((goal) => (
           <div key={goal.id} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
@@ -723,6 +743,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                   onClick={() => setEditingGoal(goal)}
                   className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
                   title="Edit Goal"
+                  aria-label="Edit Goal"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
@@ -730,6 +751,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                   onClick={() => handleDeleteGoal(goal.id)}
                   className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400"
                   title="Delete Goal"
+                  aria-label="Delete Goal"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -763,6 +785,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                           onClick={() => setEditingRoadmap(rm)}
                           className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                           title="Edit Roadmap"
+                          aria-label="Edit Roadmap"
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
@@ -770,6 +793,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                           onClick={() => handleDeleteRoadmap(rm.id)}
                           className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
                           title="Delete Roadmap"
+                          aria-label="Delete Roadmap"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -779,9 +803,11 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                       <div className="space-y-1.5 pl-2 pt-1 border-t border-slate-200 dark:border-slate-700/60">
                         {rm.milestones.map((ms: any) => (
                           <div key={ms.id} className="flex items-center justify-between group/ms text-xs py-0.5">
-                            <div
+                            <button
                               onClick={() => handleToggleMilestone(ms.id, ms.status)}
-                              className="flex items-center space-x-2 cursor-pointer select-none"
+                              className="flex items-center space-x-2 cursor-pointer select-none text-left"
+                              aria-pressed={ms.status === 'COMPLETED'}
+                              aria-label={ms.status === 'COMPLETED' ? `Mark ${ms.title} as not completed` : `Mark ${ms.title} as completed`}
                             >
                               {ms.status === 'COMPLETED' ? (
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -791,12 +817,13 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                               <span className={ms.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300 font-medium'}>
                                 {ms.title}
                               </span>
-                            </div>
+                            </button>
                             <div className="flex items-center space-x-1 opacity-0 group-hover/ms:opacity-100 transition-opacity">
                               <button
                                 onClick={() => handleRenameMilestone(ms.id, ms.title)}
                                 className="p-0.5 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                                 title="Edit Checkpoint Title"
+                                aria-label="Edit Checkpoint Title"
                               >
                                 <Edit2 className="w-3 h-3" />
                               </button>
@@ -804,6 +831,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                                 onClick={() => handleDeleteMilestone(ms.id)}
                                 className="p-0.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
                                 title="Delete Checkpoint"
+                                aria-label="Delete Checkpoint"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -819,6 +847,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
           </div>
         ))}
       </div>
+      )}
 
       {/* Reusable Confirmation & Prompt Modals */}
       <ConfirmModal

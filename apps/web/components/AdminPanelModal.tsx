@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Shield, Plus, X, User, Mail, Lock, Key, Copy, Check, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import DialogShell from './ui/Dialog';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
     setLoading(true);
     setErrorMsg('');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users`);
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`);
       const data = await res.json();
       if (data.success) {
         setUsers(data.data);
@@ -58,9 +59,8 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
     setErrorMsg('');
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users`, {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, role }),
       });
 
@@ -84,7 +84,7 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
   const handleDeleteUser = async (userId: string) => {
     setErrorMsg('');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
       if (res.ok) {
         fetchUsers();
       } else {
@@ -98,15 +98,14 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
   };
 
   const handleCopyCredentials = (u: any) => {
-    const text = `NOX Account Credentials:\nEmail: ${u.email}\nPassword: ${u.password}\nRole: ${u.role}`;
+    const text = `NOX Account (${u.name}):\nEmail: ${u.email}\nRole: ${u.role}\nPasswords are not stored in plaintext and cannot be retrieved.`;
     navigator.clipboard.writeText(text);
     setCopiedId(u.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative max-h-[90vh] flex flex-col transition-colors">
+    <DialogShell isOpen={isOpen} onClose={onClose} label="Admin Account Manager" className="max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] flex flex-col transition-colors">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-4">
           <div className="flex items-center space-x-3 min-w-0">
@@ -254,17 +253,17 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <div className="text-right hidden sm:block">
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-mono">Password:</span>
-                    <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                      {u.password}
+                  <div className="text-right hidden sm:block" title="Passwords are hashed and never stored in plaintext">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-mono">Password</span>
+                    <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900">
+                      ••••••••
                     </span>
                   </div>
 
                   <button
                     onClick={() => handleCopyCredentials(u)}
                     className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                    title="Copy Credentials to Clipboard"
+                    title="Copy Account Email & Role to Clipboard"
                   >
                     {copiedId === u.id ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   </button>
@@ -281,7 +280,6 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
             ))
           )}
         </div>
-      </div>
-    </div>
+    </DialogShell>
   );
 }

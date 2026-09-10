@@ -1,73 +1,115 @@
-describe('Roadmap JSON Plan Import Validation Unit Tests', () => {
-  function validateRoadmapPlanPayload(payload: any): { isValid: boolean; error?: string } {
-    if (!payload || typeof payload !== 'object') {
-      return { isValid: false, error: 'Payload must be a non-null JSON object' };
-    }
+import { validateRoadmapPlan } from '../../src/lib/validate';
 
-    if (!payload.title || typeof payload.title !== 'string' || payload.title.trim().length === 0) {
-      return { isValid: false, error: 'Invalid plan payload: "title" is required and must be a non-empty string' };
-    }
-
-    if (!payload.milestones || !Array.isArray(payload.milestones) || payload.milestones.length === 0) {
-      return { isValid: false, error: 'Invalid plan payload: "milestones" must be a non-empty array of milestone objects' };
-    }
-
-    for (let idx = 0; idx < payload.milestones.length; idx++) {
-      const m = payload.milestones[idx];
-      if (!m || typeof m !== 'object' || !m.title || typeof m.title !== 'string' || m.title.trim().length === 0) {
-        return { isValid: false, error: `Milestone at index ${idx} missing required "title" string property` };
-      }
-    }
-
-    return { isValid: true };
-  }
-
-  test('should validate correct roadmap plan JSON payload', () => {
-    const validPayload = {
+describe('Roadmap JSON Plan Import Validation', () => {
+  test('accepts a valid roadmap plan', () => {
+    const valid = {
       title: 'Full-Stack FDE Roadmap',
-      description: 'Systematic approach to FDE engineering',
+      description: 'Systematic approach',
       milestones: [
         {
           title: 'Phase 1: Systems Engineering',
-          tasks: [{ title: 'Master Linux Networking' }, { title: 'Docker & Kubernetes Fundamentals' }],
+          targetDate: '2026-10-01',
+          tasks: [
+            { title: 'Master Linux Networking', priority: 'HIGH', estimatedMinutes: 60 },
+            { title: 'Docker & Kubernetes Fundamentals', dueDate: '2026-10-15' },
+          ],
         },
       ],
     };
-
-    const res = validateRoadmapPlanPayload(validPayload);
-    expect(res.isValid).toBe(true);
-    expect(res.error).toBeUndefined();
+    expect(validateRoadmapPlan(valid)).toEqual({ isValid: true });
   });
 
-  test('should reject payload missing title', () => {
-    const invalidPayload = {
+  test('accepts a plan without tasks arrays', () => {
+    const valid = {
+      title: 'Minimal Plan',
       milestones: [{ title: 'Phase 1' }],
     };
-
-    const res = validateRoadmapPlanPayload(invalidPayload);
-    expect(res.isValid).toBe(false);
-    expect(res.error).toContain('"title" is required');
+    expect(validateRoadmapPlan(valid).isValid).toBe(true);
   });
 
-  test('should reject payload with empty milestones array', () => {
-    const invalidPayload = {
-      title: 'Empty Roadmap',
-      milestones: [],
-    };
-
-    const res = validateRoadmapPlanPayload(invalidPayload);
+  test('rejects missing title', () => {
+    const res = validateRoadmapPlan({ milestones: [{ title: 'Phase 1' }] });
     expect(res.isValid).toBe(false);
-    expect(res.error).toContain('"milestones" must be a non-empty array');
+    expect(res.error).toContain('title');
   });
 
-  test('should reject payload with invalid milestone title at specific index', () => {
-    const invalidPayload = {
-      title: 'Roadmap with Broken Milestone',
-      milestones: [{ title: 'Valid Phase 1' }, { description: 'Missing title' }],
-    };
-
-    const res = validateRoadmapPlanPayload(invalidPayload);
+  test('rejects empty milestones array', () => {
+    const res = validateRoadmapPlan({ title: 'Empty', milestones: [] });
     expect(res.isValid).toBe(false);
-    expect(res.error).toContain('Milestone at index 1 missing required "title"');
+    expect(res.error).toContain('milestones');
+  });
+
+  test('rejects missing milestone title at a specific index with a useful path', () => {
+    const res = validateRoadmapPlan({
+      title: 'Broken',
+      milestones: [{ title: 'Phase 1' }, { description: 'missing title' }],
+    });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('milestones[1].title');
+  });
+
+  test('rejects wrong field types inside tasks', () => {
+    const res = validateRoadmapPlan({
+      title: 'Wrong types',
+      milestones: [{ title: 'Phase 1', tasks: [{ title: 'Task', priority: 'IMPORTANT' }] }],
+    });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('priority');
+  });
+
+  test('rejects unexpected top-level fields', () => {
+    const res = validateRoadmapPlan({
+      title: 'X',
+      milestones: [{ title: 'Phase 1' }],
+      evilField: 'nope',
+    });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('unexpected field');
+  });
+
+  test('rejects duplicate milestone titles', () => {
+    const res = validateRoadmapPlan({
+      title: 'Duplicates',
+      milestones: [{ title: 'Same' }, { title: 'Same' }],
+    });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('duplicate milestone title');
+  });
+
+  test('rejects invalid dates', () => {
+    const res = validateRoadmapPlan({
+      title: 'Dates',
+      milestones: [{ title: 'Phase 1', targetDate: 'not-a-date', tasks: [{ title: 'A', dueDate: 'garbage' }] }],
+    });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('valid date string');
+  });
+
+  test('rejects oversized payloads', () => {
+    const milestones = Array.from({ length: 51 }, (_, i) => ({ title: `M${i}` }));
+    const res = validateRoadmapPlan({ title: 'Too big', milestones });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('maximum of 50 milestones');
+  });
+
+  test('rejects excessively long strings', () => {
+    const res = validateRoadmapPlan({ title: 'x'.repeat(5000), milestones: [{ title: 'Phase 1' }] });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('title');
+  });
+
+  test('rejects non-object payloads (array / null / string)', () => {
+    expect(validateRoadmapPlan([]).isValid).toBe(false);
+    expect(validateRoadmapPlan(null).isValid).toBe(false);
+    expect(validateRoadmapPlan('hello').isValid).toBe(false);
+  });
+
+  test('rejects milestone with unexpected fields', () => {
+    const res = validateRoadmapPlan({
+      title: 'X',
+      milestones: [{ title: 'Phase 1', scheduled: true }],
+    });
+    expect(res.isValid).toBe(false);
+    expect(res.error).toContain('scheduled');
   });
 });

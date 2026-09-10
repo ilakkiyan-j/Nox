@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Layers, Mail, Lock, ArrowRight, X, Key, Eye, EyeOff } from 'lucide-react';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, saveAuth } from '../lib/api';
+import DialogShell from './ui/Dialog';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -32,8 +33,9 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
       });
 
       const data = await res.json();
-      if (data.success) {
-        onLoginSuccess(data.data);
+      if (data.success && data.data?.token && data.data?.user) {
+        saveAuth(data.data.token, data.data.user);
+        onLoginSuccess(data.data.user);
         onClose();
       } else {
         setErrorMsg(data.error?.message || 'Authentication failed');
@@ -46,9 +48,8 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative transition-colors">
-        <button onClick={onClose} className="absolute top-5 right-5 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg">
+    <DialogShell isOpen={isOpen} onClose={onClose} label="Sign in to NOX" className="max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 transition-colors">
+        <button onClick={onClose} className="absolute top-5 right-5 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg" aria-label="Close">
           <X className="w-5 h-5" />
         </button>
 
@@ -116,7 +117,6 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-      </div>
-    </div>
+    </DialogShell>
   );
 }

@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+
+const BCRYPT_ROUNDS = 12;
 
 async function main() {
   console.log('🌱 Seeding NOX database...');
@@ -22,11 +25,14 @@ async function main() {
   await prisma.user.deleteMany();
 
   // 2. Create Admin & Primary Users
+  const hashedAdmin = await bcrypt.hash('admin123password', BCRYPT_ROUNDS);
+  const hashedUser = await bcrypt.hash('user123password', BCRYPT_ROUNDS);
+
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@nox.internal',
       name: 'System Admin',
-      password: 'admin123password',
+      password: hashedAdmin,
       role: 'ADMIN',
       headline: 'NOX Master Architect & Administrator',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
@@ -37,7 +43,7 @@ async function main() {
     data: {
       email: 'user@nox.internal',
       name: 'Nox Architect',
-      password: 'user123password',
+      password: hashedUser,
       role: 'USER',
       headline: 'Senior Forward Deployed Engineer (FDE)',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',

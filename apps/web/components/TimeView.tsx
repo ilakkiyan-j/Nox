@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Clock, Zap, ArrowRight, Calendar, CheckSquare, AlarmClock, Plus } from 'lucide-react';
+import { Clock, Zap, ArrowRight, Calendar, CheckSquare, AlarmClock, Plus, Target, Repeat } from 'lucide-react';
 import { NavTab } from './Navigation';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
@@ -45,53 +45,58 @@ export default function TimeView({ onNavigate }: TimeViewProps) {
   }
 
   const renderCard = (item: any) => {
-    switch (item.type) {
-      case 'TASK':
-        return (
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-            <div className="flex items-center space-x-3">
-              <CheckSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</p>
-                {item.goal && <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">🎯 {item.goal.title}</span>}
-              </div>
-            </div>
-            <span className="text-[10px] px-2.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-mono font-bold">
-              Action Item
-            </span>
+    const config: Record<string, any> = {
+      TASK: {
+        icon: CheckSquare,
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        badgeColor: 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300',
+        fallbackBadge: 'Action Item',
+      },
+      EVENT: {
+        icon: Calendar,
+        iconColor: 'text-rose-600 dark:text-rose-400',
+        badgeColor: 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300',
+        fallbackBadge: 'Event',
+      },
+      REMINDER: {
+        icon: AlarmClock,
+        iconColor: 'text-violet-600 dark:text-violet-400',
+        badgeColor: 'bg-violet-100 dark:bg-violet-950/80 text-violet-800 dark:text-violet-300',
+        fallbackBadge: 'Scheduled',
+      },
+      MILESTONE: {
+        icon: Target,
+        iconColor: 'text-amber-600 dark:text-amber-400',
+        badgeColor: 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300',
+        fallbackBadge: 'Milestone',
+      },
+      HABIT: {
+        icon: Repeat,
+        iconColor: 'text-sky-600 dark:text-sky-400',
+        badgeColor: 'bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300',
+        fallbackBadge: 'Habit',
+      },
+    };
+
+    const cfg = config[item.type];
+    if (!cfg) return null;
+    const Icon = cfg.icon;
+    const meta = [item.subtitle, item.when, item.time].filter(Boolean).join(' · ');
+
+    return (
+      <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+        <div className="flex items-center space-x-3 min-w-0">
+          <Icon className={`w-5 h-5 ${cfg.iconColor} shrink-0`} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{item.title}</p>
+            {meta && <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{meta}</p>}
           </div>
-        );
-      case 'EVENT':
-        return (
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-            <div className="flex items-center space-x-3">
-              <Calendar className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">📅 {new Date(item.date).toLocaleDateString()}</p>
-              </div>
-            </div>
-            <span className="text-[10px] px-2.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 font-mono font-bold">Event</span>
-          </div>
-        );
-      case 'HABIT':
-        // Habits not shown in Time view — filtered server side
-        return null;
-      case 'REMINDER':
-        return (
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-            <div className="flex items-center space-x-3">
-              <AlarmClock className="w-5 h-5 text-violet-600 dark:text-violet-400 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</p>
-              </div>
-            </div>
-            <span className="text-[10px] px-2.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950/80 text-violet-800 dark:text-violet-300 font-mono font-bold">Scheduled</span>
-          </div>
-        );
-      default:
-        return null;
-    }
+        </div>
+        <span className={`text-[10px] px-2.5 py-0.5 rounded font-mono font-bold whitespace-nowrap shrink-0 ${cfg.badgeColor}`}>
+          {item.label || cfg.fallbackBadge}
+        </span>
+      </div>
+    );
   };
 
   const isFeedEmpty = timeData.now.length === 0 && timeData.next.length === 0 && timeData.upcoming.length === 0;

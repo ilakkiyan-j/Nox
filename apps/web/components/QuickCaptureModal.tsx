@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, Clipboard, Link as LinkIcon, Folder, Tag, Save } from 'lucide-react';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import DialogShell from './ui/Dialog';
 
 interface QuickCaptureModalProps {
   isOpen: boolean;
@@ -15,7 +16,7 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
   const [content, setContent] = useState('');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
-  const [folder, setFolder] = useState('Unsorted');
+  const [folder, setFolder] = useState('');
   const [tags, setTags] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -34,6 +35,7 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
           title: title.trim() || content.slice(0, 35) || 'Captured Link',
           content: content.trim(),
           url: url.trim(),
+          folderId: folder || undefined,
           tags: tags ? tags.split(',').map((t) => t.trim()) : [],
         }),
       });
@@ -43,6 +45,7 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
         setUrl('');
         setTitle('');
         setTags('');
+        setFolder('');
         onSaved();
         onClose();
       }
@@ -68,15 +71,14 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 relative transition-colors">
+    <DialogShell isOpen={isOpen} onClose={onClose} label="Quick Capture Scratchpad" className="max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 transition-colors">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
           <div className="flex items-center space-x-2">
             <Clipboard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">Quick Capture Scratchpad</h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -137,22 +139,13 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
                 onChange={(e) => setFolder(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 font-medium appearance-none cursor-pointer"
               >
-                <option value="Unsorted">📥 Unsorted</option>
-                {folders.length > 0 ? (
+                <option value="">📥 Unsorted</option>
+                {folders.length > 0 &&
                   folders.map((f: any) => (
-                    <option key={f.id || f.name} value={f.name || f}>
-                      📁 {f.name || f}
+                    <option key={f.id} value={f.id}>
+                      📁 {f.name}
                     </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="Jobs">📁 Jobs</option>
-                    <option value="Events">📁 Events</option>
-                    <option value="Learning">📁 Learning</option>
-                    <option value="Resources">📁 Resources</option>
-                    <option value="Ideas">📁 Ideas</option>
-                  </>
-                )}
+                  ))}
               </select>
             </div>
             <div>
@@ -185,7 +178,6 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </DialogShell>
   );
 }

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+import DialogShell from './ui/Dialog';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -25,11 +26,12 @@ export default function ConfirmModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 relative transition-colors">
+    <DialogShell isOpen={isOpen} onClose={onClose} label={title} className="max-w-md">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 relative transition-colors">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg transition-colors"
+          aria-label="Close"
         >
           <X className="w-4 h-4" />
         </button>
@@ -62,6 +64,6 @@ export default function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </DialogShell>
   );
 }

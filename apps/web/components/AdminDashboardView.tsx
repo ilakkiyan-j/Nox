@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Shield, Plus, Key, Copy, Check, Trash2, RefreshCw, Users, Lock, LogOut, Sun, Moon, AlertCircle } from 'lucide-react';
 import { useTheme } from './ThemeContext';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface AdminDashboardViewProps {
   onSignOut: () => void;
@@ -28,7 +28,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
     setLoading(true);
     setErrorMsg('');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users`);
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`);
       const data = await res.json();
       if (data.success) {
         setUsers(data.data);
@@ -59,9 +59,8 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
     setSuccessMsg('');
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users`, {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, role }),
       });
 
@@ -87,7 +86,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
   const handleDeleteUser = async (userId: string) => {
     setErrorMsg('');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
       if (res.ok) {
         setSuccessMsg('Account access revoked');
         setTimeout(() => setSuccessMsg(''), 3000);
@@ -103,7 +102,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
   };
 
   const handleCopyCredentials = (u: any) => {
-    const text = `NOX Account Credentials:\nEmail: ${u.email}\nPassword: ${u.password}\nRole: ${u.role}`;
+    const text = `NOX Account (${u.name}):\nEmail: ${u.email}\nRole: ${u.role}\nPasswords are not stored in plaintext and cannot be retrieved.`;
     navigator.clipboard.writeText(text);
     setCopiedId(u.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -308,7 +307,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
                     className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs font-semibold flex items-center space-x-1.5 whitespace-nowrap shrink-0 transition-all"
                   >
                     {copiedId === u.id ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />}
-                    <span>{copiedId === u.id ? 'Copied Creds!' : 'Copy Creds'}</span>
+                    <span>{copiedId === u.id ? 'Copied!' : 'Copy Email'}</span>
                   </button>
 
                   <button
