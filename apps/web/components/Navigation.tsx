@@ -196,6 +196,18 @@ export default function Navigation({ activeTab, setActiveTab, onOpenProfile, cur
                 </button>
               );
             })}
+
+            <button
+              role="menuitem"
+              onClick={() => {
+                onOpenProfile();
+                setMoreOpen(false);
+              }}
+              className="flex flex-col items-center justify-center py-3 px-2 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-400 font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+            >
+              <Settings className="w-5 h-5" />
+              <span className="text-[10px] mt-1.5">Profile & Settings</span>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

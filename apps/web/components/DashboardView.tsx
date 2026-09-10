@@ -76,7 +76,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full min-w-0 overflow-hidden">
       {/* Hero Welcome Banner (Light + Dark Theme Parity) */}
       <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-slate-50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 border border-slate-200/90 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs transition-colors">
         <div>

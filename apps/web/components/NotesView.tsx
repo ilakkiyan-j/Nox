@@ -183,7 +183,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       </div>
 
       {/* Folder Chips Filter Bar with Strict Overflow Containment */}
-      <div className="w-full max-w-full flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none min-w-0">
+      <div className="w-full max-w-full flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none min-w-0 touch-pan-x">
         <button
           onClick={() => setSelectedFolderId(null)}
           className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 ${

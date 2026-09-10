@@ -257,7 +257,7 @@ export default function Home() {
           />
 
           {/* Main Workstation */}
-          <div className="flex-1 md:pl-64 flex flex-col min-h-screen pb-20 md:pb-8">
+          <div className="flex-1 md:pl-64 flex flex-col min-h-screen pb-20 md:pb-8 min-w-0 max-w-full overflow-x-hidden">
             {/* Global Header with embedded Notifications dropdown bar */}
             <Header
               activeTabTitle={activeTab}
@@ -266,10 +266,12 @@ export default function Home() {
               notifications={notifications}
               onRefreshNotifications={fetchAllData}
               onBackToLanding={handleSignOut}
+              onOpenProfile={() => setIsProfileOpen(true)}
+              currentUser={currentUser}
             />
 
             {/* View Workstation Content Container with Animated Entrance */}
-            <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">
+            <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto min-w-0 max-w-full overflow-hidden">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}
