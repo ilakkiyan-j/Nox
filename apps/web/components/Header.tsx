@@ -40,8 +40,8 @@ export default function Header({
       <div className="flex items-center space-x-2.5 min-w-0">
         {/* Mobile Brand Logo */}
         <div className="flex items-center space-x-2 md:hidden shrink-0">
-          <img src="/Nox_logo.png" alt="NOX Logo" className="w-7 h-7 object-contain" />
-          <h1 className="font-display font-bold text-base tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>
+          <img src="/Nox_logo.png" alt="NOX Logo" className="w-9 h-9 object-contain" />
+          <h1 className="font-display font-bold text-lg tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>
         </div>
 
         <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 md:hidden shrink-0" />
