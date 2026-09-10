@@ -238,9 +238,16 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
             <div key={habit.id} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 uppercase">
-                    {habit.frequency}
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 uppercase">
+                      {habit.frequency}
+                    </span>
+                    {habit.reminderTime && (
+                      <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        ⏰ {habit.reminderTime}
+                      </span>
+                    )}
+                  </div>
                   <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 mt-1">{habit.title}</h3>
                 </div>
                 <div className="text-right">

@@ -95,6 +95,20 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
     });
   };
 
+  const handleToggleLearningStatus = async (item: any) => {
+    const nextStatus = item.status === 'COMPLETED' ? 'IN_PROGRESS' : 'COMPLETED';
+    try {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      onRefresh();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleToggleModule = async (moduleId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'NOT_STARTED' : 'COMPLETED';
     try {
@@ -352,16 +366,31 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
         {learning.map((item) => {
           const completedCount = item.modules?.filter((m: any) => m.status === 'COMPLETED').length || 0;
           const totalCount = item.modules?.length || 0;
-          const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+          const isCompleted = item.status === 'COMPLETED';
+          const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : (isCompleted ? 100 : 0);
 
           return (
             <div key={item.id} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
               <div className="flex items-start justify-between">
-                <div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 uppercase">
-                    {item.type}
-                  </span>
-                  <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 mt-1">{item.title}</h3>
+                <div className="flex items-start space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLearningStatus(item)}
+                    className={`mt-1 p-0.5 rounded-full transition-colors cursor-pointer shrink-0 ${
+                      isCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 hover:text-indigo-600 dark:text-slate-600 dark:hover:text-indigo-400'
+                    }`}
+                    title={isCompleted ? 'Mark as In Progress' : 'Mark Course as Completed'}
+                  >
+                    {isCompleted ? <CheckCircle2 className="w-5 h-5 fill-current text-emerald-600 dark:text-emerald-400" /> : <Circle className="w-5 h-5" />}
+                  </button>
+                  <div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 uppercase">
+                      {item.type}
+                    </span>
+                    <h3 className={`font-display font-bold text-lg mt-0.5 ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
+                      {item.title}
+                    </h3>
+                  </div>
                 </div>
                 <div className="flex items-center space-x-1">
                   <button

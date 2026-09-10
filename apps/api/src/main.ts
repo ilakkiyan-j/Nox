@@ -7,6 +7,12 @@ import { globalErrorHandler } from './middleware/error';
 
 import rateLimit from 'express-rate-limit';
 
+function parseSafeDate(val?: any): Date | null {
+  if (!val) return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -837,7 +843,7 @@ app.delete('/api/v1/learning/modules/:id', async (req: Request, res: Response) =
   }
 });
 
-// 8. Events CRUD (User Isolated)
+// 8. Events & Calendar API (User Isolated)
 app.get('/api/v1/events', async (req: Request, res: Response) => {
   try {
     const user = await getTargetUser(req);
@@ -845,8 +851,8 @@ app.get('/api/v1/events', async (req: Request, res: Response) => {
 
     const events = await db.event.findMany({
       where: { userId: user.id },
-      orderBy: { date: 'asc' },
-      include: { goal: true, tasks: true, notes: true },
+      orderBy: [{ date: 'asc' }, { createdAt: 'desc' }],
+      include: { goal: true, roadmap: true, learning: true, tasks: true, notes: true },
     });
     return apiResponse(res, events);
   } catch (err: any) {
@@ -863,10 +869,10 @@ app.post('/api/v1/events', async (req: Request, res: Response) => {
     const event = await db.event.create({
       data: {
         userId: user.id,
-        title,
+        title: title || 'Untitled Event',
         description,
-        date: new Date(date),
-        endDate: endDate ? new Date(endDate) : null,
+        date: parseSafeDate(date) || new Date(),
+        endDate: parseSafeDate(endDate),
         startTime,
         endTime,
         location,
@@ -885,19 +891,21 @@ app.patch('/api/v1/events/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { title, description, date, endDate, startTime, endTime, location, url, isOnline } = req.body;
+    const updateData: any = {
+      title,
+      description,
+      startTime,
+      endTime,
+      location,
+      url,
+      isOnline,
+    };
+    if (date !== undefined) updateData.date = parseSafeDate(date) || undefined;
+    if (endDate !== undefined) updateData.endDate = parseSafeDate(endDate);
+
     const updated = await db.event.update({
       where: { id },
-      data: {
-        title,
-        description,
-        date: date ? new Date(date) : undefined,
-        endDate: endDate !== undefined ? (endDate ? new Date(endDate) : null) : undefined,
-        startTime,
-        endTime,
-        location,
-        url,
-        isOnline,
-      },
+      data: updateData,
     });
     return apiResponse(res, updated);
   } catch (err: any) {
@@ -929,6 +937,7 @@ app.get('/api/v1/habits', async (req: Request, res: Response) => {
 
     const habits = await db.habit.findMany({
       where: { userId: user.id },
+      orderBy: [{ reminderTime: 'asc' }, { createdAt: 'desc' }],
       include: { logs: { orderBy: { createdAt: 'desc' } } },
     });
     return apiResponse(res, habits);
@@ -1218,8 +1227,8 @@ app.post('/api/v1/reminders', async (req: Request, res: Response) => {
     const reminder = await db.reminder.create({
       data: {
         userId: user.id,
-        title,
-        remindAt: new Date(remindAt),
+        title: title || 'Untitled Reminder',
+        remindAt: parseSafeDate(remindAt) || new Date(),
         entityType,
         entityId,
       },
@@ -1238,7 +1247,7 @@ app.patch('/api/v1/reminders/:id', async (req: Request, res: Response) => {
       where: { id },
       data: {
         title,
-        remindAt: remindAt ? new Date(remindAt) : undefined,
+        remindAt: remindAt ? (parseSafeDate(remindAt) || undefined) : undefined,
         isCompleted,
       },
     });
