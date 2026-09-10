@@ -18,8 +18,9 @@ function parseDate(value: unknown): Date | null | undefined {
 router.get('/roadmaps', async (req: Request, res: Response) => {
   try {
     const roadmaps = await db.roadmap.findMany({
-      where: { goal: { userId: req.user!.id } },
-      include: { goal: true, milestones: true, tasks: true, learnings: true },
+      where: { userId: req.user!.id },
+      include: { goal: { select: { id: true, title: true, status: true } }, milestones: { orderBy: { order: 'asc' } }, tasks: true },
+      orderBy: { createdAt: 'desc' },
     });
     return apiResponse(res, roadmaps);
   } catch (err: unknown) {
@@ -37,10 +38,12 @@ router.post('/roadmaps', async (req: Request, res: Response) => {
 
     const roadmap = await db.roadmap.create({
       data: {
+        userId: req.user!.id,
         goalId: (goalId as string) || null,
         title: limitString(title.trim(), 200),
         description: typeof description === 'string' ? limitString(description, 2000) : (description as string | null),
       },
+      include: { goal: { select: { id: true, title: true } }, milestones: true },
     });
     return apiResponse(res, roadmap, 201);
   } catch (err: unknown) {
@@ -66,6 +69,7 @@ router.post('/roadmaps/import', async (req: Request, res: Response) => {
     const createdRoadmap = await db.$transaction(async (tx) => {
       const roadmap = await tx.roadmap.create({
         data: {
+          userId: req.user!.id,
           goalId: (goalId as string) || null,
           title: limitString(String(title).trim(), 200),
           description: typeof description === 'string' && description.trim() ? limitString(description, 2000) : 'Imported via Roadmap JSON Plan',

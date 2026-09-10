@@ -26,6 +26,7 @@ model User {
   notes         Note[]
   reminders     Reminder[]
   notifications Notification[]
+  roadmaps      Roadmap[]
 }
 
 model Goal {
@@ -49,8 +50,10 @@ model Goal {
 
 model Roadmap {
   id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   goalId      String?
-  goal        Goal?       @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  goal        Goal?       @relation(fields: [goalId], references: [id], onDelete: SetNull)
   title       String
   description String?
   status      String      @default("IN_PROGRESS")

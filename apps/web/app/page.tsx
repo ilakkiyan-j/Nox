@@ -15,6 +15,7 @@ import CommandPalette from '../components/CommandPalette';
 import UserControlPanel from '../components/UserControlPanel';
 import DashboardView from '../components/DashboardView';
 import GoalsView from '../components/GoalsView';
+import RoadmapsView from '../components/RoadmapsView';
 import TasksView from '../components/TasksView';
 import LearningView from '../components/LearningView';
 import EventsView from '../components/EventsView';
@@ -39,6 +40,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
+  const [roadmaps, setRoadmaps] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [learning, setLearning] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
@@ -55,10 +57,11 @@ export default function Home() {
 
   const fetchAllData = async () => {
     try {
-      const [dashRes, goalsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes] =
+      const [dashRes, goalsRes, roadmapsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes] =
         await Promise.all([
           fetchWithUser(`${API_BASE}/dashboard`).then((r) => r.json()),
           fetchWithUser(`${API_BASE}/goals`).then((r) => r.json()),
+          fetchWithUser(`${API_BASE}/roadmaps`).then((r) => r.json()),
           fetchWithUser(`${API_BASE}/tasks`).then((r) => r.json()),
           fetchWithUser(`${API_BASE}/learning`).then((r) => r.json()),
           fetchWithUser(`${API_BASE}/events`).then((r) => r.json()),
@@ -71,6 +74,7 @@ export default function Home() {
 
       if (dashRes.success) setDashboardData(dashRes.data);
       if (goalsRes.success) setGoals(goalsRes.data);
+      if (roadmapsRes.success) setRoadmaps(roadmapsRes.data);
       if (tasksRes.success) setTasks(tasksRes.data);
       if (learningRes.success) setLearning(learningRes.data);
       if (eventsRes.success) setEvents(eventsRes.data);
@@ -130,8 +134,9 @@ export default function Home() {
           />
         );
       case 'goals':
-      case 'roadmaps':
         return <GoalsView goals={goals} onRefresh={fetchAllData} />;
+      case 'roadmaps':
+        return <RoadmapsView roadmaps={roadmaps} goals={goals} onRefresh={fetchAllData} />;
       case 'tasks':
         return <TasksView tasks={tasks} goals={goals} onRefresh={fetchAllData} />;
       case 'learning':

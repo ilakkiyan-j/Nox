@@ -42,16 +42,16 @@ export const getOwnedNotification = (id: string, userId: string) =>
 export async function getOwnedRoadmap(id: string, userId: string) {
   return owned(
     userId,
-    () => db.roadmap.findUnique({ where: { id }, include: { goal: true } }),
-    (r: any) => r.goal?.userId ?? null,
+    () => db.roadmap.findUnique({ where: { id } }),
+    (r: any) => r.userId,
   );
 }
 
 export async function getOwnedMilestone(id: string, userId: string) {
   return owned(
     userId,
-    () => db.milestone.findUnique({ where: { id }, include: { goal: true, roadmap: { include: { goal: true } } } }),
-    (m: any) => m.goal?.userId ?? m.roadmap?.goal?.userId ?? null,
+    () => db.milestone.findUnique({ where: { id }, include: { goal: true, roadmap: true } }),
+    (m: any) => m.goal?.userId ?? m.roadmap?.userId ?? null,
   );
 }
 
@@ -84,8 +84,8 @@ async function assertRelationOwner(model: 'goal' | 'roadmap' | 'milestone' | 'le
       return;
     }
     case 'roadmap': {
-      const r = await db.roadmap.findUnique({ where: { id }, select: { id: true, goal: { select: { userId: true } } } });
-      if (!r || r.goal?.userId !== userId) throw new HttpError('Resource not found', 404);
+      const r = await db.roadmap.findUnique({ where: { id }, select: { id: true, userId: true } });
+      if (!r || r.userId !== userId) throw new HttpError('Resource not found', 404);
       return;
     }
     case 'milestone': {
