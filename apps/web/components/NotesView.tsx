@@ -153,7 +153,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -182,11 +182,11 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
         </div>
       </div>
 
-      {/* Folder Chips Filter */}
-      <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none">
+      {/* Folder Chips Filter Bar with Strict Overflow Containment */}
+      <div className="w-full max-w-full flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none min-w-0">
         <button
           onClick={() => setSelectedFolderId(null)}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
             selectedFolderId === null
               ? 'bg-indigo-600 text-white font-semibold shadow-xs'
               : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -201,17 +201,17 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
             <div
               key={f.id}
               onClick={() => setSelectedFolderId(f.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap flex items-center space-x-1.5 transition-all cursor-pointer group/f ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap flex items-center space-x-1.5 transition-all cursor-pointer group/f shrink-0 ${
                 isSelected
                   ? 'bg-indigo-600 text-white font-semibold shadow-xs'
                   : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              <Folder className="w-3.5 h-3.5" style={{ color: f.color }} />
-              <span>{f.name}</span>
-              <span className="text-[10px] opacity-75">({count})</span>
+              <Folder className="w-3.5 h-3.5 shrink-0" style={{ color: f.color }} />
+              <span className="truncate max-w-[120px] sm:max-w-[180px] inline-block">{f.name}</span>
+              <span className="text-[10px] opacity-75 shrink-0">({count})</span>
               {!f.isSystem && (
-                <div className="flex items-center space-x-0.5 opacity-0 group-hover/f:opacity-100 transition-opacity ml-1">
+                <div className="flex items-center space-x-0.5 opacity-100 sm:opacity-0 group-hover/f:opacity-100 transition-opacity ml-1 shrink-0">
                   <button
                     onClick={(e) => handleEditFolder(e, f.id, f.name)}
                     className="p-0.5 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -235,7 +235,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
 
       {/* Edit Note Form */}
       {editingNote && (
-        <form onSubmit={handleUpdateNote} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 shadow-sm space-y-3">
+        <form onSubmit={handleUpdateNote} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 shadow-sm space-y-3 max-w-full overflow-hidden">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Edit Quick Note</h3>
             <button type="button" onClick={() => setEditingNote(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
@@ -301,8 +301,8 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
         </form>
       )}
 
-      {/* Notes Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Notes Grid with Containment & Min-Width Safety */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0 max-w-full">
         {filteredNotes.map((note) => {
           const isLongContent = note.content && note.content.length > 120;
 
@@ -310,11 +310,11 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
             <div
               key={note.id}
               onClick={() => setViewingNote(note)}
-              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 flex flex-col justify-between hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all cursor-pointer group relative"
+              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 flex flex-col justify-between hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all cursor-pointer group relative min-w-0 max-w-full overflow-hidden"
             >
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+              <div className="space-y-2 min-w-0">
+                <div className="flex items-start justify-between gap-2 min-w-0">
+                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors break-words overflow-hidden">
                     {note.title}
                   </h4>
                   <div className="flex items-center space-x-1 shrink-0">
@@ -349,8 +349,8 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
                 </div>
 
                 {note.content && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-4 leading-relaxed font-normal">
+                  <div className="space-y-1.5 min-w-0">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-4 leading-relaxed font-normal break-words overflow-hidden">
                       {note.content}
                     </p>
                     {isLongContent && (
@@ -363,14 +363,14 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
                 )}
               </div>
 
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] min-w-0 gap-2">
                 {note.folder ? (
-                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium flex items-center space-x-1">
-                    <Folder className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-                    <span>{note.folder.name}</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium flex items-center space-x-1 shrink-0 max-w-[60%] truncate">
+                    <Folder className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span className="truncate">{note.folder.name}</span>
                   </span>
                 ) : (
-                  <span className="text-slate-400">Unsorted</span>
+                  <span className="text-slate-400 shrink-0">Unsorted</span>
                 )}
 
                 {note.url && (
@@ -379,11 +379,11 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
                     target="_blank"
                     rel="noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium"
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium truncate max-w-[40%]"
                   >
-                    <LinkIcon className="w-3 h-3" />
-                    <span>Open URL</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
+                    <LinkIcon className="w-3 h-3 shrink-0" />
+                    <span className="truncate">URL</span>
+                    <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                   </a>
                 )}
               </div>
