@@ -717,9 +717,9 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
             const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
             
             const isExpanded = expandedCards[rm.id] !== false; // default expanded
-            const isShowingAllPhases = showAllPhases[rm.id] === true;
+            const isShowingAllPhases = showAllPhases[rm.id] !== false; // default all phases expanded
 
-            // Phase preview slicing: limit to PREVIEW_PHASE_COUNT if not expanded fully
+            // Phase preview slicing: show all phases by default unless user explicitly chose brief view
             const visiblePhases = isShowingAllPhases
               ? allMilestones
               : allMilestones.slice(0, PREVIEW_PHASE_COUNT);
@@ -891,9 +891,9 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
                           className="text-violet-600 dark:text-violet-400 font-semibold hover:underline flex items-center space-x-1 cursor-pointer"
                         >
                           {isShowingAllPhases ? (
-                            <><span>Show Top 3 Phases</span><ChevronDown className="w-3.5 h-3.5 rotate-180 transition-transform" /></>
+                            <><span>Collapse to Brief 3-Phase View</span><ChevronDown className="w-3.5 h-3.5 rotate-180 transition-transform" /></>
                           ) : (
-                            <><span>Show all {total} phases (+{remainingCount} more)</span><ChevronDown className="w-3.5 h-3.5" /></>
+                            <><span>Show all {total} phases (+{total - PREVIEW_PHASE_COUNT} more)</span><ChevronDown className="w-3.5 h-3.5" /></>
                           )}
                         </button>
                         <button
