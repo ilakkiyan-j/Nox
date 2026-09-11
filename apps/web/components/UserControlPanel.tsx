@@ -61,15 +61,37 @@ export default function UserControlPanel({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size is too large. Please select an image under 5MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size is too large. Please select an image under 10MB.');
       return;
     }
     const reader = new FileReader();
     reader.onload = (event) => {
-      if (event.target?.result) {
-        setAvatarUrl(event.target.result as string);
-      }
+      const rawUrl = event.target?.result as string;
+      if (!rawUrl) return;
+
+      // Compress and resize photo to 256x256 thumbnail using Canvas
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const maxDim = 256;
+        canvas.width = maxDim;
+        canvas.height = maxDim;
+
+        if (ctx) {
+          // Center-crop to square aspect ratio
+          const minSide = Math.min(img.width, img.height);
+          const sx = (img.width - minSide) / 2;
+          const sy = (img.height - minSide) / 2;
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, maxDim, maxDim);
+          const compressed = canvas.toDataURL('image/jpeg', 0.88);
+          setAvatarUrl(compressed);
+        } else {
+          setAvatarUrl(rawUrl);
+        }
+      };
+      img.src = rawUrl;
     };
     reader.readAsDataURL(file);
   };
