@@ -5,6 +5,7 @@ import { StickyNote, Folder, Link as LinkIcon, Trash2, Edit2, ExternalLink, Plus
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
 import DialogShell from './ui/Dialog';
+import NoteStudioModal from './NoteStudioModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
 interface NotesViewProps {
@@ -18,6 +19,8 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<any | null>(null);
   const [viewingNote, setViewingNote] = useState<any | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [studioNote, setStudioNote] = useState<any | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Modal Dialog States
@@ -45,6 +48,48 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveStudioNote = async (data: { id?: string; title: string; content: string; url?: string; folderId?: string | null }) => {
+    try {
+      if (data.id) {
+        await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${data.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: data.title,
+            content: data.content,
+            url: data.url || null,
+            folderId: data.folderId || null,
+          }),
+        });
+      } else {
+        await fetchWithUser(`${API_BASE_URL}/api/v1/notes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: data.title,
+            content: data.content,
+            url: data.url || undefined,
+            folderId: data.folderId || undefined,
+          }),
+        });
+      }
+      onRefresh();
+    } catch (err) {
+      console.error('Save note error:', err);
+    }
+  };
+
+  const handleOpenNewNote = () => {
+    setStudioNote(null);
+    setIsStudioOpen(true);
+  };
+
+  const handleOpenEditStudio = (note: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setStudioNote(note);
+    setIsStudioOpen(true);
   };
 
   const handleUpdateNote = async (e: React.FormEvent) => {
@@ -167,17 +212,25 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
         <div className="flex items-center space-x-2">
           <button
             onClick={handleCreateFolder}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 text-xs font-semibold hover:bg-violet-50 dark:hover:bg-violet-950/40 flex items-center space-x-1.5 transition-all"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 text-xs font-semibold hover:bg-violet-50 dark:hover:bg-violet-950/40 flex items-center space-x-1.5 transition-all cursor-pointer"
           >
             <Folder className="w-4 h-4" />
             <span>New Folder</span>
           </button>
           <button
             onClick={onOpenQuickCapture}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
+            title="Quick Capture snippet / link"
+          >
+            <Plus className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+            <span>Quick Capture</span>
+          </button>
+          <button
+            onClick={handleOpenNewNote}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Quick Capture</span>
+            <span>New Note</span>
           </button>
         </div>
       </div>
@@ -309,7 +362,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
           return (
             <div
               key={note.id}
-              onClick={() => setViewingNote(note)}
+              onClick={() => handleOpenEditStudio(note)}
               className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 flex flex-col justify-between hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all cursor-pointer group relative min-w-0 max-w-full overflow-hidden"
             >
               <div className="space-y-2 min-w-0">
@@ -319,20 +372,14 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
                   </h4>
                   <div className="flex items-center space-x-1 shrink-0">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setViewingNote(note);
-                      }}
+                      onClick={(e) => handleOpenEditStudio(note, e)}
                       className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                      title="View Full Note"
+                      title="Open Note Studio"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      <Maximize2 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingNote(note);
-                      }}
+                      onClick={(e) => handleOpenEditStudio(note, e)}
                       className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       title="Edit Note"
                     >
@@ -355,7 +402,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
                     </p>
                     {isLongContent && (
                       <span className="inline-flex items-center space-x-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline">
-                        <span>Expand / View full note</span>
+                        <span>Open Studio / View full note</span>
                         <Maximize2 className="w-2.5 h-2.5" />
                       </span>
                     )}
@@ -525,6 +572,19 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
         initialValue={promptState.initialValue}
         onSubmit={promptState.onSubmit}
         onClose={() => setPromptState({ ...promptState, isOpen: false })}
+      />
+
+      <NoteStudioModal
+        isOpen={isStudioOpen}
+        note={studioNote}
+        folders={folders}
+        defaultFolderId={selectedFolderId}
+        onSave={handleSaveStudioNote}
+        onDelete={(id) => handleDeleteNote(id)}
+        onClose={() => {
+          setIsStudioOpen(false);
+          setStudioNote(null);
+        }}
       />
     </div>
   );
