@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Search, Plus, Bell, Sun, Moon } from 'lucide-react';
 import NotificationsDropdown from './NotificationsDropdown';
 import { useTheme } from './ThemeContext';
+import Avatar from './Avatar';
 
 interface HeaderProps {
   activeTabTitle: string;
@@ -112,12 +113,10 @@ export default function Header({
         {onOpenProfile && (
           <button
             onClick={onOpenProfile}
-            className="md:hidden flex items-center justify-center p-0.5 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-white font-bold text-xs shadow-xs"
+            className="md:hidden flex items-center justify-center cursor-pointer"
             title="User Control Center & Settings"
           >
-            <div className="w-7 h-7 rounded-full bg-slate-900/10 flex items-center justify-center font-bold text-[11px] text-white">
-              {initials}
-            </div>
+            <Avatar src={currentUser?.avatarUrl} name={currentUser?.name} size="sm" />
           </button>
         )}
 

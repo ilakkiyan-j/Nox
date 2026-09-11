@@ -64,5 +64,33 @@ privateRouter.get('/auth/me', async (req: Request, res: Response) => {
   }
 });
 
+privateRouter.patch('/auth/profile', async (req: Request, res: Response) => {
+  try {
+    const { name, headline, avatarUrl } = (req.body ?? {}) as { name?: unknown; headline?: unknown; avatarUrl?: unknown };
+    const data: Record<string, any> = {};
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) return apiError(res, 'Name must be a non-empty string');
+      data.name = name.trim().slice(0, 100);
+    }
+    if (headline !== undefined) {
+      data.headline = typeof headline === 'string' && headline.trim() ? headline.trim().slice(0, 200) : null;
+    }
+    if (avatarUrl !== undefined) {
+      data.avatarUrl = typeof avatarUrl === 'string' && avatarUrl.trim() ? avatarUrl.trim() : null;
+    }
+
+    const updated = await db.user.update({
+      where: { id: req.user!.id },
+      data,
+    });
+
+    return apiResponse(res, sanitizeUser(updated), 200, 'Profile updated successfully');
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to update profile';
+    return apiError(res, message, 500);
+  }
+});
+
 export { publicRouter as authPublicRouter, privateRouter as authPrivateRouter };
 export default publicRouter;

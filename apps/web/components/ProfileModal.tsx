@@ -3,6 +3,7 @@
 import React from 'react';
 import { X, Shield, Zap, Target, Flame, Layers, LogOut, Sun, Moon } from 'lucide-react';
 import { useTheme } from './ThemeContext';
+import Avatar from './Avatar';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -30,9 +31,7 @@ export default function ProfileModal({ isOpen, onClose, onSignOut, onOpenAdmin, 
 
         {/* Profile Identity Context */}
         <div className="flex items-center space-x-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center font-bold text-lg text-white shadow-md shadow-indigo-500/20">
-            {currentUser?.name ? currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'NA'}
-          </div>
+          <Avatar src={currentUser?.avatarUrl} name={currentUser?.name} size="lg" />
           <div>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 uppercase font-mono border border-indigo-200/50 dark:border-indigo-800/50">
               {currentUser?.role === 'ADMIN' ? 'Administrator' : 'Standard User'}

@@ -1,14 +1,13 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X, User, Sun, Moon, Shield, Zap, LogOut, Settings, Target, CheckSquare,
   StickyNote, Calendar, Flame, GraduationCap, Bell, Download, Trash2,
   Edit3, Save, BarChart3, Clock, AlarmClock, Layers, ChevronRight,
-  Database, Compass, Lock, Sparkles, ArrowLeft,
+  Database, Compass, Lock, Sparkles, ArrowLeft, Upload, Image as ImageIcon, Link as LinkIcon, RefreshCw
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import Avatar from './Avatar';
 
 interface UserControlPanelProps {
   isOpen: boolean;
@@ -40,11 +39,14 @@ export default function UserControlPanel({
   const { theme, toggleTheme } = useTheme();
   const [activeSection, setActiveSection] = useState<PanelSection>('overview');
   const [displayName, setDisplayName] = useState(currentUser?.name || 'Nox Architect');
+  const [avatarUrl, setAvatarUrl] = useState<string>(currentUser?.avatarUrl || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentUser?.name) setDisplayName(currentUser.name);
+    if (currentUser?.avatarUrl !== undefined) setAvatarUrl(currentUser.avatarUrl || '');
   }, [currentUser]);
 
   if (!isOpen) return null;
@@ -56,15 +58,37 @@ export default function UserControlPanel({
     .slice(0, 2)
     .toUpperCase() || 'NA';
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size is too large. Please select an image under 5MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setAvatarUrl(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveProfile = async () => {
     setSavingProfile(true);
     try {
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('nox_user');
-        if (stored) {
-          const user = JSON.parse(stored);
-          user.name = displayName;
-          localStorage.setItem('nox_user', JSON.stringify(user));
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/auth/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: displayName,
+          avatarUrl: avatarUrl.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('nox_user', JSON.stringify(data.data));
         }
       }
       setSaveSuccess(true);
@@ -183,9 +207,7 @@ export default function UserControlPanel({
           {/* User Profile Footer card in Sidebar */}
           <div className="p-4 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-3">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center font-bold text-sm text-white shadow-sm shrink-0">
-                {initials}
-              </div>
+              <Avatar src={avatarUrl} name={displayName} size="md" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{displayName}</p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || 'user@nox.internal'}</p>
@@ -233,9 +255,7 @@ export default function UserControlPanel({
               {/* Identity Banner */}
               <div className="p-8 rounded-3xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white shadow-xl shadow-indigo-500/15 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="flex items-center space-x-5 z-10">
-                  <div className="w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center font-bold text-3xl text-white shadow-lg shrink-0">
-                    {initials}
-                  </div>
+                  <Avatar src={avatarUrl} name={displayName} size="2xl" className="shadow-2xl border-2 border-white/30" />
                   <div>
                     <span className="inline-block text-[10px] font-bold px-2.5 py-1 rounded-md bg-white/20 text-white uppercase font-mono tracking-wider border border-white/20 mb-2">
                       {currentUser?.role === 'ADMIN' ? '🛡️ System Administrator' : '⚡ Personal Operating System User'}
@@ -339,20 +359,62 @@ export default function UserControlPanel({
 
               {/* Avatar & Display Name Settings */}
               <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
-                <div className="flex items-center space-x-5 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center font-bold text-2xl text-white shadow-lg shrink-0">
-                    {initials}
-                  </div>
-                  <div>
-                    <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">Identity Avatar</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Automatically generated using your display initials.</p>
-                    <span className="inline-block mt-2 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 font-mono font-bold">
-                      ACTIVE INITIALS: {initials}
-                    </span>
+                <div className="flex items-start space-x-5 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex-col sm:flex-row gap-4 sm:gap-0">
+                  <Avatar src={avatarUrl} name={displayName} size="2xl" className="shadow-lg" />
+                  <div className="flex-1 space-y-3 min-w-0">
+                    <div>
+                      <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">Identity Avatar Customizer</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Use an external image URL or upload a custom photo from your computer/device.</p>
+                    </div>
+
+                    <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Photo File</span>
+                      </button>
+
+                      {avatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setAvatarUrl('')}
+                          className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-rose-100 dark:hover:bg-rose-950/60 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Reset to Initials</span>
+                        </button>
+                      )}
+
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center space-x-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Custom Avatar Image URL</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={avatarUrl}
+                      onChange={(e) => setAvatarUrl(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 transition-colors font-mono"
+                      placeholder="https://images.unsplash.com/... or https://github.com/username.png"
+                    />
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">Paste any direct image link URL (`https://...`).</p>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
                       Display Name

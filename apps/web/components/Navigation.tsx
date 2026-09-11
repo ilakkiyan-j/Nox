@@ -19,6 +19,8 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 
+import Avatar from './Avatar';
+
 export type NavTab =
   | 'dashboard'
   | 'goals'
@@ -118,9 +120,7 @@ export default function Navigation({ activeTab, setActiveTab, onOpenProfile, cur
           className="pt-4 border-t border-slate-200 dark:border-slate-800 px-3 flex items-center justify-between cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-800/70 p-2 rounded-xl transition-all"
         >
           <div className="flex items-center space-x-3 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-xs shadow-sm shrink-0">
-              {initials}
-            </div>
+            <Avatar src={currentUser?.avatarUrl} name={currentUser?.name} size="sm" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">{currentUser?.name || 'Nox Architect'}</p>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || 'user@nox.internal'}</p>
