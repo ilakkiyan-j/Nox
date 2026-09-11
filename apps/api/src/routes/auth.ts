@@ -99,33 +99,9 @@ privateRouter.post('/auth/avatar/upload', async (req: Request, res: Response) =>
       return apiError(res, 'Image payload is required');
     }
 
-    const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const cloudinaryPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
     const imgbbKey = process.env.IMGBB_API_KEY;
 
-    // 1. Cloudinary upload if CLOUDINARY_CLOUD_NAME & CLOUDINARY_UPLOAD_PRESET are set
-    if (cloudinaryCloudName && cloudinaryPreset) {
-      const formData = new URLSearchParams();
-      formData.append('file', image.trim());
-      formData.append('upload_preset', cloudinaryPreset);
-
-      const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      const cloudData = (await cloudRes.json()) as any;
-
-      if (cloudData && cloudData.secure_url) {
-        const cdnUrl = cloudData.secure_url as string;
-        const updatedUser = await db.user.update({
-          where: { id: req.user!.id },
-          data: { avatarUrl: cdnUrl },
-        });
-        return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to Cloudinary CDN successfully');
-      }
-    }
-
-    // 2. ImgBB upload if IMGBB_API_KEY is set
+    // 1. Upload to ImgBB Cloud CDN if IMGBB_API_KEY is configured in .env
     if (imgbbKey) {
       const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, '');
       const formData = new URLSearchParams();
@@ -143,11 +119,11 @@ privateRouter.post('/auth/avatar/upload', async (req: Request, res: Response) =>
           where: { id: req.user!.id },
           data: { avatarUrl: cdnUrl },
         });
-        return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to Cloud CDN successfully');
+        return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to ImgBB CDN successfully');
       }
     }
 
-    // 3. Fallback: Save optimized base64 data URL directly if no cloud environment key is configured
+    // 2. Fallback: Save optimized base64 thumbnail directly if IMGBB_API_KEY is not configured
     const updatedUser = await db.user.update({
       where: { id: req.user!.id },
       data: { avatarUrl: image.trim() },
