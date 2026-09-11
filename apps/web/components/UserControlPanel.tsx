@@ -42,6 +42,7 @@ export default function UserControlPanel({
   const [avatarUrl, setAvatarUrl] = useState<string>(currentUser?.avatarUrl || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [uploadingCloud, setUploadingCloud] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,6 +59,31 @@ export default function UserControlPanel({
     .slice(0, 2)
     .toUpperCase() || 'NA';
 
+  const uploadToCloudCDN = async (base64Payload: string) => {
+    setUploadingCloud(true);
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/auth/avatar/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64Payload }),
+      });
+      const data = await res.json();
+      if (data.success && data.data?.url) {
+        setAvatarUrl(data.data.url);
+        if (data.data.user && typeof window !== 'undefined') {
+          localStorage.setItem('nox_user', JSON.stringify(data.data.user));
+        }
+      } else {
+        setAvatarUrl(base64Payload);
+      }
+    } catch (err) {
+      console.error('Cloud avatar upload failed:', err);
+      setAvatarUrl(base64Payload);
+    } finally {
+      setUploadingCloud(false);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -70,7 +96,7 @@ export default function UserControlPanel({
       const rawUrl = event.target?.result as string;
       if (!rawUrl) return;
 
-      // Compress and resize photo to 256x256 thumbnail using Canvas
+      // Compress photo to 256x256 thumbnail using Canvas before cloud upload
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
@@ -80,15 +106,14 @@ export default function UserControlPanel({
         canvas.height = maxDim;
 
         if (ctx) {
-          // Center-crop to square aspect ratio
           const minSide = Math.min(img.width, img.height);
           const sx = (img.width - minSide) / 2;
           const sy = (img.height - minSide) / 2;
           ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, maxDim, maxDim);
           const compressed = canvas.toDataURL('image/jpeg', 0.88);
-          setAvatarUrl(compressed);
+          uploadToCloudCDN(compressed);
         } else {
-          setAvatarUrl(rawUrl);
+          uploadToCloudCDN(rawUrl);
         }
       };
       img.src = rawUrl;
@@ -393,10 +418,11 @@ export default function UserControlPanel({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+                        disabled={uploadingCloud}
+                        className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
-                        <span>Upload Photo File</span>
+                        <span>{uploadingCloud ? 'Uploading to Cloud...' : 'Upload Photo File'}</span>
                       </button>
 
                       {avatarUrl && (
@@ -408,6 +434,12 @@ export default function UserControlPanel({
                           <RefreshCw className="w-3.5 h-3.5" />
                           <span>Reset to Initials</span>
                         </button>
+                      )}
+
+                      {avatarUrl?.startsWith('http') && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 flex items-center space-x-1">
+                          <span>☁️ Cloud CDN Hosted</span>
+                        </span>
                       )}
 
                       <input

@@ -92,5 +92,40 @@ privateRouter.patch('/auth/profile', async (req: Request, res: Response) => {
   }
 });
 
+privateRouter.post('/auth/avatar/upload', async (req: Request, res: Response) => {
+  try {
+    const { image } = (req.body ?? {}) as { image?: unknown };
+    if (typeof image !== 'string' || !image.trim()) {
+      return apiError(res, 'Image payload is required');
+    }
+
+    const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, '');
+
+    const imgbbKey = process.env.IMGBB_API_KEY || '6d70055c31005f4238e5163018db4a9b';
+    const formData = new URLSearchParams();
+    formData.append('image', cleanBase64);
+
+    const cloudRes = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
+      method: 'POST',
+      body: formData,
+    });
+    const cloudData = (await cloudRes.json()) as any;
+
+    if (cloudData && cloudData.success && cloudData.data?.url) {
+      const cdnUrl = (cloudData.data.display_url || cloudData.data.url) as string;
+      const updatedUser = await db.user.update({
+        where: { id: req.user!.id },
+        data: { avatarUrl: cdnUrl },
+      });
+      return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to Cloud CDN successfully');
+    }
+
+    return apiError(res, 'Cloud upload service error: ' + (cloudData?.error?.message || 'Failed to host image in cloud'), 500);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Cloud avatar upload failed';
+    return apiError(res, message, 500);
+  }
+});
+
 export { publicRouter as authPublicRouter, privateRouter as authPrivateRouter };
 export default publicRouter;
