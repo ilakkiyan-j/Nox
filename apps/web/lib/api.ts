@@ -32,6 +32,15 @@ export function saveAuth(token: string, user: unknown): void {
   }
 }
 
+export function setStoredUser(user: unknown): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    // ignore
+  }
+}
+
 export function clearAuth(): void {
   if (typeof window === 'undefined') return;
   try {

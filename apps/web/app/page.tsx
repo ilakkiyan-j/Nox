@@ -24,7 +24,7 @@ import NotesView from '../components/NotesView';
 import NotificationsView from '../components/NotificationsView';
 import TimeView from '../components/TimeView';
 import RemindersView from '../components/RemindersView';
-import { API_BASE_URL, fetchWithUser, clearAuth, getToken, getStoredUser } from '../lib/api';
+import { API_BASE_URL, fetchWithUser, clearAuth, getToken, getStoredUser, setStoredUser } from '../lib/api';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
 
@@ -93,6 +93,7 @@ export default function Home() {
         fetchWithUser(`${API_BASE}/folders`),
         fetchWithUser(`${API_BASE}/notifications`),
         fetchWithUser(`${API_BASE}/reminders`),
+        fetchWithUser(`${API_BASE}/auth/me`),
       ]);
 
       if (responses.some((r) => r.status === 401)) {
@@ -101,7 +102,7 @@ export default function Home() {
         return;
       }
 
-      const [dashRes, goalsRes, roadmapsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes] =
+      const [dashRes, goalsRes, roadmapsRes, tasksRes, learningRes, eventsRes, habitsRes, notesRes, foldersRes, notifRes, remindRes, meRes] =
         await Promise.all(responses.map((r) => r.json()));
 
       if (
@@ -126,6 +127,10 @@ export default function Home() {
       if (foldersRes?.success) setFolders(foldersRes.data);
       if (notifRes?.success) setNotifications(notifRes.data);
       if (remindRes?.success) setReminders(remindRes.data);
+      if (meRes?.success && meRes?.data) {
+        setCurrentUser(meRes.data);
+        setStoredUser(meRes.data);
+      }
     } catch (err) {
       console.error('API Fetch error:', err);
     } finally {
@@ -141,6 +146,12 @@ export default function Home() {
       };
       window.addEventListener('nox-unauthorized', handleUnauthorized);
 
+      const handleFocus = () => {
+        const token = getToken();
+        if (token) fetchAllData();
+      };
+      window.addEventListener('focus', handleFocus);
+
       const user = getStoredUser();
       const token = getToken();
       if (user && token) {
@@ -155,6 +166,7 @@ export default function Home() {
 
       return () => {
         window.removeEventListener('nox-unauthorized', handleUnauthorized);
+        window.removeEventListener('focus', handleFocus);
       };
     }
   }, []);
