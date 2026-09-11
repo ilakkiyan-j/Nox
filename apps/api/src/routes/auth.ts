@@ -99,30 +99,62 @@ privateRouter.post('/auth/avatar/upload', async (req: Request, res: Response) =>
       return apiError(res, 'Image payload is required');
     }
 
-    const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, '');
+    const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const cloudinaryPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
+    const imgbbKey = process.env.IMGBB_API_KEY;
 
-    const imgbbKey = process.env.IMGBB_API_KEY || '6d70055c31005f4238e5163018db4a9b';
-    const formData = new URLSearchParams();
-    formData.append('image', cleanBase64);
+    // 1. Cloudinary upload if CLOUDINARY_CLOUD_NAME & CLOUDINARY_UPLOAD_PRESET are set
+    if (cloudinaryCloudName && cloudinaryPreset) {
+      const formData = new URLSearchParams();
+      formData.append('file', image.trim());
+      formData.append('upload_preset', cloudinaryPreset);
 
-    const cloudRes = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
-      method: 'POST',
-      body: formData,
-    });
-    const cloudData = (await cloudRes.json()) as any;
-
-    if (cloudData && cloudData.success && cloudData.data?.url) {
-      const cdnUrl = (cloudData.data.display_url || cloudData.data.url) as string;
-      const updatedUser = await db.user.update({
-        where: { id: req.user!.id },
-        data: { avatarUrl: cdnUrl },
+      const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryCloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
       });
-      return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to Cloud CDN successfully');
+      const cloudData = (await cloudRes.json()) as any;
+
+      if (cloudData && cloudData.secure_url) {
+        const cdnUrl = cloudData.secure_url as string;
+        const updatedUser = await db.user.update({
+          where: { id: req.user!.id },
+          data: { avatarUrl: cdnUrl },
+        });
+        return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to Cloudinary CDN successfully');
+      }
     }
 
-    return apiError(res, 'Cloud upload service error: ' + (cloudData?.error?.message || 'Failed to host image in cloud'), 500);
+    // 2. ImgBB upload if IMGBB_API_KEY is set
+    if (imgbbKey) {
+      const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, '');
+      const formData = new URLSearchParams();
+      formData.append('image', cleanBase64);
+
+      const cloudRes = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
+        method: 'POST',
+        body: formData,
+      });
+      const cloudData = (await cloudRes.json()) as any;
+
+      if (cloudData && cloudData.success && cloudData.data?.url) {
+        const cdnUrl = (cloudData.data.display_url || cloudData.data.url) as string;
+        const updatedUser = await db.user.update({
+          where: { id: req.user!.id },
+          data: { avatarUrl: cdnUrl },
+        });
+        return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to Cloud CDN successfully');
+      }
+    }
+
+    // 3. Fallback: Save optimized base64 data URL directly if no cloud environment key is configured
+    const updatedUser = await db.user.update({
+      where: { id: req.user!.id },
+      data: { avatarUrl: image.trim() },
+    });
+    return apiResponse(res, { url: image.trim(), user: sanitizeUser(updatedUser) }, 200, 'Avatar saved successfully');
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Cloud avatar upload failed';
+    const message = err instanceof Error ? err.message : 'Avatar upload failed';
     return apiError(res, message, 500);
   }
 });
