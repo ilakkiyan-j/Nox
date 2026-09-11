@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -436,7 +436,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       )}
 
       {/* Learning Items Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         {learning.map((item) => {
           const completedCount = item.modules?.filter((m: any) => m.status === 'COMPLETED').length || 0;
           const totalCount = item.modules?.length || 0;
@@ -448,131 +448,144 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
             : !isMobile;
 
           return (
-            <div key={item.id} className="p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start space-x-3 min-w-0 flex-1">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleLearningStatus(item)}
-                    className={`mt-1 p-0.5 rounded-full transition-colors cursor-pointer shrink-0 ${
-                      isCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 hover:text-indigo-600 dark:text-slate-600 dark:hover:text-indigo-400'
-                    }`}
-                    title={isCompleted ? 'Mark as In Progress' : 'Mark Course as Completed'}
-                  >
-                    {isCompleted ? <CheckCircle2 className="w-5 h-5 fill-current text-emerald-600 dark:text-emerald-400" /> : <Circle className="w-5 h-5" />}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 uppercase font-mono">
-                      {item.type}
-                    </span>
-                    <h3 className={`font-display font-bold text-lg mt-0.5 ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
-                      {item.title}
-                    </h3>
-                    {item.url && (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center space-x-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-1 font-medium"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Visit Course / Website</span>
-                      </a>
-                    )}
-                    {item.description && (
-                      <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 mt-2">
-                        {item.description}
-                      </p>
-                    )}
+            <div key={item.id} className="p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start space-x-3 min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLearningStatus(item)}
+                      className={`mt-1 p-0.5 rounded-full transition-colors cursor-pointer shrink-0 ${
+                        isCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 hover:text-indigo-600 dark:text-slate-600 dark:hover:text-indigo-400'
+                      }`}
+                      title={isCompleted ? 'Mark as In Progress' : 'Mark Course as Completed'}
+                    >
+                      {isCompleted ? <CheckCircle2 className="w-5 h-5 fill-current text-emerald-600 dark:text-emerald-400" /> : <Circle className="w-5 h-5" />}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 uppercase font-mono">
+                        {item.type}
+                      </span>
+                      <h3 className={`font-display font-bold text-lg mt-0.5 ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
+                        {item.title}
+                      </h3>
+                      {item.url && (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center space-x-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-1 font-medium"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Visit Course / Website</span>
+                        </a>
+                      )}
+                      {item.description && (
+                        <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 mt-2">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center space-x-1 shrink-0">
-                  <button
-                    onClick={() => handleAddModule(item.id)}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-semibold text-xs flex items-center space-x-1 cursor-pointer"
-                    title="Add Module"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Module</span>
-                  </button>
-                  <button
-                    onClick={() => setEditingLearning(item)}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
-                    title="Edit Track"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteLearning(item.id)}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-                    title="Delete Track"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                  {totalCount > 0 && (
+                  <div className="flex items-center space-x-1 shrink-0">
+                    <button
+                      onClick={() => handleAddModule(item.id)}
+                      className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-semibold text-xs flex items-center space-x-1 cursor-pointer"
+                      title="Add Module"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Module</span>
+                    </button>
+                    <button
+                      onClick={() => setEditingLearning(item)}
+                      className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
+                      title="Edit Track"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteLearning(item.id)}
+                      className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                      title="Delete Track"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => toggleExpandItem(item.id)}
                       className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
                       title={isExpanded ? 'Collapse modules' : 'Expand modules'}
                     >
-                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
-                  )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Progress Bar */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-600 dark:text-slate-400 font-medium">Completion Progress ({completedCount}/{totalCount})</span>
-                  <span className="text-indigo-600 dark:text-indigo-400 font-mono">{progressPercent}%</span>
+                {/* Progress Bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">Completion Progress ({completedCount}/{totalCount})</span>
+                    <span className="text-indigo-600 dark:text-indigo-400 font-mono">{progressPercent}%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-600 to-violet-600 rounded-full transition-all duration-500"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-indigo-600 to-violet-600 rounded-full transition-all duration-500"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-              </div>
 
-              {/* Modules List */}
-              {item.modules && item.modules.length > 0 && isExpanded && (
-                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                  {item.modules.map((mod: any) => (
-                    <div key={mod.id} className="p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between group/m text-xs">
-                      <div
-                        onClick={() => handleToggleModule(mod.id, mod.status)}
-                        className="flex items-center space-x-2.5 cursor-pointer select-none min-w-0 flex-1"
-                      >
-                        {mod.status === 'COMPLETED' ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-slate-400 shrink-0" />
-                        )}
-                        <span className={`truncate ${mod.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200 font-medium'}`}>
-                          {mod.title}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-1 opacity-0 group-hover/m:opacity-100 transition-opacity shrink-0">
+                {/* Modules List */}
+                {isExpanded && (
+                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                    {totalCount === 0 ? (
+                      <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+                        <span>No modules added yet</span>
                         <button
-                          onClick={() => handleRenameModule(mod.id, mod.title)}
-                          className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
-                          title="Edit Module Title"
+                          onClick={() => handleAddModule(item.id)}
+                          className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center space-x-1 cursor-pointer"
                         >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteModule(mod.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-                          title="Delete Module"
-                        >
-                          <Trash2 className="w-3 h-3" />
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Module</span>
                         </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ) : (
+                      item.modules.map((mod: any) => (
+                        <div key={mod.id} className="p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between group/m text-xs">
+                          <div
+                            onClick={() => handleToggleModule(mod.id, mod.status)}
+                            className="flex items-center space-x-2.5 cursor-pointer select-none min-w-0 flex-1"
+                          >
+                            {mod.status === 'COMPLETED' ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            ) : (
+                              <Circle className="w-4 h-4 text-slate-400 shrink-0" />
+                            )}
+                            <span className={`truncate ${mod.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200 font-medium'}`}>
+                              {mod.title}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1 shrink-0 text-slate-400 dark:text-slate-500">
+                            <button
+                              onClick={() => handleRenameModule(mod.id, mod.title)}
+                              className="p-1 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer transition-colors"
+                              title="Edit Module Title"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteModule(mod.id)}
+                              className="p-1 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer transition-colors"
+                              title="Delete Module"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
