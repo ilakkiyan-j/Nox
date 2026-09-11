@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -14,6 +14,24 @@ interface LearningViewProps {
 export default function LearningView({ learning, onRefresh }: LearningViewProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingLearning, setEditingLearning] = useState<any | null>(null);
+
+  // Card view state: expansion of learning modules per item
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+  // Responsive mobile check
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkMobile = () => setIsMobile(window.innerWidth < 768);
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }
+  }, []);
+
+  const toggleExpandItem = (id: string) => {
+    setExpandedItems((prev) => ({ ...prev, [id]: prev[id] !== undefined ? !prev[id] : isMobile }));
+  };
 
   // Modal Dialog States
   const [confirmState, setConfirmState] = useState<{
@@ -425,10 +443,14 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           const isCompleted = item.status === 'COMPLETED';
           const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : (isCompleted ? 100 : 0);
 
+          const isExpanded = expandedItems[item.id] !== undefined
+            ? expandedItems[item.id]
+            : !isMobile;
+
           return (
-            <div key={item.id} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start space-x-3">
+            <div key={item.id} className="p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start space-x-3 min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => handleToggleLearningStatus(item)}
@@ -439,8 +461,8 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
                   >
                     {isCompleted ? <CheckCircle2 className="w-5 h-5 fill-current text-emerald-600 dark:text-emerald-400" /> : <Circle className="w-5 h-5" />}
                   </button>
-                  <div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 uppercase">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 uppercase font-mono">
                       {item.type}
                     </span>
                     <h3 className={`font-display font-bold text-lg mt-0.5 ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
@@ -464,36 +486,45 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
                     )}
                   </div>
                 </div>
-                <div className="flex items-center space-x-1">
+                <div className="flex items-center space-x-1 shrink-0">
                   <button
                     onClick={() => handleAddModule(item.id)}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-semibold text-xs flex items-center space-x-1"
+                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-semibold text-xs flex items-center space-x-1 cursor-pointer"
                     title="Add Module"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Module</span>
+                    <span className="hidden sm:inline">Module</span>
                   </button>
                   <button
                     onClick={() => setEditingLearning(item)}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
                     title="Edit Track"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleDeleteLearning(item.id)}
-                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400"
+                    className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                     title="Delete Track"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
+                  {totalCount > 0 && (
+                    <button
+                      onClick={() => toggleExpandItem(item.id)}
+                      className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
+                      title={isExpanded ? 'Collapse modules' : 'Expand modules'}
+                    >
+                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Progress Bar */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-600 dark:text-slate-400">Completion Progress</span>
+                  <span className="text-slate-600 dark:text-slate-400 font-medium">Completion Progress ({completedCount}/{totalCount})</span>
                   <span className="text-indigo-600 dark:text-indigo-400 font-mono">{progressPercent}%</span>
                 </div>
                 <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
@@ -505,34 +536,34 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
               </div>
 
               {/* Modules List */}
-              {item.modules && item.modules.length > 0 && (
+              {item.modules && item.modules.length > 0 && isExpanded && (
                 <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                   {item.modules.map((mod: any) => (
                     <div key={mod.id} className="p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between group/m text-xs">
                       <div
                         onClick={() => handleToggleModule(mod.id, mod.status)}
-                        className="flex items-center space-x-2.5 cursor-pointer select-none"
+                        className="flex items-center space-x-2.5 cursor-pointer select-none min-w-0 flex-1"
                       >
                         {mod.status === 'COMPLETED' ? (
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         ) : (
                           <Circle className="w-4 h-4 text-slate-400 shrink-0" />
                         )}
-                        <span className={mod.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200 font-medium'}>
+                        <span className={`truncate ${mod.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200 font-medium'}`}>
                           {mod.title}
                         </span>
                       </div>
-                      <div className="flex items-center space-x-1 opacity-0 group-hover/m:opacity-100 transition-opacity">
+                      <div className="flex items-center space-x-1 opacity-0 group-hover/m:opacity-100 transition-opacity shrink-0">
                         <button
                           onClick={() => handleRenameModule(mod.id, mod.title)}
-                          className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                          className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
                           title="Edit Module Title"
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
                         <button
                           onClick={() => handleDeleteModule(mod.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
+                          className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                           title="Delete Module"
                         >
                           <Trash2 className="w-3 h-3" />

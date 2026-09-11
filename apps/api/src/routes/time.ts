@@ -61,7 +61,11 @@ router.get('/time', async (req: Request, res: Response) => {
         where: {
           status: { not: 'COMPLETED' },
           targetDate: { not: null },
-          OR: [{ goal: { userId } }, { roadmap: { goal: { userId } } }],
+          OR: [
+            { goal: { userId } },
+            { roadmap: { userId } },
+            { roadmap: { goal: { userId } } },
+          ],
         },
         orderBy: { targetDate: 'asc' },
         include: { goal: true },
@@ -79,17 +83,17 @@ router.get('/time', async (req: Request, res: Response) => {
     const upcomingItems: TimeItem[] = [];
 
     function push(item: TimeItem) {
-      const active =
-        item.type === 'TASK' && item.sortAt <= now.getTime() + 2 * 60 * 60 * 1000 && item.sortAt >= now.getTime() - 12 * 60 * 60 * 1000
-          ? true
-          : false;
-      if (item.sortAt < now.getTime() && (item.type === 'TASK' || item.type === 'REMINDER')) {
-        // Overdue surfaced in "Now" so it cannot be missed.
+      const isOverdue = item.sortAt > 0 && item.sortAt < now.getTime() && (item.type === 'TASK' || item.type === 'REMINDER');
+      const isNowWindow = item.sortAt > 0 && item.sortAt >= now.getTime() - 1 * 60 * 60 * 1000 && item.sortAt <= now.getTime() + 2 * 60 * 60 * 1000;
+
+      if (isOverdue) {
         nowItems.push({ ...item, label: 'Overdue' });
+      } else if (isNowWindow) {
+        nowItems.push({ ...item, label: item.label || 'Active Now' });
       } else if (item.type === 'TASK' && item.sortAt === 0) {
         nextItems.push({ ...item, label: 'No due date' });
       } else if (item.sortAt <= todayEnd.getTime()) {
-        nextItems.push({ ...item, label: active ? 'Active' : 'Today' });
+        nextItems.push({ ...item, label: item.label || 'Today' });
       } else {
         upcomingItems.push({ ...item });
       }

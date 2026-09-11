@@ -84,6 +84,17 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   // Focus View Modal for dedicated roadmap inspection
   const [focusedRoadmapId, setFocusedRoadmapId] = useState<string | null>(null);
 
+  // Responsive mobile viewport check
+  const [isMobile, setIsMobile] = useState(false);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkMobile = () => setIsMobile(window.innerWidth < 768);
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }
+  }, []);
+
   // Editing roadmap
   const [editingRoadmap, setEditingRoadmap] = useState<any | null>(null);
 
@@ -716,7 +727,9 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
             const total = allMilestones.length;
             const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
             
-            const isExpanded = expandedCards[rm.id] !== false; // default expanded so phases are visible at a glance
+            const isExpanded = expandedCards[rm.id] !== undefined
+              ? expandedCards[rm.id]
+              : !isMobile; // default expanded on desktop, compact collapsed on mobile
             const isShowingAllPhases = showAllPhases[rm.id] !== false; // default all phases when expanded
 
             // Phase preview slicing: show all phases by default unless user explicitly chose brief view

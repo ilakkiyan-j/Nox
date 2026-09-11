@@ -37,6 +37,29 @@ async function recomputeStreaks(habitId: string) {
   return current;
 }
 
+function normalizeTimeTo24h(raw: unknown): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const str = raw.trim();
+  // 12-hour format match e.g. "8:30 PM", "08:30 AM", "12:15 PM"
+  const match12 = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(str);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = match12[2];
+    const period = match12[3].toUpperCase();
+    if (period === 'PM' && hours < 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  }
+  // 24-hour format match e.g. "20:30", "08:00", "9:15"
+  const match24 = /^(\d{1,2}):(\d{2})$/.exec(str);
+  if (match24) {
+    const hours = Math.min(23, Math.max(0, parseInt(match24[1], 10)));
+    const minutes = match24[2];
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  }
+  return limitString(str, 20);
+}
+
 router.get('/habits', async (req: Request, res: Response) => {
   try {
     const habits = await db.habit.findMany({
@@ -69,7 +92,7 @@ router.post('/habits', async (req: Request, res: Response) => {
         title: limitString(title.trim(), 200),
         frequency: (frequency as string) || 'DAILY',
         targetCount: typeof targetCount === 'number' ? targetCount : 1,
-        reminderTime: typeof reminderTime === 'string' && reminderTime.trim() ? limitString(reminderTime.trim(), 20) : null,
+        reminderTime: normalizeTimeTo24h(reminderTime),
       },
     });
     return apiResponse(res, habit, 201);
@@ -95,7 +118,7 @@ router.patch('/habits/:id', async (req: Request, res: Response) => {
       data.frequency = frequency;
     }
     if (reminderTime !== undefined) {
-      data.reminderTime = typeof reminderTime === 'string' && reminderTime.trim() ? limitString(reminderTime.trim(), 20) : null;
+      data.reminderTime = normalizeTimeTo24h(reminderTime);
     }
     if (targetCount !== undefined) {
       const count = typeof targetCount === 'number' ? targetCount : parseInt(String(targetCount), 10);

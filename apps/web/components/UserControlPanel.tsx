@@ -151,7 +151,7 @@ export default function UserControlPanel({
       </header>
 
       {/* ── FULL SCREEN WORKSTATION BODY ── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         
         {/* Desktop Left Navigation Sidebar */}
         <aside className="w-72 border-r border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 p-4 space-y-1.5 shrink-0 hidden md:flex flex-col justify-between">
@@ -202,7 +202,7 @@ export default function UserControlPanel({
         </aside>
 
         {/* Mobile Sub-Navigation Bar */}
-        <div className="md:hidden flex items-center space-x-1 p-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 overflow-x-auto shrink-0">
+        <div className="md:hidden flex items-center space-x-1 p-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 overflow-x-auto shrink-0 touch-pan-x">
           {sectionNav.map((s) => {
             const Icon = s.icon;
             const isActive = activeSection === s.id;
@@ -210,7 +210,7 @@ export default function UserControlPanel({
               <button
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
-                className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -224,7 +224,7 @@ export default function UserControlPanel({
         </div>
 
         {/* Main Workstation Workspace Content */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-10 max-w-6xl w-full mx-auto space-y-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 max-w-6xl w-full mx-auto space-y-8 pb-16 md:pb-10">
 
           {/* ── OVERVIEW SECTION ── */}
           {activeSection === 'overview' && (
