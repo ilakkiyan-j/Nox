@@ -30,7 +30,16 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
   }, []);
 
   const toggleExpandItem = (id: string) => {
-    setExpandedItems((prev) => ({ ...prev, [id]: prev[id] !== undefined ? !prev[id] : isMobile }));
+    setExpandedItems((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleExpandAll = () => {
+    const allExpanded = learning.length > 0 && learning.every((item) => expandedItems[item.id] === true);
+    const nextState: Record<string, boolean> = {};
+    learning.forEach((item) => {
+      nextState[item.id] = !allExpanded;
+    });
+    setExpandedItems(nextState);
   };
 
   // Modal Dialog States
@@ -154,6 +163,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
   };
 
   const handleAddModule = (learningId: string) => {
+    setExpandedItems((prev) => ({ ...prev, [learningId]: true }));
     setPromptState({
       isOpen: true,
       title: 'Add Module / Chapter',
@@ -211,6 +221,8 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
     });
   };
 
+  const areAllExpanded = learning.length > 0 && learning.every((item) => expandedItems[item.id] === true);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -223,13 +235,29 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Courses, certifications, technical practice, and book study modules.</p>
         </div>
 
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Learning Track</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {learning.length > 0 && (
+            <button
+              onClick={toggleExpandAll}
+              className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              title={areAllExpanded ? 'Collapse all tracks' : 'Expand all tracks'}
+            >
+              {areAllExpanded ? (
+                <ChevronUp className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              )}
+              <span>{areAllExpanded ? 'Collapse All' : 'Expand All'}</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Learning Track</span>
+          </button>
+        </div>
       </div>
 
       {/* Create Learning Track Form */}
@@ -443,9 +471,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           const isCompleted = item.status === 'COMPLETED';
           const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : (isCompleted ? 100 : 0);
 
-          const isExpanded = expandedItems[item.id] !== undefined
-            ? expandedItems[item.id]
-            : !isMobile;
+          const isExpanded = expandedItems[item.id] === true;
 
           return (
             <div key={item.id} className="p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between">

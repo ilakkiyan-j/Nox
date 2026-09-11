@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Compass, Plus, X, Save, Edit2, Trash2, CheckCircle2, Circle,
-  ChevronDown, ChevronRight, FileCode, Check, AlertCircle, Layers,
+  ChevronDown, ChevronUp, ChevronRight, FileCode, Check, AlertCircle, Layers,
   Search, Filter, Maximize2, Minimize2, Eye, LayoutGrid, ListFilter,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
@@ -115,24 +115,23 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const toggleExpand = (id: string) =>
-    setExpandedCards((prev) => ({ ...prev, [id]: prev[id] === false ? true : false }));
+    setExpandedCards((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const toggleShowAllPhases = (id: string) =>
     setShowAllPhases((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // Global expand/collapse toggle
-  const allCollapsed = useMemo(() => {
-    if (roadmaps.length === 0) return true;
-    return roadmaps.every((rm) => expandedCards[rm.id] === false);
+  const areAllExpanded = useMemo(() => {
+    if (roadmaps.length === 0) return false;
+    return roadmaps.every((rm) => expandedCards[rm.id] === true);
   }, [roadmaps, expandedCards]);
 
   const toggleAllExpanded = () => {
-    const shouldExpand = allCollapsed;
-    const updated: Record<string, boolean> = {};
+    const nextState: Record<string, boolean> = {};
     roadmaps.forEach((rm) => {
-      updated[rm.id] = shouldExpand;
+      nextState[rm.id] = !areAllExpanded;
     });
-    setExpandedCards(updated);
+    setExpandedCards(nextState);
   };
 
   // Filtered roadmaps calculation
@@ -378,10 +377,10 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
             <button
               onClick={toggleAllExpanded}
               className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
-              title={allCollapsed ? 'Expand All Roadmaps' : 'Collapse All Roadmaps'}
+              title={areAllExpanded ? 'Collapse All Roadmaps' : 'Expand All Roadmaps'}
             >
-              {allCollapsed ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-              <span>{allCollapsed ? 'Expand All' : 'Collapse All'}</span>
+              {areAllExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <span>{areAllExpanded ? 'Collapse All' : 'Expand All'}</span>
             </button>
           )}
           <button
@@ -727,9 +726,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
             const total = allMilestones.length;
             const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
             
-            const isExpanded = expandedCards[rm.id] !== undefined
-              ? expandedCards[rm.id]
-              : !isMobile; // default expanded on desktop, compact collapsed on mobile
+            const isExpanded = expandedCards[rm.id] === true;
             const isShowingAllPhases = showAllPhases[rm.id] !== false; // default all phases when expanded
 
             // Phase preview slicing: show all phases by default unless user explicitly chose brief view
@@ -781,7 +778,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
                       <button onClick={() => toggleExpand(rm.id)}
                         className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
                         title={isExpanded ? 'Collapse card' : 'Expand card'}>
-                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
