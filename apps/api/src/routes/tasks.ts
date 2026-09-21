@@ -80,7 +80,20 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const existing = await getOwnedTask(id, req.user!.id);
 
-    const { title, description, status, priority, dueDate, startDate, estimatedMinutes, goalId } = (req.body ?? {}) as Record<string, unknown>;
+    const {
+      title,
+      description,
+      status,
+      priority,
+      dueDate,
+      startDate,
+      estimatedMinutes,
+      goalId,
+      roadmapId,
+      milestoneId,
+      learningId,
+      eventId,
+    } = (req.body ?? {}) as Record<string, unknown>;
 
     const data: Record<string, unknown> = {};
     if (title !== undefined) {
@@ -108,6 +121,22 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
       await validateGoalRelation(goalId as string | undefined, req.user!.id);
       data.goalId = (goalId as string) || null;
     }
+    if (roadmapId !== undefined) {
+      await validateRoadmapRelation(roadmapId as string | undefined, req.user!.id);
+      data.roadmapId = (roadmapId as string) || null;
+    }
+    if (milestoneId !== undefined) {
+      await validateMilestoneRelation(milestoneId as string | undefined, req.user!.id);
+      data.milestoneId = (milestoneId as string) || null;
+    }
+    if (learningId !== undefined) {
+      await validateLearningRelation(learningId as string | undefined, req.user!.id);
+      data.learningId = (learningId as string) || null;
+    }
+    if (eventId !== undefined) {
+      await validateEventRelation(eventId as string | undefined, req.user!.id);
+      data.eventId = (eventId as string) || null;
+    }
 
     const updated = await db.task.update({ where: { id }, data });
 
@@ -128,6 +157,31 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     if (err instanceof HttpError) return apiError(res, err.message, err.statusCode);
     const message = err instanceof Error ? err.message : 'Failed to update task';
+    return apiError(res, message, 500);
+  }
+});
+
+router.delete('/tasks/completed', async (req: Request, res: Response) => {
+  try {
+    const completedTasks = await db.task.findMany({
+      where: { userId: req.user!.id, status: 'COMPLETED' },
+      select: { id: true },
+    });
+
+    const taskIds = completedTasks.map((t) => t.id);
+
+    if (taskIds.length > 0) {
+      await db.$transaction([
+        db.note.deleteMany({ where: { taskId: { in: taskIds } } }),
+        db.reminder.deleteMany({ where: { entityType: 'TASK', entityId: { in: taskIds } } }),
+        db.notification.deleteMany({ where: { entityType: 'TASK', entityId: { in: taskIds } } }),
+        db.task.deleteMany({ where: { id: { in: taskIds } } }),
+      ]);
+    }
+
+    return apiResponse(res, { deletedCount: taskIds.length });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to clear completed tasks';
     return apiError(res, message, 500);
   }
 });

@@ -206,11 +206,26 @@ export default function Home() {
       case 'roadmaps':
         return <RoadmapsView roadmaps={roadmaps} goals={goals} onRefresh={fetchAllData} />;
       case 'tasks':
-        return <TasksView tasks={tasks} goals={goals} onRefresh={fetchAllData} />;
+        return (
+          <TasksView
+            tasks={tasks}
+            goals={goals}
+            roadmaps={roadmaps}
+            learning={learning}
+            events={events}
+            onRefresh={fetchAllData}
+          />
+        );
       case 'learning':
         return <LearningView learning={learning} onRefresh={fetchAllData} />;
       case 'events':
-        return <EventsView events={events} onRefresh={fetchAllData} />;
+        return (
+          <EventsView
+            events={events}
+            onRefresh={fetchAllData}
+            onNavigate={(tab) => setActiveTab(tab)}
+          />
+        );
       case 'habits':
         return <HabitsView habits={habits} onRefresh={fetchAllData} />;
       case 'notes':
@@ -225,7 +240,13 @@ export default function Home() {
       case 'time':
         return <TimeView onNavigate={(tab) => setActiveTab(tab)} />;
       case 'reminders':
-        return <RemindersView reminders={reminders} onRefresh={fetchAllData} />;
+        return (
+          <RemindersView
+            reminders={reminders}
+            events={events}
+            onRefresh={fetchAllData}
+          />
+        );
       case 'notifications':
         return <NotificationsView notifications={notifications} onRefresh={fetchAllData} />;
       default:

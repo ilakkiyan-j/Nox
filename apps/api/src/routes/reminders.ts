@@ -65,9 +65,9 @@ router.post('/reminders', async (req: Request, res: Response) => {
 router.patch('/reminders/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await getOwnedReminder(id, req.user!.id);
+    const existing = await getOwnedReminder(id, req.user!.id);
 
-    const { title, remindAt, isCompleted } = (req.body ?? {}) as Record<string, unknown>;
+    const { title, remindAt, isCompleted, entityType, entityId } = (req.body ?? {}) as Record<string, unknown>;
     const data: Record<string, unknown> = {};
     if (title !== undefined) {
       if (!isSafeString(title)) return apiError(res, 'Title must be a non-empty string');
@@ -76,11 +76,54 @@ router.patch('/reminders/:id', async (req: Request, res: Response) => {
     if (remindAt !== undefined) data.remindAt = (parseDate(remindAt) ?? undefined) as Date | undefined;
     if (isCompleted !== undefined) data.isCompleted = Boolean(isCompleted);
 
+    if (entityType !== undefined) {
+      if (entityType === null || entityType === '') {
+        data.entityType = null;
+        data.entityId = null;
+      } else {
+        if (typeof entityType !== 'string' || !ENTITY_TYPES.includes(entityType)) {
+          return apiError(res, `entityType must be one of ${ENTITY_TYPES.join(', ')}`);
+        }
+        const targetEntityId = entityId !== undefined ? (entityId as string) : existing.entityId;
+        await validateGoalRelation(entityType === 'GOAL' ? targetEntityId : undefined, req.user!.id);
+        await validateTaskRelation(entityType === 'TASK' ? targetEntityId : undefined, req.user!.id);
+        await validateEventRelation(entityType === 'EVENT' ? targetEntityId : undefined, req.user!.id);
+        await validateHabitRelation(entityType === 'HABIT' ? targetEntityId : undefined, req.user!.id);
+        await validateMilestoneRelation(entityType === 'MILESTONE' ? targetEntityId : undefined, req.user!.id);
+        await validateLearningRelation(entityType === 'LEARNING' ? targetEntityId : undefined, req.user!.id);
+
+        data.entityType = entityType;
+        data.entityId = targetEntityId || null;
+      }
+    } else if (entityId !== undefined) {
+      if (existing.entityType) {
+        await validateGoalRelation(existing.entityType === 'GOAL' ? (entityId as string) : undefined, req.user!.id);
+        await validateTaskRelation(existing.entityType === 'TASK' ? (entityId as string) : undefined, req.user!.id);
+        await validateEventRelation(existing.entityType === 'EVENT' ? (entityId as string) : undefined, req.user!.id);
+        await validateHabitRelation(existing.entityType === 'HABIT' ? (entityId as string) : undefined, req.user!.id);
+        await validateMilestoneRelation(existing.entityType === 'MILESTONE' ? (entityId as string) : undefined, req.user!.id);
+        await validateLearningRelation(existing.entityType === 'LEARNING' ? (entityId as string) : undefined, req.user!.id);
+      }
+      data.entityId = (entityId as string) || null;
+    }
+
     const updated = await db.reminder.update({ where: { id }, data });
     return apiResponse(res, updated);
   } catch (err: unknown) {
     if (err instanceof HttpError) return apiError(res, err.message, err.statusCode);
     const message = err instanceof Error ? err.message : 'Failed to update reminder';
+    return apiError(res, message, 500);
+  }
+});
+
+router.delete('/reminders/completed', async (req: Request, res: Response) => {
+  try {
+    const result = await db.reminder.deleteMany({
+      where: { userId: req.user!.id, isCompleted: true },
+    });
+    return apiResponse(res, { deletedCount: result.count });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to clear completed reminders';
     return apiError(res, message, 500);
   }
 });

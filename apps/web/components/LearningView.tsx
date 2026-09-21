@@ -225,21 +225,23 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header with Responsive Mobile Layout */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="font-display text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
             <GraduationCap className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
             <span>Learning & Knowledge Base</span>
           </h2>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Courses, certifications, technical practice, and book study modules.</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+            Courses, certifications, technical practice, and book study modules.
+          </p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {learning.length > 0 && (
             <button
               onClick={toggleExpandAll}
-              className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="flex-1 sm:flex-none justify-center px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
               title={areAllExpanded ? 'Collapse all tracks' : 'Expand all tracks'}
             >
               {areAllExpanded ? (
@@ -252,7 +254,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           )}
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-none justify-center px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>New Learning Track</span>
