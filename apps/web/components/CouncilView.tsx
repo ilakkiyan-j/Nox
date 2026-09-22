@@ -433,8 +433,11 @@ export default function CouncilView({
 
       setMessages((prev) => [...prev, botMsg]);
 
-      if (data?.executedActions && data.executedActions.length > 0 && onRefresh) {
-        onRefresh();
+      if (data?.executedActions && data.executedActions.length > 0) {
+        if (onRefresh) onRefresh();
+        if (data.executedActions.some((act: any) => act.toolName === 'adapt_persona')) {
+          fetchBots();
+        }
       }
 
       fetchSessions();
@@ -972,15 +975,40 @@ export default function CouncilView({
                       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                         ⚡ Executed Actions:
                       </div>
-                      {m.executedActions.map((act, i) => (
-                        <div
-                          key={i}
-                          className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono"
-                        >
-                          <div className="font-bold text-indigo-600 dark:text-indigo-400">{act.toolName}</div>
-                          <div className="text-slate-500 text-[10px] mt-0.5">{JSON.stringify(act.params)}</div>
-                        </div>
-                      ))}
+                      {m.executedActions.map((act, i) => {
+                        const isAdaptPersona = act.toolName === 'adapt_persona';
+                        const isWebSearch = act.toolName === 'web_search';
+                        return (
+                          <div
+                            key={i}
+                            className={`p-2.5 rounded-xl border text-xs font-mono ${
+                              isAdaptPersona
+                                ? 'bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-indigo-500/10 border-purple-200 dark:border-purple-800/60'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span
+                                className={`font-bold ${
+                                  isAdaptPersona
+                                    ? 'text-purple-600 dark:text-purple-400'
+                                    : 'text-indigo-600 dark:text-indigo-400'
+                                }`}
+                              >
+                                {isAdaptPersona ? '🎭 adapt_persona' : isWebSearch ? '🔍 web_search' : `⚡ ${act.toolName}`}
+                              </span>
+                              {isAdaptPersona && (
+                                <span className="text-[10px] font-sans px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-semibold">
+                                  Character & Instructions Adapted
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-slate-500 text-[10px] mt-1 break-all">
+                              {JSON.stringify(act.params)}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
