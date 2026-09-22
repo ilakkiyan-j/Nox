@@ -417,13 +417,23 @@ export default function CouncilView({
       fetchSessions();
       fetchMemory();
     } catch (err: any) {
+      const errText = err.message || '';
+      const isHighDemand =
+        errText.toLowerCase().includes('high demand') ||
+        errText.toLowerCase().includes('temporary') ||
+        errText.toLowerCase().includes('rate limit');
+
+      const content = isHighDemand
+        ? `**Sofi is catching her breath 💖**: Google Gemini is experiencing a brief high-demand spike on its free tier. Please send your message again in a few seconds, or switch to **Riven** 🧭 or **Lucifer** 🔥 (powered by Groq) in the meantime!`
+        : `**Connection Notice**: Couldn't reach Council server: ${
+            errText || 'Check if Council is running on port 4100'
+          }.`;
+
       const errMsg: Message = {
         id: `err-${Date.now()}`,
         sender: 'assistant',
         persona: activePersona,
-        content: `**Connection Notice**: Couldn't reach Council server: ${
-          err.message || 'Check if Council is running on port 4100'
-        }.`,
+        content,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errMsg]);
