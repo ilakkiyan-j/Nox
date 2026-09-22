@@ -187,6 +187,88 @@ privateRouter.post('/council/bots', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/council/bots/:id
+ * Retrieve details for a specific Bot (including instruction prompt)
+ */
+privateRouter.get('/council/bots/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}`, {
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    if (!councilResponse.ok) {
+      return apiError(res, data?.error?.message || 'Bot not found', mapCouncilStatus(councilResponse.status));
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to retrieve bot';
+    return apiError(res, msg, 502);
+  }
+});
+
+/**
+ * PATCH /api/v1/council/bots/:id
+ * Update any existing Bot (Sofi, Riven, Lucifer, or custom bots)
+ */
+privateRouter.patch('/council/bots/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    if (!councilResponse.ok) {
+      return apiError(res, data?.error?.message || 'Failed to update bot', mapCouncilStatus(councilResponse.status));
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to update bot';
+    return apiError(res, msg, 502);
+  }
+});
+
+/**
+ * POST /api/v1/council/bots/:id/duplicate
+ * Duplicate an existing Bot to experiment with prompts or roles
+ */
+privateRouter.post('/council/bots/:id/duplicate', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}/duplicate`, {
+      method: 'POST',
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    if (!councilResponse.ok) {
+      return apiError(res, data?.error?.message || 'Failed to duplicate bot', mapCouncilStatus(councilResponse.status));
+    }
+    return apiResponse(res, data.data || data, 201);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to duplicate bot';
+    return apiError(res, msg, 502);
+  }
+});
+
+/**
  * DELETE /api/v1/council/bots/:id
  * Delete a custom bot
  */

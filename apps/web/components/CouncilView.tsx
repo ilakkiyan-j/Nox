@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
-  Flame,
-  Compass,
   Heart,
+  Compass,
+  Flame,
   ListTodo,
   Trash2,
   Send,
@@ -18,11 +18,17 @@ import {
   Key,
   Bot,
   RefreshCw,
+  Edit3,
+  Copy,
+  Sliders,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
 
-export type PersonaId = 'sofi' | 'riven' | 'lucifer' | string;
+export type StudioView = 'chat' | 'bots' | 'byok' | 'deliberate';
 
 export interface ExecutedAction {
   toolName: string;
@@ -81,13 +87,19 @@ export interface BotItem {
   description?: string;
   isDefault?: boolean;
   status?: string;
-  systemPrompt?: string;
+  instruction?: {
+    systemPrompt?: string;
+    contextGuidelines?: string;
+    safetyRules?: string;
+  };
   modelConfig?: {
     provider?: string;
     model?: string;
     temperature?: number;
     credential?: {
+      id?: string;
       label?: string;
+      provider?: string;
     };
   };
 }
@@ -98,6 +110,7 @@ export interface ProviderCredential {
   label: string;
   maskedKey: string;
   status: string;
+  activeBotsCount?: number;
 }
 
 export interface CouncilViewProps {
@@ -107,59 +120,37 @@ export interface CouncilViewProps {
   onRefresh?: () => void;
 }
 
-const DEFAULT_PERSONAS: Record<string, { name: string; role: string; avatar: string; color: string; greeting: string; suggestions: string[] }> = {
+const DEFAULT_PERSONAS: Record<string, { name: string; role: string; avatar: string; greeting: string; prompt: string }> = {
   sofi: {
     name: 'Sofi',
     role: 'Executive PA & Girlfriend',
     avatar: '💖',
-    color: 'bg-rose-500 text-white shadow-xs',
     greeting:
       "Hey babe! I have full visibility into your Nox tasks and schedule. How are you holding up? Let's negotiate your plan for today so you crush your goals without burning out. What's on your mind? 💖",
-    suggestions: [
-      'What are my tasks for today? 📋',
-      'Help me negotiate my plan for today 💖',
-      'I have too much on my plate, help me triage',
-      'Add a high priority task for tomorrow',
-    ],
+    prompt:
+      "You are Sofi, the user's caring, witty Executive PA and Girlfriend. You keep them organized, prioritize ruthlessly, and care about their well-being.",
   },
   riven: {
     name: 'Riven',
     role: 'Chief Architect & Idea Shaper',
     avatar: '🧭',
-    color: 'bg-cyan-600 text-white shadow-xs',
     greeting:
       'Ready to build. What architectural bottleneck or technical doubt are we breaking down today? Hand over your schemas, roadmaps, or project ideas.',
-    suggestions: [
-      'Help me shape a new project architecture 🧭',
-      'Clear my technical doubts on database design',
-      'Break down a large project into phases',
-      'Review my API contract and data flow',
-    ],
+    prompt:
+      'You are Riven, a brilliant Chief Architect and Systems Designer. You think in clean architectures, scalability, and modular software designs.',
   },
   lucifer: {
     name: 'Lucifer',
     role: 'Partner in Crime & Auditor',
     avatar: '🔥',
-    color: 'bg-amber-600 text-white shadow-xs',
     greeting:
       "Let's see what you've cooked up. Hand over your timeline or plan so I can tell you where it's going to crash and burn. No excuses.",
-    suggestions: [
-      'Audit my schedule and roast my procrastination 🔥',
-      'Stress-test my launch timeline',
-      'Tell me the brutal truth about this plan',
-      'Why am I avoiding my hardest task?',
-    ],
+    prompt:
+      'You are Lucifer, the user\'s brutal auditor and devil\'s advocate. You challenge assumptions, stress-test deadlines, and cut through excuses.',
   },
 };
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  preference: { bg: 'bg-indigo-50 dark:bg-indigo-950/40', text: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-900/60' },
-  tech_stack: { bg: 'bg-cyan-50 dark:bg-cyan-950/40', text: 'text-cyan-600 dark:text-cyan-400', border: 'border-cyan-200 dark:border-cyan-900/60' },
-  goal: { bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-900/60' },
-  habit: { bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-900/60' },
-  relationship: { bg: 'bg-rose-50 dark:bg-rose-950/40', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-200 dark:border-rose-900/60' },
-  general: { bg: 'bg-slate-100 dark:bg-slate-800/60', text: 'text-slate-600 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-700' },
-};
+const SUGGESTED_EMOJIS = ['💖', '🧭', '🔥', '🤖', '🧠', '⚡', '🚀', '🛡️', '🦉', '🎨', '🧪', '💼'];
 
 const DEBATE_SUGGESTIONS = [
   'Should I migrate my local storage to SQLite or stay with file JSON?',
@@ -174,27 +165,31 @@ export default function CouncilView({
   habits = [],
   onRefresh,
 }: CouncilViewProps) {
-  // Bots & Personas
+  // Navigation View Mode
+  const [studioView, setStudioView] = useState<StudioView>('chat');
+
+  // Bots & Active Selection
   const [bots, setBots] = useState<BotItem[]>([]);
   const [activeBotId, setActiveBotId] = useState<string>('sofi');
 
   // BYOK Credentials
   const [credentials, setCredentials] = useState<ProviderCredential[]>([]);
-  const [showCredModal, setShowCredModal] = useState(false);
   const [credProvider, setCredProvider] = useState('gemini');
   const [credLabel, setCredLabel] = useState('');
   const [credKey, setCredKey] = useState('');
   const [savingCred, setSavingCred] = useState(false);
 
-  // Bot Workshop Modal
-  const [showWorkshopModal, setShowWorkshopModal] = useState(false);
-  const [workshopName, setWorkshopName] = useState('');
-  const [workshopRole, setWorkshopRole] = useState('');
-  const [workshopAvatar, setWorkshopAvatar] = useState('🤖');
-  const [workshopDesc, setWorkshopDesc] = useState('');
-  const [workshopPrompt, setWorkshopPrompt] = useState('');
-  const [workshopProvider, setWorkshopProvider] = useState('gemini');
-  const [workshopModel, setWorkshopModel] = useState('');
+  // Bot Workshop Modal (Create & Edit)
+  const [showEditorModal, setShowEditorModal] = useState(false);
+  const [editingBotId, setEditingBotId] = useState<string | null>(null);
+  const [editorName, setEditorName] = useState('');
+  const [editorRole, setEditorRole] = useState('');
+  const [editorAvatar, setEditorAvatar] = useState('🤖');
+  const [editorDesc, setEditorDesc] = useState('');
+  const [editorPrompt, setEditorPrompt] = useState('');
+  const [editorProvider, setEditorProvider] = useState('gemini');
+  const [editorModel, setEditorModel] = useState('');
+  const [editorTemperature, setEditorTemperature] = useState(0.7);
   const [savingBot, setSavingBot] = useState(false);
 
   // Chat & Sessions
@@ -208,7 +203,6 @@ export default function CouncilView({
   // Drawers & Deliberation
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
   const [showMemoryDrawer, setShowMemoryDrawer] = useState(false);
-  const [showDebateModal, setShowDebateModal] = useState(false);
   const [debateTopic, setDebateTopic] = useState('');
   const [debateLoading, setDebateLoading] = useState(false);
   const [memoryProfile, setMemoryProfile] = useState<MemoryProfile | null>(null);
@@ -226,6 +220,11 @@ export default function CouncilView({
   const currentBotName = activeBot?.name || DEFAULT_PERSONAS[activeBotId]?.name || 'Council Bot';
   const currentBotRole = activeBot?.role || DEFAULT_PERSONAS[activeBotId]?.role || 'AI Assistant';
   const currentBotAvatar = activeBot?.avatar || DEFAULT_PERSONAS[activeBotId]?.avatar || '🤖';
+  const currentBotProvider = activeBot?.modelConfig?.provider || 'gemini';
+  const currentBotModel = activeBot?.modelConfig?.model || 'gemini-2.5-flash';
+
+  // Check if provider has connected BYOK key
+  const hasKeyForActiveBot = credentials.some((c) => c.provider === currentBotProvider && c.status === 'ACTIVE');
 
   useEffect(() => {
     checkCouncilStatus();
@@ -247,8 +246,10 @@ export default function CouncilView({
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading, debateLoading]);
+    if (studioView === 'chat') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, loading, debateLoading, studioView]);
 
   const checkCouncilStatus = async () => {
     try {
@@ -447,9 +448,9 @@ export default function CouncilView({
     const topic = topicToDebate || debateTopic;
     if (!topic.trim()) return;
 
-    setShowDebateModal(false);
     setDebateTopic('');
     setDebateLoading(true);
+    setStudioView('chat');
 
     const callMsg: Message = {
       id: `debate-summon-${Date.now()}`,
@@ -498,50 +499,151 @@ export default function CouncilView({
     }
   };
 
-  const handleCreateBot = async (e: React.FormEvent) => {
+  // Open modal for Creating a new bot
+  const handleOpenCreateBot = () => {
+    setEditingBotId(null);
+    setEditorName('');
+    setEditorRole('');
+    setEditorAvatar('🤖');
+    setEditorDesc('');
+    setEditorPrompt('');
+    setEditorProvider('gemini');
+    setEditorModel('gemini-2.5-flash');
+    setEditorTemperature(0.7);
+    setShowEditorModal(true);
+  };
+
+  // Open modal for Editing an existing bot (Sofi, Riven, Lucifer, or custom)
+  const handleOpenEditBot = async (bot: BotItem) => {
+    setEditingBotId(bot.id);
+    setEditorName(bot.name || '');
+    setEditorRole(bot.role || '');
+    setEditorAvatar(bot.avatar || '🤖');
+    setEditorDesc(bot.description || '');
+    setEditorPrompt(bot.instruction?.systemPrompt || DEFAULT_PERSONAS[bot.id]?.prompt || '');
+    setEditorProvider(bot.modelConfig?.provider || 'gemini');
+    setEditorModel(bot.modelConfig?.model || '');
+    setEditorTemperature(bot.modelConfig?.temperature || 0.7);
+    setShowEditorModal(true);
+
+    // Fetch full bot details if instruction wasn't loaded
+    if (!bot.instruction?.systemPrompt) {
+      try {
+        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${bot.id}`);
+        if (res.ok) {
+          const json = await res.json();
+          const detailed = json?.data;
+          if (detailed?.instruction?.systemPrompt) {
+            setEditorPrompt(detailed.instruction.systemPrompt);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch full bot instructions:', err);
+      }
+    }
+  };
+
+  // Save Bot (Create or Edit)
+  const handleSaveBot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!workshopName.trim()) return;
+    if (!editorName.trim()) return;
 
     setSavingBot(true);
     try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: workshopName.trim(),
-          role: workshopRole.trim() || 'AI Assistant',
-          avatar: workshopAvatar || '🤖',
-          description: workshopDesc.trim(),
-          systemPrompt: workshopPrompt.trim(),
-          provider: workshopProvider,
-          model: workshopModel.trim() || undefined,
-        }),
-      });
+      const payload = {
+        name: editorName.trim(),
+        role: editorRole.trim() || 'AI Assistant',
+        avatar: editorAvatar || '🤖',
+        description: editorDesc.trim(),
+        instruction: {
+          systemPrompt: editorPrompt.trim(),
+        },
+        modelConfig: {
+          provider: editorProvider,
+          model: editorModel.trim() || undefined,
+          temperature: editorTemperature,
+        },
+      };
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error?.message || 'Failed to create bot');
+      if (editingBotId) {
+        // PATCH existing bot
+        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${editingBotId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json?.error?.message || 'Failed to update bot');
+        }
+      } else {
+        // POST new bot
+        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json?.error?.message || 'Failed to create bot');
+        }
+
+        const created = (await res.json())?.data;
+        if (created?.id) {
+          setActiveBotId(created.id);
+        }
       }
 
-      const created = (await res.json())?.data;
-      setShowWorkshopModal(false);
-      setWorkshopName('');
-      setWorkshopRole('');
-      setWorkshopDesc('');
-      setWorkshopPrompt('');
-
+      setShowEditorModal(false);
       await fetchBots();
-      if (created?.id) {
-        setActiveBotId(created.id);
-        createNewSession(created.id, true);
-      }
     } catch (err: any) {
-      alert(err.message);
+      alert(`Error: ${err.message}`);
     } finally {
       setSavingBot(false);
     }
   };
 
+  // Duplicate Bot
+  const handleDuplicateBot = async (botId: string) => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${botId}/duplicate`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error?.message || 'Failed to duplicate bot');
+      }
+      await fetchBots();
+      alert('✓ Bot duplicated successfully!');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // Delete Bot
+  const handleDeleteBot = async (botId: string, botName: string) => {
+    if (!confirm(`Delete "${botName}"? This bot will be removed from your workspace.`)) return;
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${botId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error?.message || 'Failed to delete bot');
+      }
+      await fetchBots();
+      if (activeBotId === botId) {
+        setActiveBotId('sofi');
+        createNewSession('sofi', true);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // Save BYOK Key
   const handleSaveCredential = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!credKey.trim()) return;
@@ -563,11 +665,10 @@ export default function CouncilView({
         throw new Error(json?.error?.message || 'Failed to save credential');
       }
 
-      setShowCredModal(false);
       setCredKey('');
       setCredLabel('');
       await fetchCredentials();
-      alert('✓ Credential saved and encrypted securely!');
+      alert('✓ API Key encrypted and linked to all matching bots!');
     } catch (err: any) {
       alert(`Failed to save key: ${err.message}`);
     } finally {
@@ -575,6 +676,7 @@ export default function CouncilView({
     }
   };
 
+  // Delete BYOK Key
   const handleDeleteCredential = async (credId: string) => {
     if (!confirm('Revoke and delete this provider credential?')) return;
     try {
@@ -587,6 +689,7 @@ export default function CouncilView({
     }
   };
 
+  // Add Fact to Memory
   const handleAddFact = async () => {
     if (!newFact.trim()) return;
     setIsAddingFact(true);
@@ -612,84 +715,74 @@ export default function CouncilView({
     }
   };
 
-  // Compile bot tabs: default bots + custom bots
+  // Compile bot tabs
   const displayedBots = bots.length > 0 ? bots : [
-    { id: 'sofi', name: 'Sofi', role: 'Executive PA & Girlfriend', avatar: '💖' },
-    { id: 'riven', name: 'Riven', role: 'Chief Architect & Idea Shaper', avatar: '🧭' },
-    { id: 'lucifer', name: 'Lucifer', role: 'Partner in Crime & Auditor', avatar: '🔥' },
+    { id: 'sofi', name: 'Sofi', role: 'Executive PA & Girlfriend', avatar: '💖', modelConfig: { provider: 'gemini', model: 'gemini-2.5-flash' } },
+    { id: 'riven', name: 'Riven', role: 'Chief Architect & Idea Shaper', avatar: '🧭', modelConfig: { provider: 'groq', model: 'llama-3.3-70b-versatile' } },
+    { id: 'lucifer', name: 'Lucifer', role: 'Partner in Crime & Auditor', avatar: '🔥', modelConfig: { provider: 'groq', model: 'llama-3.3-70b-versatile' } },
   ];
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-      {/* Top Header & Dynamic Bot Selector */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md gap-3 flex-wrap">
-        {/* Dynamic Bot Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {displayedBots.map((b) => {
-            const isSelected = activeBotId === b.id || activeBotId === b.slug;
-            return (
-              <button
-                key={b.id}
-                onClick={() => {
-                  setActiveBotId(b.id);
-                  createNewSession(b.id, true);
-                }}
-                className={`px-3 py-1.5 rounded-xl flex items-center space-x-1.5 transition-all text-xs font-medium shrink-0 ${
-                  isSelected
-                    ? 'bg-blue-600 text-white shadow-xs font-bold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-800'
-                }`}
-                title={`${b.name} (${b.role})`}
-              >
-                <span>{b.avatar || '🤖'}</span>
-                <span>{b.name}</span>
-              </button>
-            );
-          })}
-
-          {/* + Create Bot Workshop Trigger */}
+      {/* Studio Master Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md flex-wrap gap-2">
+        {/* View Mode Switcher */}
+        <div className="flex items-center p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 text-xs font-semibold">
           <button
-            onClick={() => setShowWorkshopModal(true)}
-            className="px-2.5 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 text-xs font-medium flex items-center gap-1 shrink-0 transition"
-            title="Create Custom AI Bot"
+            onClick={() => setStudioView('chat')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+              studioView === 'chat'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+            }`}
           >
-            <Plus size={13} />
-            <span className="hidden sm:inline">New Bot</span>
+            <MessageSquare size={13} />
+            <span>Chat Studio</span>
+          </button>
+          <button
+            onClick={() => setStudioView('bots')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+              studioView === 'bots'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+            }`}
+          >
+            <Bot size={13} />
+            <span>My Bots ({displayedBots.length})</span>
+          </button>
+          <button
+            onClick={() => setStudioView('byok')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+              studioView === 'byok'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+            }`}
+          >
+            <Key size={13} />
+            <span>BYOK Vault</span>
+          </button>
+          <button
+            onClick={() => setStudioView('deliberate')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+              studioView === 'deliberate'
+                ? 'bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+            }`}
+          >
+            <Sparkles size={13} />
+            <span>Deliberation</span>
           </button>
         </div>
 
-        {/* Action Controls & Utilities */}
-        <div className="flex items-center flex-wrap gap-2 text-xs">
-          {/* BYOK Keys Modal Button */}
-          <button
-            onClick={() => setShowCredModal(true)}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
-            title="Manage BYOK AI Provider API Keys"
-          >
-            <Key size={13} className="text-amber-500" />
-            <span className="hidden sm:inline">BYOK Keys</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-[10px]">
-              {credentials.length}
-            </span>
-          </button>
-
-          {/* Summon Council Debate Button */}
-          <button
-            onClick={() => setShowDebateModal(true)}
-            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs hover:opacity-95 transition-all"
-            title="Summon multi-bot deliberation on a decision"
-          >
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            <span>Summon Debate</span>
-          </button>
-
-          {/* Persistent Memory Vault Drawer Button */}
+        {/* Global Utilities */}
+        <div className="flex items-center gap-2 text-xs">
+          {/* Memory Vault Button */}
           <button
             onClick={() => setShowMemoryDrawer(true)}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
-            title="View & manage long-term persistent memory vault"
+            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
+            title="Memory Vault"
           >
-            <Brain className="w-3.5 h-3.5 text-indigo-500" />
+            <Brain size={13} className="text-indigo-500" />
             <span className="hidden sm:inline">Memory</span>
             <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-600 font-mono text-[10px]">
               {memoryProfile?.facts?.length || 0}
@@ -699,397 +792,446 @@ export default function CouncilView({
           {/* Sessions Drawer Button */}
           <button
             onClick={() => setShowSessionsDrawer(true)}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
-            title="Browse & switch chat sessions"
+            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
+            title="Chat History"
           >
-            <MessageSquare className="w-3.5 h-3.5 text-cyan-500" />
+            <MessageSquare size={13} className="text-cyan-500" />
             <span className="hidden sm:inline">Sessions</span>
             <span className="px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono text-[10px]">
               {sessions.length}
             </span>
           </button>
 
-          {/* Online Status badge */}
-          <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 text-[11px] font-mono">
-            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-            <span className="hidden md:inline">{isOnline ? 'Online' : 'Standby'}</span>
-            <span className="text-slate-300 dark:text-slate-600">•</span>
-            <span className="flex items-center gap-1">
-              <ListTodo className="w-3 h-3 text-indigo-500" />
-              <span>{pendingTasksCount} tasks</span>
-            </span>
+          {/* Online Indicator */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 text-[11px] font-mono">
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            <span>{isOnline ? 'Council Online' : 'Standby'}</span>
           </div>
 
-          {/* New Chat Button */}
+          {/* + Create Bot Trigger */}
           <button
-            onClick={() => createNewSession(activeBotId, true)}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
-            title="Start New Chat"
+            onClick={handleOpenCreateBot}
+            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1 transition"
           >
-            <Plus className="w-4 h-4" />
+            <Plus size={14} />
+            <span className="hidden sm:inline">Create Bot</span>
           </button>
         </div>
       </div>
 
-      {/* Main Conversation Stream */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-sm scroll-smooth">
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'} max-w-3xl ${
-              m.sender === 'user' ? 'ml-auto' : 'mr-auto'
-            } w-full`}
-          >
-            <div className="flex items-center space-x-1.5 mb-1 px-1 text-[11px] text-slate-400">
-              {m.sender === 'assistant' ? (
-                <>
-                  <span>{currentBotAvatar}</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">{currentBotName}</span>
-                </>
-              ) : (
-                <span className="font-semibold text-slate-700 dark:text-slate-300">You</span>
-              )}
-              <span>•</span>
-              <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      {/* VIEW 1: CHAT STUDIO */}
+      {studioView === 'chat' && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Active Bot Bar & Tabs */}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+            {/* Horizontal Bot Switcher */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              {displayedBots.map((b) => {
+                const isSelected = activeBotId === b.id || activeBotId === b.slug;
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      setActiveBotId(b.id);
+                      createNewSession(b.id, true);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl flex items-center space-x-1.5 transition text-xs shrink-0 ${
+                      isSelected
+                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>{b.avatar || '🤖'}</span>
+                    <span>{b.name}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            <div
-              className={`p-4 rounded-2xl leading-relaxed text-sm ${
-                m.sender === 'user'
-                  ? 'bg-blue-600 text-white rounded-tr-none shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200/80 dark:border-slate-700/80'
-              }`}
-            >
-              <MarkdownRenderer content={m.content} />
-
-              {/* Executed Action Cards */}
-              {m.executedActions && m.executedActions.length > 0 && (
-                <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
-                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    ⚡ Executed Actions:
-                  </div>
-                  {m.executedActions.map((act, i) => (
-                    <div
-                      key={i}
-                      className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono"
-                    >
-                      <div className="font-bold text-indigo-600 dark:text-indigo-400">{act.toolName}</div>
-                      <div className="text-slate-500 text-[10px] mt-0.5">{JSON.stringify(act.params)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Deliberation Results */}
-              {m.deliberation && m.deliberation.length > 0 && (
-                <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
-                  {m.deliberation.map((delib, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1"
-                    >
-                      <div className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                        {delib.name} ({delib.role})
-                      </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-300">{delib.opinion || delib.synthesis}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {loading && (
-          <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
-            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <span>{currentBotName} is thinking...</span>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Message Input Box */}
-      <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSendMessage();
-          }}
-          className="flex items-end gap-2"
-        >
-          <textarea
-            ref={textareaRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            placeholder={`Message ${currentBotName}... (Press Enter to send, Shift+Enter for newline)`}
-            rows={2}
-            className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none resize-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={!inputMessage.trim() || loading}
-            className="p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition disabled:opacity-50"
-          >
-            <Send size={16} />
-          </button>
-        </form>
-      </div>
-
-      {/* Modal: Bot Workshop (Create Custom Bot) */}
-      {showWorkshopModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-blue-600 text-white">
-                  <Bot size={18} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Bot Workshop</h3>
-                  <p className="text-xs text-slate-500">Create a personalized AI bot for your workspace</p>
-                </div>
+            {/* In-Chat Edit Bot Button */}
+            <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                <span>⚙️ {currentBotProvider}</span>
+                <span>•</span>
+                <span className={hasKeyForActiveBot ? 'text-emerald-500 font-medium' : 'text-amber-500'}>
+                  {hasKeyForActiveBot ? '🔑 Key Active' : 'No Key'}
+                </span>
               </div>
-              <button onClick={() => setShowWorkshopModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
-                <X size={18} />
+
+              <button
+                onClick={() => handleOpenEditBot(activeBot || { id: activeBotId, name: currentBotName, role: currentBotRole, avatar: currentBotAvatar })}
+                className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-100 text-xs font-semibold flex items-center gap-1 transition"
+                title="Edit this bot's instructions, avatar, or AI model"
+              >
+                <Edit3 size={13} />
+                <span>Edit Bot</span>
+              </button>
+
+              <button
+                onClick={() => createNewSession(activeBotId, true)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                title="New Chat Session"
+              >
+                <RefreshCw size={14} />
               </button>
             </div>
+          </div>
 
-            <form onSubmit={handleCreateBot} className="space-y-3 text-xs">
-              <div className="grid grid-cols-4 gap-2">
-                <div className="col-span-1">
-                  <label className="font-semibold block mb-1">Avatar</label>
-                  <input
-                    value={workshopAvatar}
-                    onChange={(e) => setWorkshopAvatar(e.target.value)}
-                    className="w-full p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-center text-lg outline-none"
-                    placeholder="🤖"
-                  />
+          {/* Conversation Stream */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-sm scroll-smooth">
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'} max-w-3xl ${
+                  m.sender === 'user' ? 'ml-auto' : 'mr-auto'
+                } w-full`}
+              >
+                <div className="flex items-center space-x-1.5 mb-1 px-1 text-[11px] text-slate-400">
+                  {m.sender === 'assistant' ? (
+                    <>
+                      <span>{currentBotAvatar}</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{currentBotName}</span>
+                    </>
+                  ) : (
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">You</span>
+                  )}
+                  <span>•</span>
+                  <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
-                <div className="col-span-3">
-                  <label className="font-semibold block mb-1">Bot Name *</label>
-                  <input
-                    value={workshopName}
-                    onChange={(e) => setWorkshopName(e.target.value)}
-                    required
-                    placeholder="e.g. Sage, DevCoach, Piper"
-                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
-                  />
-                </div>
-              </div>
 
-              <div>
-                <label className="font-semibold block mb-1">Role / Persona Title</label>
-                <input
-                  value={workshopRole}
-                  onChange={(e) => setWorkshopRole(e.target.value)}
-                  placeholder="e.g. Senior Backend Architect & Code Reviewer"
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-semibold block mb-1">AI Provider</label>
-                  <select
-                    value={workshopProvider}
-                    onChange={(e) => setWorkshopProvider(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
-                  >
-                    <option value="gemini">Google Gemini</option>
-                    <option value="groq">Groq Cloud</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="ollama">Ollama (Local)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="font-semibold block mb-1">Model (Optional)</label>
-                  <input
-                    value={workshopModel}
-                    onChange={(e) => setWorkshopModel(e.target.value)}
-                    placeholder="default"
-                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold block mb-1">System Instructions / Prompt</label>
-                <textarea
-                  value={workshopPrompt}
-                  onChange={(e) => setWorkshopPrompt(e.target.value)}
-                  rows={3}
-                  placeholder="Describe how this bot should speak, reason, and advise you..."
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowWorkshopModal(false)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700"
+                <div
+                  className={`p-4 rounded-2xl leading-relaxed text-sm ${
+                    m.sender === 'user'
+                      ? 'bg-blue-600 text-white rounded-tr-none shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200/80 dark:border-slate-700/80'
+                  }`}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingBot}
-                  className="px-4 py-1.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500"
-                >
-                  {savingBot ? 'Saving...' : 'Create Bot'}
-                </button>
+                  <MarkdownRenderer content={m.content} />
+
+                  {/* Executed Action Cards */}
+                  {m.executedActions && m.executedActions.length > 0 && (
+                    <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        ⚡ Executed Actions:
+                      </div>
+                      {m.executedActions.map((act, i) => (
+                        <div
+                          key={i}
+                          className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono"
+                        >
+                          <div className="font-bold text-indigo-600 dark:text-indigo-400">{act.toolName}</div>
+                          <div className="text-slate-500 text-[10px] mt-0.5">{JSON.stringify(act.params)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Deliberation Items */}
+                  {m.deliberation && m.deliberation.length > 0 && (
+                    <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
+                      {m.deliberation.map((delib, idx) => (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1"
+                        >
+                          <div className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                            {delib.name} ({delib.role})
+                          </div>
+                          <div className="text-xs text-slate-600 dark:text-slate-300">{delib.opinion || delib.synthesis}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
+            ))}
+
+            {loading && (
+              <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <span>{currentBotName} is thinking...</span>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Chat Input */}
+          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="flex items-end gap-2"
+            >
+              <textarea
+                ref={textareaRef}
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder={`Message ${currentBotName}... (Press Enter to send, Shift+Enter for newline)`}
+                rows={2}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none resize-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={!inputMessage.trim() || loading}
+                className="p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition disabled:opacity-50"
+              >
+                <Send size={16} />
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal: BYOK Credential Vault */}
-      {showCredModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-amber-500 text-white">
-                  <Key size={18} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">BYOK Key Vault</h3>
-                  <p className="text-xs text-slate-500">AES-256-GCM Encrypted Provider Credentials</p>
-                </div>
-              </div>
-              <button onClick={() => setShowCredModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
-                <X size={18} />
-              </button>
+      {/* VIEW 2: MY BOTS (GRID & WORKSHOP) */}
+      {studioView === 'bots' && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">AI Bot Workshop</h2>
+              <p className="text-xs text-slate-500">
+                Personal AI assistants configured with your instructions, models, and shared BYOK keys.
+              </p>
             </div>
+            <button
+              onClick={handleOpenCreateBot}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
+            >
+              <Plus size={15} />
+              <span>+ Create New Bot</span>
+            </button>
+          </div>
 
-            {/* Existing Keys List */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Connected Keys:</span>
-              {credentials.length === 0 ? (
-                <div className="text-xs text-slate-500 py-2">No custom API keys connected yet. Default keys are being used.</div>
-              ) : (
-                credentials.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
-                  >
-                    <div>
-                      <div className="font-bold uppercase text-slate-800 dark:text-slate-200">{c.provider}</div>
-                      <div className="text-slate-500 font-mono text-[10px]">{c.maskedKey}</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {displayedBots.map((b) => {
+              const prov = b.modelConfig?.provider || 'gemini';
+              const mod = b.modelConfig?.model || 'default';
+              const keyActive = credentials.some((c) => c.provider === prov && c.status === 'ACTIVE');
+
+              return (
+                <div
+                  key={b.id}
+                  className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-blue-400 transition group shadow-2xs"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-2xl shadow-xs">
+                        {b.avatar || '🤖'}
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        {b.status || 'ACTIVE'}
+                      </span>
                     </div>
-                    <button
-                      onClick={() => handleDeleteCredential(c.id)}
-                      className="p-1 text-rose-500 hover:bg-rose-500/10 rounded"
-                      title="Revoke Key"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
 
-            {/* Connect New Key Form */}
-            <form onSubmit={handleSaveCredential} className="space-y-3 text-xs pt-2 border-t border-slate-200 dark:border-slate-800">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Add / Update Key:</span>
-              <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-blue-500 transition">
+                        {b.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">{b.role}</p>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                      {b.description || b.instruction?.systemPrompt || 'Personalized AI assistant.'}
+                    </p>
+
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                        ⚙️ {prov} / {mod}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-medium ${
+                          keyActive
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                        }`}
+                      >
+                        {keyActive ? '🔑 Key Active' : 'No Key'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
+                    <button
+                      onClick={() => {
+                        setActiveBotId(b.id);
+                        createNewSession(b.id, true);
+                        setStudioView('chat');
+                      }}
+                      className="flex-1 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition flex items-center justify-center gap-1"
+                    >
+                      <MessageSquare size={13} />
+                      <span>Chat</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEditBot(b)}
+                      className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 text-xs transition"
+                      title="Edit Bot Instructions & Model"
+                    >
+                      <Edit3 size={13} />
+                    </button>
+
+                    <button
+                      onClick={() => handleDuplicateBot(b.id)}
+                      className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 text-xs transition"
+                      title="Duplicate Bot"
+                    >
+                      <Copy size={13} />
+                    </button>
+
+                    {!b.isDefault && (
+                      <button
+                        onClick={() => handleDeleteBot(b.id, b.name)}
+                        className="px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs transition"
+                        title="Delete Bot"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 3: BYOK KEY VAULT */}
+      {studioView === 'byok' && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">BYOK Credential Vault</h2>
+            <p className="text-xs text-slate-500">
+              Bring Your Own Key (BYOK) encrypted with AES-256-GCM. A single key automatically powers all bots using that provider.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Add/Update Key Form */}
+            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex items-center gap-2">
+                <Key size={16} className="text-amber-500" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Connect Provider Key</h3>
+              </div>
+
+              <form onSubmit={handleSaveCredential} className="space-y-3 text-xs">
                 <div>
                   <label className="font-semibold block mb-1">Provider</label>
                   <select
                     value={credProvider}
                     onChange={(e) => setCredProvider(e.target.value)}
-                    className="w-full p-2 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
                   >
-                    <option value="gemini">Google Gemini</option>
-                    <option value="groq">Groq Cloud</option>
+                    <option value="gemini">Google Gemini (Free at aistudio.google.com)</option>
+                    <option value="groq">Groq Cloud (Free at console.groq.com)</option>
                     <option value="openai">OpenAI</option>
-                    <option value="ollama">Ollama</option>
+                    <option value="ollama">Ollama (Local)</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="font-semibold block mb-1">Key Label</label>
                   <input
                     value={credLabel}
                     onChange={(e) => setCredLabel(e.target.value)}
-                    placeholder="e.g. My Personal Key"
-                    className="w-full p-2 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                    placeholder="e.g. My Personal Gemini API Key"
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="font-semibold block mb-1">API Key *</label>
-                <input
-                  type="password"
-                  value={credKey}
-                  onChange={(e) => setCredKey(e.target.value)}
-                  required
-                  placeholder="sk-... or AIza..."
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
-                />
-              </div>
+                <div>
+                  <label className="font-semibold block mb-1">API Key *</label>
+                  <input
+                    type="password"
+                    value={credKey}
+                    onChange={(e) => setCredKey(e.target.value)}
+                    required
+                    placeholder="AIza... or sk-..."
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                  />
+                </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCredModal(false)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700"
-                >
-                  Close
-                </button>
+                <div className="text-[11px] text-slate-500">
+                  🔒 Keys are validated with the provider, encrypted with AES-256-GCM, and immediately activate across all matching bots.
+                </div>
+
                 <button
                   type="submit"
                   disabled={savingCred}
-                  className="px-4 py-1.5 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-500"
+                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold transition disabled:opacity-50"
                 >
-                  {savingCred ? 'Validating...' : 'Encrypt & Save'}
+                  {savingCred ? 'Validating Key...' : 'Validate & Save Encrypted Key'}
                 </button>
-              </div>
-            </form>
+              </form>
+            </div>
+
+            {/* Active Keys List */}
+            <div className="space-y-3">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Configured Credentials</h3>
+              {credentials.length === 0 ? (
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+                  No custom BYOK keys added yet. Add a free Google Gemini key or Groq key to get started!
+                </div>
+              ) : (
+                credentials.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold uppercase text-slate-900 dark:text-slate-100">{c.provider}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-500">
+                          {c.status}
+                        </span>
+                      </div>
+                      <div className="text-slate-500 text-[11px] mt-0.5">{c.label}</div>
+                      <div className="font-mono text-[10px] text-slate-400 mt-1">{c.maskedKey}</div>
+                    </div>
+
+                    <button
+                      onClick={() => handleDeleteCredential(c.id)}
+                      className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition"
+                      title="Revoke and delete key"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Summon Council Debate */}
-      {showDebateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-500 text-white">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Summon Council Deliberation</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Multiple personas deliberate on your decision or deadline sequentially
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowDebateModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* VIEW 4: DELIBERATION STUDIO */}
+      {studioView === 'deliberate' && (
+        <div className="flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full space-y-6">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Summon Council Deliberation</h2>
+            <p className="text-xs text-slate-500">
+              Riven, Lucifer, and Sofi convene sequentially to debate your architectural dilemmas, deadlines, and project risks.
+            </p>
+          </div>
 
+          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-4">
             <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
-                What project decision or deadline should they debate?
-              </label>
+              <label className="text-xs font-semibold block mb-1.5">What topic or decision should the Council debate?</label>
               <textarea
                 value={debateTopic}
                 onChange={(e) => setDebateTopic(e.target.value)}
-                placeholder="e.g. Should I rewrite my backend in Go or stick with TypeScript/Node.js?"
+                placeholder="e.g. Should I stick with a modular monolith or break into microservices for the next milestone?"
                 rows={3}
-                className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-indigo-500"
+                className="w-full p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-xs"
               />
             </div>
 
@@ -1100,7 +1242,7 @@ export default function CouncilView({
                   <button
                     key={i}
                     onClick={() => setDebateTopic(sug)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-100"
                   >
                     {sug}
                   </button>
@@ -1108,26 +1250,193 @@ export default function CouncilView({
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-              <button
-                onClick={() => setShowDebateModal(false)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-400"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleTriggerDebate()}
-                disabled={!debateTopic.trim()}
-                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white text-xs font-bold shadow-xs hover:opacity-95 disabled:opacity-50"
-              >
-                ⚡ Start Deliberation
-              </button>
-            </div>
+            <button
+              onClick={() => handleTriggerDebate()}
+              disabled={!debateTopic.trim() || debateLoading}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white font-bold text-xs shadow-sm hover:opacity-95 transition disabled:opacity-50"
+            >
+              {debateLoading ? 'Deliberating...' : '⚡ Summon the Council'}
+            </button>
           </div>
         </div>
       )}
 
-      {/* Drawer: Sessions */}
+      {/* UNIVERSAL BOT WORKSHOP MODAL (CREATE & EDIT) */}
+      {showEditorModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-blue-600 text-white">
+                  <Bot size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    {editingBotId ? `Edit "${editorName || 'Bot'}"` : 'Create Custom AI Bot'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Customize the personality, system prompt, and model configuration
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowEditorModal(false)} className="p-1 text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBot} className="space-y-3.5 text-xs">
+              {/* Avatar Selector */}
+              <div>
+                <label className="font-semibold block mb-1">Avatar Emoji</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={editorAvatar}
+                    onChange={(e) => setEditorAvatar(e.target.value)}
+                    className="w-12 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-center text-xl outline-none font-bold"
+                  />
+                  <div className="flex flex-wrap gap-1 flex-1">
+                    {SUGGESTED_EMOJIS.map((em) => (
+                      <button
+                        type="button"
+                        key={em}
+                        onClick={() => setEditorAvatar(em)}
+                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-base"
+                      >
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Name & Role */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold block mb-1">Bot Name *</label>
+                  <input
+                    value={editorName}
+                    onChange={(e) => setEditorName(e.target.value)}
+                    required
+                    placeholder="e.g. Sage, DevCoach, Sofi"
+                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1">Role / Persona Title *</label>
+                  <input
+                    value={editorRole}
+                    onChange={(e) => setEditorRole(e.target.value)}
+                    required
+                    placeholder="e.g. Senior Backend Architect"
+                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="font-semibold block mb-1">Description</label>
+                <input
+                  value={editorDesc}
+                  onChange={(e) => setEditorDesc(e.target.value)}
+                  placeholder="Short description of what this bot specializes in..."
+                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                />
+              </div>
+
+              {/* Model Provider & Configuration */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-semibold block mb-1">AI Provider</label>
+                    <select
+                      value={editorProvider}
+                      onChange={(e) => setEditorProvider(e.target.value)}
+                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                    >
+                      <option value="gemini">Google Gemini</option>
+                      <option value="groq">Groq Cloud</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="ollama">Ollama (Local)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-semibold block mb-1">Model Name (Optional)</label>
+                    <input
+                      value={editorModel}
+                      onChange={(e) => setEditorModel(e.target.value)}
+                      placeholder="default (e.g. gemini-2.5-flash)"
+                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Key Status Helper */}
+                <div className="text-[11px] flex items-center gap-1 text-slate-500">
+                  {credentials.some((c) => c.provider === editorProvider && c.status === 'ACTIVE') ? (
+                    <span className="text-emerald-500 font-medium">✓ Uses your active {editorProvider.toUpperCase()} BYOK key</span>
+                  ) : (
+                    <span className="text-amber-500">⚠️ No key configured for {editorProvider}. You can connect one in BYOK Vault.</span>
+                  )}
+                </div>
+
+                {/* Temperature Slider */}
+                <div>
+                  <div className="flex justify-between font-semibold mb-1">
+                    <span>Creativity (Temperature)</span>
+                    <span>{editorTemperature.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={editorTemperature}
+                    onChange={(e) => setEditorTemperature(parseFloat(e.target.value))}
+                    className="w-full accent-blue-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400">
+                    <span>0.0 (Precise & Deterministic)</span>
+                    <span>1.0 (Creative & Exploratory)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* System Instructions / Prompt */}
+              <div>
+                <label className="font-semibold block mb-1">System Instructions / Prompt</label>
+                <textarea
+                  value={editorPrompt}
+                  onChange={(e) => setEditorPrompt(e.target.value)}
+                  rows={5}
+                  placeholder="Define this bot's personality, decision-making style, and behavior rules..."
+                  className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none resize-none font-mono text-[11px] leading-relaxed"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditorModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingBot}
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition disabled:opacity-50"
+                >
+                  {savingBot ? 'Saving...' : editingBotId ? 'Save Changes' : 'Create Bot'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SESSIONS DRAWER */}
       {showSessionsDrawer && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-end z-50">
           <div className="w-full max-w-sm bg-white dark:bg-slate-900 h-full p-4 border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-3">
@@ -1161,6 +1470,7 @@ export default function CouncilView({
                       setSessionId(s.sessionId);
                       loadSessionHistory(s.sessionId);
                       setShowSessionsDrawer(false);
+                      setStudioView('chat');
                     }}
                     className={`p-3 rounded-xl border text-xs cursor-pointer transition ${
                       s.sessionId === sessionId
@@ -1181,7 +1491,7 @@ export default function CouncilView({
         </div>
       )}
 
-      {/* Drawer: Memory Vault */}
+      {/* MEMORY VAULT DRAWER */}
       {showMemoryDrawer && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-end z-50">
           <div className="w-full max-w-sm bg-white dark:bg-slate-900 h-full p-4 border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-3">
@@ -1195,7 +1505,6 @@ export default function CouncilView({
               </button>
             </div>
 
-            {/* Add Fact Form */}
             <div className="space-y-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
               <span className="font-bold text-[11px] block">Record User Preference / Fact:</span>
               <textarea
@@ -1227,7 +1536,6 @@ export default function CouncilView({
               </div>
             </div>
 
-            {/* Facts List */}
             <div className="flex-1 overflow-y-auto space-y-2 text-xs">
               {memoryProfile?.facts?.map((f) => (
                 <div
