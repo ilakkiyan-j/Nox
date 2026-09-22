@@ -45,7 +45,7 @@ export default function Header({
           <h1 className="font-display font-bold text-lg tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>
         </div>
 
-        <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 md:hidden shrink-0" />
+        <div className="h-4 w-px bg-slate-200 dark:border-slate-800 md:hidden shrink-0" />
 
         <h2 className="font-display text-sm md:text-xl font-bold text-slate-900 dark:text-slate-100 capitalize truncate">
           {activeTabTitle}

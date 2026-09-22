@@ -24,6 +24,7 @@ import NotesView from '../components/NotesView';
 import NotificationsView from '../components/NotificationsView';
 import TimeView from '../components/TimeView';
 import RemindersView from '../components/RemindersView';
+import CouncilView from '../components/CouncilView';
 import { API_BASE_URL, fetchWithUser, clearAuth, getToken, getStoredUser, setStoredUser } from '../lib/api';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
@@ -201,6 +202,15 @@ export default function Home() {
             onRefresh={fetchAllData}
           />
         );
+      case 'council':
+        return (
+          <CouncilView
+            tasks={tasks}
+            events={events}
+            habits={habits}
+            onRefresh={fetchAllData}
+          />
+        );
       case 'goals':
         return <GoalsView goals={goals} onRefresh={fetchAllData} />;
       case 'roadmaps':
@@ -290,7 +300,7 @@ export default function Home() {
           />
 
           {/* Main Workstation */}
-          <div className="flex-1 md:pl-64 flex flex-col min-h-screen pb-20 md:pb-8 min-w-0 max-w-full overflow-x-hidden">
+          <div className="flex-1 md:pl-64 flex flex-col min-h-screen pb-20 md:pb-8 min-w-0 max-w-full overflow-x-hidden transition-all duration-300">
             {/* Global Header with embedded Notifications dropdown bar */}
             <Header
               activeTabTitle={activeTab}

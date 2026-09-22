@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+Council/
 
 # Next.js build output
 .next/

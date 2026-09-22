@@ -21,6 +21,7 @@ import remindersRouter from './routes/reminders';
 import notificationsRouter from './routes/notifications';
 import timeRouter from './routes/time';
 import searchRouter from './routes/search';
+import { councilPublicRouter, councilPrivateRouter } from './routes/council';
 
 export function createApp() {
   const app = express();
@@ -101,6 +102,7 @@ export function createApp() {
 
   app.use('/api/v1', healthRouter);
   app.use('/api/v1', authPublicRouter);
+  app.use('/api/v1', councilPublicRouter);
 
   // All routes below /api/v1 require authentication.
   app.use('/api/v1', requireAuth);
@@ -118,6 +120,7 @@ export function createApp() {
   app.use('/api/v1', notificationsRouter);
   app.use('/api/v1', timeRouter);
   app.use('/api/v1', searchRouter);
+  app.use('/api/v1', councilPrivateRouter);
 
   // 404 for unmatched API routes
   app.use('/api/v1', (req, res) => {

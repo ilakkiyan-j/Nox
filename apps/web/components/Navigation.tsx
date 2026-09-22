@@ -17,12 +17,14 @@ import {
   Layers,
   Settings,
   MoreHorizontal,
+  Sparkles,
 } from 'lucide-react';
 
 import Avatar from './Avatar';
 
 export type NavTab =
   | 'dashboard'
+  | 'council'
   | 'goals'
   | 'roadmaps'
   | 'learning'
@@ -43,6 +45,7 @@ interface NavigationProps {
 
 export const navItems: { id: NavTab; label: string; icon: any }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'council', label: 'Council', icon: Sparkles },
   { id: 'goals', label: 'Goals', icon: Target },
   { id: 'roadmaps', label: 'Roadmaps', icon: Compass },
   { id: 'learning', label: 'Learning', icon: GraduationCap },
