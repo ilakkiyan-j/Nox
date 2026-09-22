@@ -24,6 +24,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -52,6 +54,8 @@ export interface Message {
   executedActions?: ExecutedAction[];
   deliberation?: DeliberationItem[];
   timestamp: string;
+  isError?: boolean;
+  failedPrompt?: string;
 }
 
 export interface SessionSummary {
@@ -197,6 +201,7 @@ export default function CouncilView({
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
+  const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
@@ -214,6 +219,16 @@ export default function CouncilView({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingTasksCount = tasks.filter((t: any) => t.status !== 'COMPLETED').length;
+
+  // Auto-resize textarea on input / paste
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const maxHeight = isInputExpanded ? 380 : 200;
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 48), maxHeight)}px`;
+    }
+  }, [inputMessage, isInputExpanded]);
 
   // Active bot resolver
   const activeBot = bots.find((b) => b.id === activeBotId || b.slug === activeBotId);
@@ -435,6 +450,8 @@ export default function CouncilView({
         sender: 'assistant',
         persona: activeBotId,
         content,
+        isError: true,
+        failedPrompt: text.trim(),
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errMsg]);
@@ -902,11 +919,52 @@ export default function CouncilView({
                 <div
                   className={`p-4 rounded-2xl leading-relaxed text-sm ${
                     m.sender === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-none shadow-xs'
+                      ? 'bg-indigo-600 dark:bg-indigo-600 text-white rounded-tr-none shadow-xs font-normal'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200/80 dark:border-slate-700/80'
                   }`}
                 >
-                  <MarkdownRenderer content={m.content} />
+                  {m.sender === 'user' ? (
+                    <div className="whitespace-pre-wrap break-words text-white font-medium text-sm selection:bg-indigo-400 selection:text-white">
+                      {m.content}
+                    </div>
+                  ) : (
+                    <MarkdownRenderer content={m.content} />
+                  )}
+
+                  {/* Retry & Restore Bar on Error */}
+                  {m.isError && m.failedPrompt && (
+                    <div className="mt-3 pt-3 border-t border-rose-200 dark:border-rose-900/60 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1.5">
+                        <AlertCircle size={13} />
+                        <span>Failed to deliver message</span>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInputMessage(m.failedPrompt!);
+                            setTimeout(() => textareaRef.current?.focus(), 50);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                          title="Restore failed message to input box"
+                        >
+                          Edit / Restore
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMessages((prev) => prev.filter((msg) => msg.id !== m.id));
+                            handleSendMessage(m.failedPrompt);
+                          }}
+                          disabled={loading}
+                          className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs disabled:opacity-50"
+                        >
+                          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                          <span>Retry</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Executed Action Cards */}
                   {m.executedActions && m.executedActions.length > 0 && (
@@ -948,7 +1006,7 @@ export default function CouncilView({
 
             {loading && (
               <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
-                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                 <span>{currentBotName} is thinking...</span>
               </div>
             )}
@@ -956,8 +1014,39 @@ export default function CouncilView({
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Chat Input */}
-          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          {/* Chat Input Container */}
+          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
+            {/* Long message helper bar */}
+            {inputMessage.length > 120 && (
+              <div className="flex items-center justify-between px-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="flex items-center gap-2 font-mono">
+                  <span>{inputMessage.length.toLocaleString()} chars</span>
+                  <span>•</span>
+                  <span>{inputMessage.split('\n').length} lines</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsInputExpanded(!isInputExpanded)}
+                    className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition"
+                    title={isInputExpanded ? 'Collapse Input Box' : 'Expand Input Box'}
+                  >
+                    {isInputExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                    <span>{isInputExpanded ? 'Collapse' : 'Expand'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputMessage('')}
+                    className="hover:text-rose-500 flex items-center gap-0.5 transition"
+                    title="Clear text"
+                  >
+                    <X size={12} />
+                    <span>Clear</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -965,24 +1054,37 @@ export default function CouncilView({
               }}
               className="flex items-end gap-2"
             >
-              <textarea
-                ref={textareaRef}
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                placeholder={`Message ${currentBotName}... (Press Enter to send, Shift+Enter for newline)`}
-                rows={2}
-                className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none resize-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="flex-1 relative flex items-end">
+                <textarea
+                  ref={textareaRef}
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder={`Message ${currentBotName}... (Press Enter to send, Shift+Enter for newline)`}
+                  rows={1}
+                  className="w-full bg-slate-100 dark:bg-slate-800 rounded-xl p-3 pr-8 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none resize-none focus:ring-2 focus:ring-indigo-500 overflow-y-auto leading-relaxed transition-all"
+                  style={{ minHeight: '48px', maxHeight: isInputExpanded ? '380px' : '200px' }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setIsInputExpanded(!isInputExpanded)}
+                  className="absolute right-2.5 top-2.5 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition"
+                  title={isInputExpanded ? 'Collapse Input Box' : 'Expand Input Box for long message'}
+                >
+                  {isInputExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                </button>
+              </div>
+
               <button
                 type="submit"
                 disabled={!inputMessage.trim() || loading}
-                className="p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition disabled:opacity-50"
+                className="h-12 w-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition flex items-center justify-center shrink-0 disabled:opacity-50 shadow-xs"
               >
                 <Send size={16} />
               </button>
