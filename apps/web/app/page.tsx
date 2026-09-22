@@ -205,6 +205,7 @@ export default function Home() {
       case 'council':
         return (
           <CouncilView
+            currentUser={currentUser}
             tasks={tasks}
             events={events}
             habits={habits}

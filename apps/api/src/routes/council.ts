@@ -21,13 +21,13 @@ function mapCouncilStatus(status: number): number {
 async function getUserCouncilContext(userId: string) {
   const [user, tasks, habits, events, reminders, goals, roadmaps, learnings] = await Promise.all([
     db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
-    db.task.findMany({ where: { userId, status: { in: ['TODO', 'IN_PROGRESS'] } }, orderBy: { dueDate: 'asc' }, take: 15 }),
+    db.task.findMany({ where: { userId, status: { in: ['TODO', 'IN_PROGRESS'] } }, orderBy: { dueDate: 'asc' }, take: 35 }),
     db.habit.findMany({ where: { userId }, select: { id: true, title: true, streakCount: true } }),
-    db.event.findMany({ where: { userId }, orderBy: { date: 'asc' }, take: 4 }),
-    db.reminder.findMany({ where: { userId, isCompleted: false }, orderBy: { remindAt: 'asc' }, take: 4 }),
-    db.goal.findMany({ where: { userId, status: { in: ['IN_PROGRESS', 'NOT_STARTED'] } }, take: 8 }),
-    db.roadmap.findMany({ where: { userId, status: 'IN_PROGRESS' }, take: 5, include: { milestones: true, goal: true } }),
-    db.learning.findMany({ where: { userId, status: 'IN_PROGRESS' }, take: 5, include: { modules: true } }),
+    db.event.findMany({ where: { userId }, orderBy: { date: 'asc' }, take: 50 }),
+    db.reminder.findMany({ where: { userId, isCompleted: false }, orderBy: { remindAt: 'asc' }, take: 30 }),
+    db.goal.findMany({ where: { userId, status: { in: ['IN_PROGRESS', 'NOT_STARTED'] } }, take: 15 }),
+    db.roadmap.findMany({ where: { userId, status: 'IN_PROGRESS' }, take: 10, include: { milestones: true, goal: true } }),
+    db.learning.findMany({ where: { userId, status: 'IN_PROGRESS' }, take: 10, include: { modules: true } }),
   ]);
 
   return {
@@ -69,15 +69,23 @@ function ensureUserSessionId(userId: string, requestedSessionId?: string): strin
 publicRouter.get('/council/status', async (_req: Request, res: Response) => {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
 
-    const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/health`, {
+    // 1. Try unauthenticated public /health root endpoint first
+    let councilRes = await fetch(`${COUNCIL_API_URL}/health`, {
       signal: controller.signal,
-    });
+    }).catch(() => null);
+
+    // 2. Fallback to /api/v1/health
+    if (!councilRes || !councilRes.ok) {
+      councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/health`, {
+        signal: controller.signal,
+      }).catch(() => null);
+    }
     clearTimeout(timeoutId);
 
-    if (councilRes.ok) {
-      const data = await councilRes.json();
+    if (councilRes && councilRes.ok) {
+      const data = await councilRes.json().catch(() => ({ status: 'ok' }));
       return apiResponse(res, { online: true, ...data });
     }
     return apiResponse(res, { online: false, message: 'Council service responded with non-200' });
@@ -377,30 +385,46 @@ privateRouter.get('/council/sessions', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const userPrefix = `user_${userId}`;
+    const authHeaders = {
+      Authorization: req.headers.authorization || '',
+      'X-User-Id': userId,
+    };
 
-    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions`, {
-      headers: {
-        Authorization: req.headers.authorization || '',
-        'X-User-Id': userId,
-      },
-    });
+    // 1. Try legacy /api/v1/sessions
+    let councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions`, {
+      headers: authHeaders,
+    }).catch(() => null);
 
-    if (!councilResponse.ok) {
-      // Graceful fallback to empty list if Council is unreachable or initial run
-      return apiResponse(res, []);
+    if (councilResponse && councilResponse.ok) {
+      const councilData = await councilResponse.json().catch(() => ({}));
+      const allSessions: any[] = councilData?.data || [];
+      const userSessions = allSessions.filter((s) => {
+        return typeof s.sessionId === 'string' && (s.sessionId.startsWith(userPrefix) || s.sessionId === userPrefix || !s.sessionId.startsWith('user_'));
+      });
+      return apiResponse(res, userSessions);
     }
 
-    const councilData = await councilResponse.json();
-    const allSessions: any[] = councilData?.data || [];
+    // 2. Fallback to Council V2 /api/v1/conversations
+    councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/conversations`, {
+      headers: authHeaders,
+    }).catch(() => null);
 
-    // Filter sessions owned by this user
-    const userSessions = allSessions.filter((s) => {
-      return typeof s.sessionId === 'string' && (s.sessionId.startsWith(userPrefix) || s.sessionId === userPrefix || !s.sessionId.startsWith('user_'));
-    });
+    if (councilResponse && councilResponse.ok) {
+      const councilData = await councilResponse.json().catch(() => ({}));
+      const conversations: any[] = councilData?.data || councilData || [];
+      const mapped = conversations.map((c: any) => ({
+        sessionId: c.id,
+        personaId: c.bot?.slug || c.botId || 'sofi',
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        messageCount: c._count?.messages ?? (c.messages?.length || 0),
+        lastMessagePreview: c.title || (c.messages?.[c.messages.length - 1]?.content) || 'Chat conversation',
+      }));
+      return apiResponse(res, mapped);
+    }
 
-    return apiResponse(res, userSessions);
+    return apiResponse(res, []);
   } catch (_err: unknown) {
-    // Return empty list gracefully instead of failing
     return apiResponse(res, []);
   }
 });
@@ -413,20 +437,46 @@ privateRouter.get('/council/sessions/:id', async (req: Request, res: Response) =
   try {
     const userId = req.user!.id;
     const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const authHeaders = {
+      Authorization: req.headers.authorization || '',
+      'X-User-Id': userId,
+    };
 
-    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions/${encodeURIComponent(rawId)}`, {
-      headers: {
-        Authorization: req.headers.authorization || '',
-        'X-User-Id': userId,
-      },
-    });
+    // 1. Try /api/v1/sessions/:id
+    let councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions/${encodeURIComponent(rawId)}`, {
+      headers: authHeaders,
+    }).catch(() => null);
 
-    const councilData = await councilResponse.json().catch(() => ({}));
-    if (!councilResponse.ok) {
-      return apiError(res, councilData?.error?.message || 'Session not found', mapCouncilStatus(councilResponse.status));
+    if (councilResponse && councilResponse.ok) {
+      const councilData = await councilResponse.json().catch(() => ({}));
+      return apiResponse(res, councilData.data || councilData);
     }
 
-    return apiResponse(res, councilData.data || councilData);
+    // 2. Fallback to /api/v1/conversations/:id
+    councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/conversations/${encodeURIComponent(rawId)}`, {
+      headers: authHeaders,
+    }).catch(() => null);
+
+    if (councilResponse && councilResponse.ok) {
+      const convData = await councilResponse.json().catch(() => ({}));
+      const conv = convData.data || convData;
+      return apiResponse(res, {
+        sessionId: conv.id,
+        personaId: conv.bot?.slug || conv.botId || 'sofi',
+        createdAt: conv.createdAt,
+        updatedAt: conv.updatedAt,
+        messages: (conv.messages || []).map((m: any) => ({
+          id: m.id,
+          sender: m.role === 'assistant' ? 'assistant' : 'user',
+          persona: conv.bot?.slug || 'sofi',
+          content: m.content,
+          timestamp: m.createdAt,
+          executedActions: m.toolCalls,
+        })),
+      });
+    }
+
+    return apiError(res, 'Session not found', 404);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to retrieve session';
     return apiError(res, message, 502);
@@ -441,16 +491,24 @@ privateRouter.delete('/council/sessions/:id', async (req: Request, res: Response
   try {
     const userId = req.user!.id;
     const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const authHeaders = {
+      Authorization: req.headers.authorization || '',
+      'X-User-Id': userId,
+    };
 
-    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions/${encodeURIComponent(rawId)}`, {
+    let councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions/${encodeURIComponent(rawId)}`, {
       method: 'DELETE',
-      headers: {
-        Authorization: req.headers.authorization || '',
-        'X-User-Id': userId,
-      },
-    });
+      headers: authHeaders,
+    }).catch(() => null);
 
-    const councilData = await councilResponse.json().catch(() => ({}));
+    if (!councilResponse || !councilResponse.ok) {
+      councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/conversations/${encodeURIComponent(rawId)}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      }).catch(() => null);
+    }
+
+    const councilData = councilResponse ? await councilResponse.json().catch(() => ({})) : { success: true };
     return apiResponse(res, councilData);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to delete session';

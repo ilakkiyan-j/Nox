@@ -118,6 +118,7 @@ export interface ProviderCredential {
 }
 
 export interface CouncilViewProps {
+  currentUser?: any;
   tasks?: any[];
   events?: any[];
   habits?: any[];
@@ -164,6 +165,7 @@ const DEBATE_SUGGESTIONS = [
 ];
 
 export default function CouncilView({
+  currentUser,
   tasks = [],
   events = [],
   habits = [],
@@ -258,7 +260,7 @@ export default function CouncilView({
 
     const interval = setInterval(checkCouncilStatus, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (studioView === 'chat') {
@@ -366,7 +368,15 @@ export default function CouncilView({
           sender: m.role === 'assistant' ? 'assistant' : 'user',
           persona: sessionData.personaId || activeBotId,
           content: m.content || '',
-          executedActions: m.toolCalls || [],
+          executedActions: Array.isArray(m.toolCalls)
+            ? m.toolCalls
+                .filter((tc: any) => tc && (tc.toolName || tc.name))
+                .map((tc: any) => ({
+                  toolName: tc.toolName || tc.name || 'action',
+                  params: tc.params || {},
+                  result: tc.result || {},
+                }))
+            : [],
           timestamp: m.timestamp || new Date().toISOString(),
         }));
         setMessages(loadedMsgs);
@@ -970,45 +980,50 @@ export default function CouncilView({
                   )}
 
                   {/* Executed Action Cards */}
-                  {m.executedActions && m.executedActions.length > 0 && (
+                  {m.executedActions && m.executedActions.filter((a: any) => a && (a.toolName || a.name)).length > 0 && (
                     <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
                       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                         ⚡ Executed Actions:
                       </div>
-                      {m.executedActions.map((act, i) => {
-                        const isAdaptPersona = act.toolName === 'adapt_persona';
-                        const isWebSearch = act.toolName === 'web_search';
-                        return (
-                          <div
-                            key={i}
-                            className={`p-2.5 rounded-xl border text-xs font-mono ${
-                              isAdaptPersona
-                                ? 'bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-indigo-500/10 border-purple-200 dark:border-purple-800/60'
-                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span
-                                className={`font-bold ${
-                                  isAdaptPersona
-                                    ? 'text-purple-600 dark:text-purple-400'
-                                    : 'text-indigo-600 dark:text-indigo-400'
-                                }`}
-                              >
-                                {isAdaptPersona ? '🎭 adapt_persona' : isWebSearch ? '🔍 web_search' : `⚡ ${act.toolName}`}
-                              </span>
-                              {isAdaptPersona && (
-                                <span className="text-[10px] font-sans px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-semibold">
-                                  Character & Instructions Adapted
+                      {m.executedActions
+                        .filter((act: any) => act && (act.toolName || act.name))
+                        .map((act: any, i) => {
+                          const toolName = act.toolName || act.name || 'action';
+                          const isAdaptPersona = toolName === 'adapt_persona';
+                          const isWebSearch = toolName === 'web_search';
+                          return (
+                            <div
+                              key={i}
+                              className={`p-2.5 rounded-xl border text-xs font-mono ${
+                                isAdaptPersona
+                                  ? 'bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-indigo-500/10 border-purple-200 dark:border-purple-800/60'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className={`font-bold ${
+                                    isAdaptPersona
+                                      ? 'text-purple-600 dark:text-purple-400'
+                                      : 'text-indigo-600 dark:text-indigo-400'
+                                  }`}
+                                >
+                                  {isAdaptPersona ? '🎭 adapt_persona' : isWebSearch ? '🔍 web_search' : `⚡ ${toolName}`}
                                 </span>
+                                {isAdaptPersona && (
+                                  <span className="text-[10px] font-sans px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-semibold">
+                                    Character & Instructions Adapted
+                                  </span>
+                                )}
+                              </div>
+                              {act.params && Object.keys(act.params).length > 0 && (
+                                <div className="text-slate-500 text-[10px] mt-1 break-all">
+                                  {JSON.stringify(act.params)}
+                                </div>
                               )}
                             </div>
-                            <div className="text-slate-500 text-[10px] mt-1 break-all">
-                              {JSON.stringify(act.params)}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
                     </div>
                   )}
 
@@ -1136,7 +1151,7 @@ export default function CouncilView({
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
             >
               <Plus size={15} />
-              <span>+ Create New Bot</span>
+              <span>Create New Bot</span>
             </button>
           </div>
 
@@ -1149,11 +1164,11 @@ export default function CouncilView({
               return (
                 <div
                   key={b.id}
-                  className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-blue-400 transition group shadow-2xs"
+                  className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-blue-400 dark:hover:border-blue-500 transition group shadow-sm"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-2xl shadow-xs">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-2xl shadow-xs">
                         {b.avatar || '🤖'}
                       </div>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -1165,7 +1180,7 @@ export default function CouncilView({
                       <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-blue-500 transition">
                         {b.name}
                       </h3>
-                      <p className="text-xs text-slate-500 font-medium">{b.role}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{b.role}</p>
                     </div>
 
                     <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
@@ -1173,7 +1188,7 @@ export default function CouncilView({
                     </p>
 
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-600 dark:text-slate-300">
                         ⚙️ {prov} / {mod}
                       </span>
                       <span
@@ -1196,7 +1211,7 @@ export default function CouncilView({
                         createNewSession(b.id, true);
                         setStudioView('chat');
                       }}
-                      className="flex-1 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition flex items-center justify-center gap-1"
+                      className="flex-1 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition flex items-center justify-center gap-1 shadow-xs"
                     >
                       <MessageSquare size={13} />
                       <span>Chat</span>
@@ -1204,7 +1219,7 @@ export default function CouncilView({
 
                     <button
                       onClick={() => handleOpenEditBot(b)}
-                      className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 text-xs transition"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs transition"
                       title="Edit Bot Instructions & Model"
                     >
                       <Edit3 size={13} />
@@ -1212,7 +1227,7 @@ export default function CouncilView({
 
                     <button
                       onClick={() => handleDuplicateBot(b.id)}
-                      className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 text-xs transition"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs transition"
                       title="Duplicate Bot"
                     >
                       <Copy size={13} />
@@ -1247,7 +1262,7 @@ export default function CouncilView({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Add/Update Key Form */}
-            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
               <div className="flex items-center gap-2">
                 <Key size={16} className="text-amber-500" />
                 <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Connect Provider Key</h3>
@@ -1259,7 +1274,7 @@ export default function CouncilView({
                   <select
                     value={credProvider}
                     onChange={(e) => setCredProvider(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                   >
                     <option value="gemini">Google Gemini (Free at aistudio.google.com)</option>
                     <option value="groq">Groq Cloud (Free at console.groq.com)</option>
@@ -1274,7 +1289,7 @@ export default function CouncilView({
                     value={credLabel}
                     onChange={(e) => setCredLabel(e.target.value)}
                     placeholder="e.g. My Personal Gemini API Key"
-                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                   />
                 </div>
 
@@ -1286,7 +1301,7 @@ export default function CouncilView({
                     onChange={(e) => setCredKey(e.target.value)}
                     required
                     placeholder="AIza... or sk-..."
-                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                   />
                 </div>
 
@@ -1308,14 +1323,14 @@ export default function CouncilView({
             <div className="space-y-3">
               <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Configured Credentials</h3>
               {credentials.length === 0 ? (
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+                <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
                   No custom BYOK keys added yet. Add a free Google Gemini key or Groq key to get started!
                 </div>
               ) : (
                 credentials.map((c) => (
                   <div
                     key={c.id}
-                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
+                    className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
                   >
                     <div>
                       <div className="flex items-center gap-2">
@@ -1324,7 +1339,7 @@ export default function CouncilView({
                           {c.status}
                         </span>
                       </div>
-                      <div className="text-slate-500 text-[11px] mt-0.5">{c.label}</div>
+                      <div className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">{c.label}</div>
                       <div className="font-mono text-[10px] text-slate-400 mt-1">{c.maskedKey}</div>
                     </div>
 
@@ -1353,7 +1368,7 @@ export default function CouncilView({
             </p>
           </div>
 
-          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
             <div>
               <label className="text-xs font-semibold block mb-1.5">What topic or decision should the Council debate?</label>
               <textarea
@@ -1361,7 +1376,7 @@ export default function CouncilView({
                 onChange={(e) => setDebateTopic(e.target.value)}
                 placeholder="e.g. Should I stick with a modular monolith or break into microservices for the next milestone?"
                 rows={3}
-                className="w-full p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-xs"
+                className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-xs text-slate-900 dark:text-slate-100"
               />
             </div>
 
@@ -1372,7 +1387,7 @@ export default function CouncilView({
                   <button
                     key={i}
                     onClick={() => setDebateTopic(sug)}
-                    className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
                   >
                     {sug}
                   </button>
@@ -1430,7 +1445,7 @@ export default function CouncilView({
                         type="button"
                         key={em}
                         onClick={() => setEditorAvatar(em)}
-                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-base"
+                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-base transition"
                       >
                         {em}
                       </button>
@@ -1448,7 +1463,7 @@ export default function CouncilView({
                     onChange={(e) => setEditorName(e.target.value)}
                     required
                     placeholder="e.g. Sage, DevCoach, Sofi"
-                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                   />
                 </div>
                 <div>
@@ -1458,7 +1473,7 @@ export default function CouncilView({
                     onChange={(e) => setEditorRole(e.target.value)}
                     required
                     placeholder="e.g. Senior Backend Architect"
-                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                   />
                 </div>
               </div>
@@ -1470,7 +1485,7 @@ export default function CouncilView({
                   value={editorDesc}
                   onChange={(e) => setEditorDesc(e.target.value)}
                   placeholder="Short description of what this bot specializes in..."
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                 />
               </div>
 
@@ -1482,7 +1497,7 @@ export default function CouncilView({
                     <select
                       value={editorProvider}
                       onChange={(e) => setEditorProvider(e.target.value)}
-                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                     >
                       <option value="gemini">Google Gemini</option>
                       <option value="groq">Groq Cloud</option>
@@ -1496,7 +1511,7 @@ export default function CouncilView({
                       value={editorModel}
                       onChange={(e) => setEditorModel(e.target.value)}
                       placeholder="default (e.g. gemini-2.5-flash)"
-                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none"
+                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
                     />
                   </div>
                 </div>
@@ -1540,7 +1555,7 @@ export default function CouncilView({
                   onChange={(e) => setEditorPrompt(e.target.value)}
                   rows={5}
                   placeholder="Define this bot's personality, decision-making style, and behavior rules..."
-                  className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none resize-none font-mono text-[11px] leading-relaxed"
+                  className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none resize-none font-mono text-[11px] leading-relaxed"
                 />
               </div>
 
@@ -1549,7 +1564,7 @@ export default function CouncilView({
                 <button
                   type="button"
                   onClick={() => setShowEditorModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 font-medium"
+                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition"
                 >
                   Cancel
                 </button>
@@ -1586,7 +1601,7 @@ export default function CouncilView({
                 value={sessionSearch}
                 onChange={(e) => setSessionSearch(e.target.value)}
                 placeholder="Search sessions..."
-                className="w-full pl-8 pr-3 py-2 text-xs bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+                className="w-full pl-8 pr-3 py-2 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
               />
             </div>
 
@@ -1605,7 +1620,7 @@ export default function CouncilView({
                     className={`p-3 rounded-xl border text-xs cursor-pointer transition ${
                       s.sessionId === sessionId
                         ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                     }`}
                   >
                     <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
@@ -1642,13 +1657,13 @@ export default function CouncilView({
                 onChange={(e) => setNewFact(e.target.value)}
                 placeholder="e.g. Prefers functional TypeScript, dislikes repetitive daily meetings..."
                 rows={2}
-                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none resize-none"
+                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg outline-none resize-none"
               />
               <div className="flex items-center justify-between gap-2">
                 <select
                   value={newFactCategory}
                   onChange={(e) => setNewFactCategory(e.target.value as any)}
-                  className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px]"
+                  className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-[11px]"
                 >
                   <option value="general">General</option>
                   <option value="preference">Preference</option>
