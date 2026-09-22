@@ -6,26 +6,23 @@ import {
   Flame,
   Compass,
   Heart,
-  CheckCircle2,
   ListTodo,
   Trash2,
   Send,
-  RefreshCw,
-  Zap,
   Brain,
   MessageSquare,
   Plus,
   Search,
   X,
-  ChevronRight,
-  ShieldAlert,
-  SlidersHorizontal,
-  ExternalLink,
+  ShieldCheck,
+  Key,
+  Bot,
+  RefreshCw,
 } from 'lucide-react';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
 
-export type PersonaId = 'sofi' | 'riven' | 'lucifer';
+export type PersonaId = 'sofi' | 'riven' | 'lucifer' | string;
 
 export interface ExecutedAction {
   toolName: string;
@@ -34,7 +31,7 @@ export interface ExecutedAction {
 }
 
 export interface DeliberationItem {
-  persona: 'riven' | 'lucifer' | 'sofi';
+  persona: string;
   name: string;
   role: string;
   opinion?: string;
@@ -44,7 +41,7 @@ export interface DeliberationItem {
 export interface Message {
   id: string;
   sender: 'user' | 'assistant';
-  persona?: PersonaId;
+  persona?: string;
   content: string;
   executedActions?: ExecutedAction[];
   deliberation?: DeliberationItem[];
@@ -53,7 +50,7 @@ export interface Message {
 
 export interface SessionSummary {
   sessionId: string;
-  personaId?: PersonaId;
+  personaId?: string;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -68,49 +65,54 @@ export interface UserFact {
   sourcePersona?: string;
 }
 
-export interface PersonaNotes {
-  sofiNotes?: string[];
-  rivenNotes?: string[];
-  luciferNotes?: string[];
-}
-
 export interface MemoryProfile {
   userId: string;
   userName?: string;
   updatedAt?: string;
   facts: UserFact[];
-  personaNotes: PersonaNotes;
 }
 
-interface CouncilViewProps {
+export interface BotItem {
+  id: string;
+  name: string;
+  slug?: string;
+  role: string;
+  avatar?: string;
+  description?: string;
+  isDefault?: boolean;
+  status?: string;
+  systemPrompt?: string;
+  modelConfig?: {
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    credential?: {
+      label?: string;
+    };
+  };
+}
+
+export interface ProviderCredential {
+  id: string;
+  provider: string;
+  label: string;
+  maskedKey: string;
+  status: string;
+}
+
+export interface CouncilViewProps {
   tasks?: any[];
   events?: any[];
   habits?: any[];
   onRefresh?: () => void;
 }
 
-const PERSONA_CONFIG: Record<
-  PersonaId,
-  {
-    name: string;
-    role: string;
-    icon: any;
-    color: string;
-    activeTabClass: string;
-    avatarEmoji: string;
-    accentName: 'rose' | 'cyan' | 'amber';
-    greeting: string;
-    suggestions: string[];
-  }
-> = {
+const DEFAULT_PERSONAS: Record<string, { name: string; role: string; avatar: string; color: string; greeting: string; suggestions: string[] }> = {
   sofi: {
     name: 'Sofi',
     role: 'Executive PA & Girlfriend',
-    icon: Heart,
-    color: 'text-rose-500 dark:text-rose-400',
-    activeTabClass: 'bg-rose-500 text-white shadow-xs',
-    avatarEmoji: '💖',
-    accentName: 'rose',
+    avatar: '💖',
+    color: 'bg-rose-500 text-white shadow-xs',
     greeting:
       "Hey babe! I have full visibility into your Nox tasks and schedule. How are you holding up? Let's negotiate your plan for today so you crush your goals without burning out. What's on your mind? 💖",
     suggestions: [
@@ -123,11 +125,8 @@ const PERSONA_CONFIG: Record<
   riven: {
     name: 'Riven',
     role: 'Chief Architect & Idea Shaper',
-    icon: Compass,
-    color: 'text-cyan-600 dark:text-cyan-400',
-    activeTabClass: 'bg-cyan-600 text-white shadow-xs',
-    avatarEmoji: '🧭',
-    accentName: 'cyan',
+    avatar: '🧭',
+    color: 'bg-cyan-600 text-white shadow-xs',
     greeting:
       'Ready to build. What architectural bottleneck or technical doubt are we breaking down today? Hand over your schemas, roadmaps, or project ideas.',
     suggestions: [
@@ -140,11 +139,8 @@ const PERSONA_CONFIG: Record<
   lucifer: {
     name: 'Lucifer',
     role: 'Partner in Crime & Auditor',
-    icon: Flame,
-    color: 'text-amber-600 dark:text-amber-400',
-    activeTabClass: 'bg-amber-600 text-white shadow-xs',
-    avatarEmoji: '🔥',
-    accentName: 'amber',
+    avatar: '🔥',
+    color: 'bg-amber-600 text-white shadow-xs',
     greeting:
       "Let's see what you've cooked up. Hand over your timeline or plan so I can tell you where it's going to crash and burn. No excuses.",
     suggestions: [
@@ -178,7 +174,30 @@ export default function CouncilView({
   habits = [],
   onRefresh,
 }: CouncilViewProps) {
-  const [activePersona, setActivePersona] = useState<PersonaId>('sofi');
+  // Bots & Personas
+  const [bots, setBots] = useState<BotItem[]>([]);
+  const [activeBotId, setActiveBotId] = useState<string>('sofi');
+
+  // BYOK Credentials
+  const [credentials, setCredentials] = useState<ProviderCredential[]>([]);
+  const [showCredModal, setShowCredModal] = useState(false);
+  const [credProvider, setCredProvider] = useState('gemini');
+  const [credLabel, setCredLabel] = useState('');
+  const [credKey, setCredKey] = useState('');
+  const [savingCred, setSavingCred] = useState(false);
+
+  // Bot Workshop Modal
+  const [showWorkshopModal, setShowWorkshopModal] = useState(false);
+  const [workshopName, setWorkshopName] = useState('');
+  const [workshopRole, setWorkshopRole] = useState('');
+  const [workshopAvatar, setWorkshopAvatar] = useState('🤖');
+  const [workshopDesc, setWorkshopDesc] = useState('');
+  const [workshopPrompt, setWorkshopPrompt] = useState('');
+  const [workshopProvider, setWorkshopProvider] = useState('gemini');
+  const [workshopModel, setWorkshopModel] = useState('');
+  const [savingBot, setSavingBot] = useState(false);
+
+  // Chat & Sessions
   const [sessionId, setSessionId] = useState<string>('');
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -186,31 +205,32 @@ export default function CouncilView({
   const [loading, setLoading] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
-  // Panels state
+  // Drawers & Deliberation
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
   const [showMemoryDrawer, setShowMemoryDrawer] = useState(false);
   const [showDebateModal, setShowDebateModal] = useState(false);
   const [debateTopic, setDebateTopic] = useState('');
   const [debateLoading, setDebateLoading] = useState(false);
-
-  // Memory Vault state
   const [memoryProfile, setMemoryProfile] = useState<MemoryProfile | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [newFactText, setNewFactText] = useState('');
+  const [newFact, setNewFact] = useState('');
   const [newFactCategory, setNewFactCategory] = useState<UserFact['category']>('general');
   const [isAddingFact, setIsAddingFact] = useState(false);
-
-  // Search filter in sessions
   const [sessionSearch, setSessionSearch] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
   const pendingTasksCount = tasks.filter((t: any) => t.status !== 'COMPLETED').length;
 
-  // Initialize or restore session on mount
+  // Active bot resolver
+  const activeBot = bots.find((b) => b.id === activeBotId || b.slug === activeBotId);
+  const currentBotName = activeBot?.name || DEFAULT_PERSONAS[activeBotId]?.name || 'Council Bot';
+  const currentBotRole = activeBot?.role || DEFAULT_PERSONAS[activeBotId]?.role || 'AI Assistant';
+  const currentBotAvatar = activeBot?.avatar || DEFAULT_PERSONAS[activeBotId]?.avatar || '🤖';
+
   useEffect(() => {
     checkCouncilStatus();
+    fetchBots();
+    fetchCredentials();
     fetchSessions();
     fetchMemory();
 
@@ -240,6 +260,33 @@ export default function CouncilView({
     }
   };
 
+  const fetchBots = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`);
+      if (res.ok) {
+        const json = await res.json();
+        const loadedBots = json?.data || [];
+        if (loadedBots.length > 0) {
+          setBots(loadedBots);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch bots:', err);
+    }
+  };
+
+  const fetchCredentials = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials`);
+      if (res.ok) {
+        const json = await res.json();
+        setCredentials(json?.data || []);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch credentials:', err);
+    }
+  };
+
   const fetchSessions = async () => {
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions`);
@@ -264,19 +311,24 @@ export default function CouncilView({
     }
   };
 
-  const createNewSession = (persona: PersonaId = activePersona, saveToStorage: boolean = true) => {
+  const createNewSession = (botId: string = activeBotId, saveToStorage: boolean = true) => {
     const newSid = `session_${Date.now()}`;
     setSessionId(newSid);
     if (saveToStorage && typeof window !== 'undefined') {
       localStorage.setItem('nox_council_active_session', newSid);
     }
-    setActivePersona(persona);
+    setActiveBotId(botId);
+
+    const greeting =
+      DEFAULT_PERSONAS[botId]?.greeting ||
+      `Hello! I'm ${currentBotName}, your ${currentBotRole}. How can I assist you with your Nox workspace today?`;
+
     setMessages([
       {
-        id: `init-${persona}-${Date.now()}`,
+        id: `init-${botId}-${Date.now()}`,
         sender: 'assistant',
-        persona,
-        content: PERSONA_CONFIG[persona].greeting,
+        persona: botId,
+        content: greeting,
         timestamp: new Date().toISOString(),
       },
     ]);
@@ -287,8 +339,7 @@ export default function CouncilView({
       setLoading(true);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions/${encodeURIComponent(sid)}`);
       if (!res.ok) {
-        // If session not found on server, initialize fresh
-        createNewSession(activePersona, true);
+        createNewSession(activeBotId, true);
         return;
       }
       const json = await res.json();
@@ -297,65 +348,21 @@ export default function CouncilView({
         const loadedMsgs: Message[] = sessionData.messages.map((m: any, idx: number) => ({
           id: `hist-${idx}-${Date.now()}`,
           sender: m.role === 'assistant' ? 'assistant' : 'user',
-          persona: sessionData.personaId || activePersona,
-          content: m.content,
-          executedActions: m.toolCalls?.map((tc: any, tIdx: number) => ({
-            toolName: tc.name || tc.toolName || 'action',
-            params: tc.params || {},
-            result: m.toolResults?.[tIdx] || {},
-          })),
+          persona: sessionData.personaId || activeBotId,
+          content: m.content || '',
+          executedActions: m.toolCalls || [],
           timestamp: m.timestamp || new Date().toISOString(),
         }));
-
-        if (sessionData.personaId && (sessionData.personaId in PERSONA_CONFIG)) {
-          setActivePersona(sessionData.personaId as PersonaId);
-        }
-
-        if (loadedMsgs.length > 0) {
-          setMessages(loadedMsgs);
-        } else {
-          setMessages([
-            {
-              id: `init-${sessionData.personaId || activePersona}`,
-              sender: 'assistant',
-              persona: (sessionData.personaId as PersonaId) || activePersona,
-              content: PERSONA_CONFIG[(sessionData.personaId as PersonaId) || activePersona].greeting,
-              timestamp: new Date().toISOString(),
-            },
-          ]);
+        setMessages(loadedMsgs);
+        if (sessionData.personaId) {
+          setActiveBotId(sessionData.personaId);
         }
       }
     } catch (err) {
-      console.warn('Failed to load session history:', err);
-      createNewSession(activePersona, true);
+      console.warn('Failed to load session:', err);
+      createNewSession(activeBotId, true);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSelectSession = (sid: string) => {
-    setSessionId(sid);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nox_council_active_session', sid);
-    }
-    loadSessionHistory(sid);
-    setShowSessionsDrawer(false);
-  };
-
-  const handleDeleteSession = async (sid: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this chat session?')) return;
-
-    try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions/${encodeURIComponent(sid)}`, {
-        method: 'DELETE',
-      });
-      setSessions((prev) => prev.filter((s) => s.sessionId !== sid));
-      if (sessionId === sid) {
-        createNewSession(activePersona, true);
-      }
-    } catch (err) {
-      console.error('Failed to delete session:', err);
     }
   };
 
@@ -379,7 +386,8 @@ export default function CouncilView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          persona: activePersona,
+          persona: activeBotId,
+          botId: activeBot?.id || activeBotId,
           message: text.trim(),
           sessionId,
         }),
@@ -401,8 +409,8 @@ export default function CouncilView({
       const botMsg: Message = {
         id: `ast-${Date.now()}`,
         sender: 'assistant',
-        persona: activePersona,
-        content: data?.reply || "I'm with you, babe.",
+        persona: activeBotId,
+        content: data?.reply || "I'm with you, partner.",
         executedActions: data?.executedActions || [],
         timestamp: new Date().toISOString(),
       };
@@ -413,26 +421,18 @@ export default function CouncilView({
         onRefresh();
       }
 
-      // Refresh background data
       fetchSessions();
       fetchMemory();
     } catch (err: any) {
       const errText = err.message || '';
-      const isHighDemand =
-        errText.toLowerCase().includes('high demand') ||
-        errText.toLowerCase().includes('temporary') ||
-        errText.toLowerCase().includes('rate limit');
-
-      const content = isHighDemand
-        ? `**Sofi is catching her breath 💖**: Google Gemini is experiencing a brief high-demand spike on its free tier. Please send your message again in a few seconds, or switch to **Riven** 🧭 or **Lucifer** 🔥 (powered by Groq) in the meantime!`
-        : `**Connection Notice**: Couldn't reach Council server: ${
-            errText || 'Check if Council is running on port 4100'
-          }.`;
+      const content = `**Connection Notice**: Couldn't reach Council server: ${
+        errText || 'Check if Council is running on port 4100'
+      }.`;
 
       const errMsg: Message = {
         id: `err-${Date.now()}`,
         sender: 'assistant',
-        persona: activePersona,
+        persona: activeBotId,
         content,
         timestamp: new Date().toISOString(),
       };
@@ -451,14 +451,13 @@ export default function CouncilView({
     setDebateTopic('');
     setDebateLoading(true);
 
-    const userPromptMsg: Message = {
-      id: `usr-deb-${Date.now()}`,
+    const callMsg: Message = {
+      id: `debate-summon-${Date.now()}`,
       sender: 'user',
       content: `🏛️ **[Summoned Council]**: Multi-Agent Deliberation on:\n> "${topic.trim()}"`,
       timestamp: new Date().toISOString(),
     };
-
-    setMessages((prev) => [...prev, userPromptMsg]);
+    setMessages((prev) => [...prev, callMsg]);
 
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/debate`, {
@@ -469,128 +468,216 @@ export default function CouncilView({
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json?.error?.message || 'Debate deliberation failed');
+        throw new Error(json?.error?.message || 'Debate execution failed');
       }
 
-      const deliberation: DeliberationItem[] = json?.data?.deliberation || [];
+      const data = json?.data;
+      const deliberationList: DeliberationItem[] = data?.deliberations || [];
 
-      const debateResultMsg: Message = {
-        id: `ast-deb-${Date.now()}`,
+      const resultMsg: Message = {
+        id: `debate-res-${Date.now()}`,
         sender: 'assistant',
-        persona: 'sofi',
         content: `### 🏛️ Council Deliberation Complete\n\nThe Council has reviewed your topic with live context across your tasks, roadmaps, and commitments.`,
-        deliberation,
+        deliberation: deliberationList,
         timestamp: new Date().toISOString(),
       };
 
-      setMessages((prev) => [...prev, debateResultMsg]);
-      fetchMemory();
+      setMessages((prev) => [...prev, resultMsg]);
       fetchSessions();
+      fetchMemory();
     } catch (err: any) {
-      const errMsg: Message = {
-        id: `err-deb-${Date.now()}`,
+      const errRes: Message = {
+        id: `debate-err-${Date.now()}`,
         sender: 'assistant',
-        persona: 'lucifer',
         content: `**Debate Interrupted**: ${err.message || 'Failed to convene Council.'}`,
         timestamp: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, errMsg]);
+      setMessages((prev) => [...prev, errRes]);
     } finally {
       setDebateLoading(false);
     }
   };
 
-  const handleAddFact = async (e: React.FormEvent) => {
+  const handleCreateBot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFactText.trim()) return;
+    if (!workshopName.trim()) return;
 
+    setSavingBot(true);
     try {
-      setIsAddingFact(true);
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: workshopName.trim(),
+          role: workshopRole.trim() || 'AI Assistant',
+          avatar: workshopAvatar || '🤖',
+          description: workshopDesc.trim(),
+          systemPrompt: workshopPrompt.trim(),
+          provider: workshopProvider,
+          model: workshopModel.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error?.message || 'Failed to create bot');
+      }
+
+      const created = (await res.json())?.data;
+      setShowWorkshopModal(false);
+      setWorkshopName('');
+      setWorkshopRole('');
+      setWorkshopDesc('');
+      setWorkshopPrompt('');
+
+      await fetchBots();
+      if (created?.id) {
+        setActiveBotId(created.id);
+        createNewSession(created.id, true);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSavingBot(false);
+    }
+  };
+
+  const handleSaveCredential = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!credKey.trim()) return;
+
+    setSavingCred(true);
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: credProvider,
+          label: credLabel.trim() || `${credProvider.toUpperCase()} Key`,
+          apiKey: credKey.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error?.message || 'Failed to save credential');
+      }
+
+      setShowCredModal(false);
+      setCredKey('');
+      setCredLabel('');
+      await fetchCredentials();
+      alert('✓ Credential saved and encrypted securely!');
+    } catch (err: any) {
+      alert(`Failed to save key: ${err.message}`);
+    } finally {
+      setSavingCred(false);
+    }
+  };
+
+  const handleDeleteCredential = async (credId: string) => {
+    if (!confirm('Revoke and delete this provider credential?')) return;
+    try {
+      await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials/${credId}`, {
+        method: 'DELETE',
+      });
+      await fetchCredentials();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleAddFact = async () => {
+    if (!newFact.trim()) return;
+    setIsAddingFact(true);
+    try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/memory`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fact: newFactText.trim(),
+          fact: newFact.trim(),
           category: newFactCategory,
-          sourcePersona: activePersona,
+          sourcePersona: activeBotId,
         }),
       });
 
       if (res.ok) {
-        const json = await res.json();
-        setMemoryProfile(json?.data || null);
-        setNewFactText('');
+        setNewFact('');
+        await fetchMemory();
       }
     } catch (err) {
-      console.error('Failed to add fact:', err);
+      console.warn('Failed to add memory fact:', err);
     } finally {
       setIsAddingFact(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  const currentCfg = PERSONA_CONFIG[activePersona];
-
-  const filteredSessions = sessions.filter((s) => {
-    if (!sessionSearch.trim()) return true;
-    const query = sessionSearch.toLowerCase();
-    return (
-      s.sessionId.toLowerCase().includes(query) ||
-      (s.lastMessagePreview && s.lastMessagePreview.toLowerCase().includes(query)) ||
-      (s.personaId && s.personaId.toLowerCase().includes(query))
-    );
-  });
-
-  const filteredFacts = (memoryProfile?.facts || []).filter((f) => {
-    if (selectedCategory === 'all') return true;
-    return f.category === selectedCategory;
-  });
+  // Compile bot tabs: default bots + custom bots
+  const displayedBots = bots.length > 0 ? bots : [
+    { id: 'sofi', name: 'Sofi', role: 'Executive PA & Girlfriend', avatar: '💖' },
+    { id: 'riven', name: 'Riven', role: 'Chief Architect & Idea Shaper', avatar: '🧭' },
+    { id: 'lucifer', name: 'Lucifer', role: 'Partner in Crime & Auditor', avatar: '🔥' },
+  ];
 
   return (
-    <div className="relative max-w-5xl mx-auto flex flex-col h-[calc(100vh-130px)] min-h-[580px]">
-      {/* Top Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 py-2.5 px-3 border-b border-slate-200/80 dark:border-slate-800/80 mb-2.5 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-2xl shadow-xs">
-        {/* Persona Switcher Tabs */}
-        <div className="inline-flex items-center p-1 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 text-xs font-semibold">
-          {(['sofi', 'riven', 'lucifer'] as PersonaId[]).map((pid) => {
-            const cfg = PERSONA_CONFIG[pid];
-            const isSelected = activePersona === pid;
-
+    <div className="flex flex-col h-[calc(100vh-4rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+      {/* Top Header & Dynamic Bot Selector */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md gap-3 flex-wrap">
+        {/* Dynamic Bot Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {displayedBots.map((b) => {
+            const isSelected = activeBotId === b.id || activeBotId === b.slug;
             return (
               <button
-                key={pid}
+                key={b.id}
                 onClick={() => {
-                  if (activePersona !== pid) {
-                    setActivePersona(pid);
-                  }
+                  setActiveBotId(b.id);
+                  createNewSession(b.id, true);
                 }}
-                className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all text-xs font-medium ${
+                className={`px-3 py-1.5 rounded-xl flex items-center space-x-1.5 transition-all text-xs font-medium shrink-0 ${
                   isSelected
-                    ? cfg.activeTabClass
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-800'
                 }`}
-                title={`Switch to ${cfg.name} (${cfg.role})`}
+                title={`${b.name} (${b.role})`}
               >
-                <span>{cfg.avatarEmoji}</span>
-                <span>{cfg.name}</span>
+                <span>{b.avatar || '🤖'}</span>
+                <span>{b.name}</span>
               </button>
             );
           })}
+
+          {/* + Create Bot Workshop Trigger */}
+          <button
+            onClick={() => setShowWorkshopModal(true)}
+            className="px-2.5 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 text-xs font-medium flex items-center gap-1 shrink-0 transition"
+            title="Create Custom AI Bot"
+          >
+            <Plus size={13} />
+            <span className="hidden sm:inline">New Bot</span>
+          </button>
         </div>
 
         {/* Action Controls & Utilities */}
         <div className="flex items-center flex-wrap gap-2 text-xs">
+          {/* BYOK Keys Modal Button */}
+          <button
+            onClick={() => setShowCredModal(true)}
+            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
+            title="Manage BYOK AI Provider API Keys"
+          >
+            <Key size={13} className="text-amber-500" />
+            <span className="hidden sm:inline">BYOK Keys</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-[10px]">
+              {credentials.length}
+            </span>
+          </button>
+
           {/* Summon Council Debate Button */}
           <button
             onClick={() => setShowDebateModal(true)}
             className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs hover:opacity-95 transition-all"
-            title="Summon all three Council personas to debate a decision or deadline"
+            title="Summon multi-bot deliberation on a decision"
           >
             <Sparkles className="w-3.5 h-3.5 animate-pulse" />
             <span>Summon Debate</span>
@@ -599,16 +686,12 @@ export default function CouncilView({
           {/* Persistent Memory Vault Drawer Button */}
           <button
             onClick={() => setShowMemoryDrawer(true)}
-            className={`px-2.5 py-1.5 rounded-xl border flex items-center gap-1.5 transition-colors ${
-              showMemoryDrawer
-                ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400'
-                : 'bg-slate-100 dark:bg-slate-800/70 border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
+            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
             title="View & manage long-term persistent memory vault"
           >
             <Brain className="w-3.5 h-3.5 text-indigo-500" />
             <span className="hidden sm:inline">Memory</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/10 dark:bg-indigo-400/20 text-indigo-600 dark:text-indigo-300 font-mono text-[10px]">
+            <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-600 font-mono text-[10px]">
               {memoryProfile?.facts?.length || 0}
             </span>
           </button>
@@ -616,11 +699,7 @@ export default function CouncilView({
           {/* Sessions Drawer Button */}
           <button
             onClick={() => setShowSessionsDrawer(true)}
-            className={`px-2.5 py-1.5 rounded-xl border flex items-center gap-1.5 transition-colors ${
-              showSessionsDrawer
-                ? 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100'
-                : 'bg-slate-100 dark:bg-slate-800/70 border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
+            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
             title="Browse & switch chat sessions"
           >
             <MessageSquare className="w-3.5 h-3.5 text-cyan-500" />
@@ -632,12 +711,8 @@ export default function CouncilView({
 
           {/* Online Status badge */}
           <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 text-[11px] font-mono">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-              }`}
-            />
-            <span className="hidden md:inline">{isOnline ? 'Port 4100' : 'Offline'}</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            <span className="hidden md:inline">{isOnline ? 'Online' : 'Standby'}</span>
             <span className="text-slate-300 dark:text-slate-600">•</span>
             <span className="flex items-center gap-1">
               <ListTodo className="w-3 h-3 text-indigo-500" />
@@ -647,7 +722,7 @@ export default function CouncilView({
 
           {/* New Chat Button */}
           <button
-            onClick={() => createNewSession(activePersona, true)}
+            onClick={() => createNewSession(activeBotId, true)}
             className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
             title="Start New Chat"
           >
@@ -657,539 +732,357 @@ export default function CouncilView({
       </div>
 
       {/* Main Conversation Stream */}
-      <div className="flex-1 overflow-y-auto px-2 space-y-4 text-sm scroll-smooth">
-        {messages.map((msg, idx) => {
-          const isUser = msg.sender === 'user';
-          const pCfg = PERSONA_CONFIG[msg.persona || activePersona];
-          const isInitialGreeting = !isUser && idx === 0 && messages.length === 1;
-
-          return (
-            <div key={msg.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-1.5`}>
-              {/* Persona header on bot message */}
-              {!isUser && (
-                <div className="flex items-center space-x-1.5 px-0.5">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                    <span>{pCfg.avatarEmoji}</span>
-                    <span>{pCfg.name}</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                    {pCfg.role}
-                  </span>
-                </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-sm scroll-smooth">
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'} max-w-3xl ${
+              m.sender === 'user' ? 'ml-auto' : 'mr-auto'
+            } w-full`}
+          >
+            <div className="flex items-center space-x-1.5 mb-1 px-1 text-[11px] text-slate-400">
+              {m.sender === 'assistant' ? (
+                <>
+                  <span>{currentBotAvatar}</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{currentBotName}</span>
+                </>
+              ) : (
+                <span className="font-semibold text-slate-700 dark:text-slate-300">You</span>
               )}
+              <span>•</span>
+              <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
 
-              {/* Message bubble */}
-              <div
-                className={`max-w-[95%] sm:max-w-[85%] p-4 rounded-2xl leading-relaxed ${
-                  isUser
-                    ? 'bg-indigo-600 text-white rounded-br-xs shadow-xs'
-                    : 'bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 rounded-bl-xs border border-slate-200/80 dark:border-slate-800 shadow-xs'
-                }`}
-              >
-                {isUser ? (
-                  <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
-                ) : (
-                  <>
-                    <MarkdownRenderer
-                      content={msg.content}
-                      accentColor={pCfg.accentName}
-                    />
+            <div
+              className={`p-4 rounded-2xl leading-relaxed text-sm ${
+                m.sender === 'user'
+                  ? 'bg-blue-600 text-white rounded-tr-none shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200/80 dark:border-slate-700/80'
+              }`}
+            >
+              <MarkdownRenderer content={m.content} />
 
-                    {/* Deliberation Debate Cards */}
-                    {msg.deliberation && msg.deliberation.length > 0 && (
-                      <div className="mt-4 space-y-3">
-                        {msg.deliberation.map((d, dIdx) => {
-                          const isRiven = d.persona === 'riven';
-                          const isLucifer = d.persona === 'lucifer';
-                          const isSofi = d.persona === 'sofi';
-
-                          const borderCls = isRiven
-                            ? 'border-cyan-200 dark:border-cyan-800 bg-cyan-50/40 dark:bg-cyan-950/20'
-                            : isLucifer
-                            ? 'border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20'
-                            : 'border-rose-200 dark:border-rose-800 bg-rose-50/40 dark:bg-rose-950/20';
-
-                          const titleColor = isRiven
-                            ? 'text-cyan-700 dark:text-cyan-300'
-                            : isLucifer
-                            ? 'text-amber-700 dark:text-amber-300'
-                            : 'text-rose-700 dark:text-rose-300';
-
-                          const emoji = isRiven ? '🧭' : isLucifer ? '🔥' : '💖';
-
-                          return (
-                            <div
-                              key={dIdx}
-                              className={`p-3.5 rounded-xl border ${borderCls} transition-all space-y-1.5`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className={`text-xs font-bold ${titleColor} flex items-center gap-1.5`}>
-                                  <span>{emoji}</span>
-                                  <span>{d.name}</span>
-                                  <span className="text-[10px] font-normal opacity-80">({d.role})</span>
-                                </span>
-                                <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-white/60 dark:bg-slate-800/60 text-slate-500">
-                                  {isSofi ? 'Actionable Synthesis' : isLucifer ? 'Auditor Critique' : 'Architecture'}
-                                </span>
-                              </div>
-                              <div className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
-                                <MarkdownRenderer
-                                  content={d.opinion || d.synthesis || ''}
-                                  accentColor={isRiven ? 'cyan' : isLucifer ? 'amber' : 'rose'}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Synced Actions Receipt */}
-                    {msg.executedActions && msg.executedActions.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-200/70 dark:border-slate-800 space-y-1.5">
-                        <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Action Synced with Nox</span>
-                        </div>
-                        {msg.executedActions.map((act, i) => (
-                          <div
-                            key={i}
-                            className="p-2 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 text-xs text-emerald-800 dark:text-emerald-300"
-                          >
-                            <span className="font-mono font-bold block text-[10px]">{act.toolName}</span>
-                            <span className="opacity-95 text-[11px]">
-                              {act.params?.title ? `Created "${act.params.title}"` : JSON.stringify(act.params)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Suggestions chips on initial greeting */}
-              {isInitialGreeting && (
-                <div className="pt-2 flex flex-wrap gap-1.5">
-                  {pCfg.suggestions.map((sug, i) => (
-                    <button
+              {/* Executed Action Cards */}
+              {m.executedActions && m.executedActions.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    ⚡ Executed Actions:
+                  </div>
+                  {m.executedActions.map((act, i) => (
+                    <div
                       key={i}
-                      onClick={() => handleSendMessage(sug)}
-                      disabled={loading}
-                      className="px-3 py-1.5 rounded-full bg-slate-100/90 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1.5 group disabled:opacity-50"
+                      className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono"
                     >
-                      <Zap className="w-3 h-3 text-slate-400 group-hover:text-indigo-500 transition-colors" />
-                      <span>{sug}</span>
-                    </button>
+                      <div className="font-bold text-indigo-600 dark:text-indigo-400">{act.toolName}</div>
+                      <div className="text-slate-500 text-[10px] mt-0.5">{JSON.stringify(act.params)}</div>
+                    </div>
                   ))}
                 </div>
               )}
 
-              <span className="text-[9px] font-mono text-slate-400 px-1">
-                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+              {/* Deliberation Results */}
+              {m.deliberation && m.deliberation.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
+                  {m.deliberation.map((delib, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1"
+                    >
+                      <div className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                        {delib.name} ({delib.role})
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-300">{delib.opinion || delib.synthesis}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          );
-        })}
+          </div>
+        ))}
 
-        {(loading || debateLoading) && (
-          <div className="flex items-center space-x-2 text-slate-400 text-xs p-3 bg-white dark:bg-slate-900/80 rounded-2xl border border-slate-200/60 dark:border-slate-800 w-fit">
-            <div className="flex space-x-1">
-              <div
-                className={`w-1.5 h-1.5 rounded-full animate-bounce ${
-                  activePersona === 'sofi'
-                    ? 'bg-rose-500'
-                    : activePersona === 'riven'
-                    ? 'bg-cyan-500'
-                    : 'bg-amber-500'
-                }`}
-              />
-              <div
-                className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.2s] ${
-                  activePersona === 'sofi'
-                    ? 'bg-rose-500'
-                    : activePersona === 'riven'
-                    ? 'bg-cyan-500'
-                    : 'bg-amber-500'
-                }`}
-              />
-              <div
-                className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.4s] ${
-                  activePersona === 'sofi'
-                    ? 'bg-rose-500'
-                    : activePersona === 'riven'
-                    ? 'bg-cyan-500'
-                    : 'bg-amber-500'
-                }`}
-              />
-            </div>
-            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-              {debateLoading
-                ? 'Council is deliberating (Riven ➔ Lucifer ➔ Sofi)...'
-                : `${currentCfg.name} is thinking...`}
-            </span>
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
+            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span>{currentBotName} is thinking...</span>
           </div>
         )}
+
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Docked Input Capsule */}
-      <div className="pt-2 shrink-0">
-        <div className="flex items-end space-x-2 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 shadow-xs focus-within:border-slate-400 dark:focus-within:border-slate-600 transition-colors">
+      {/* Message Input Box */}
+      <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSendMessage();
+          }}
+          className="flex items-end gap-2"
+        >
           <textarea
             ref={textareaRef}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${currentCfg.name}...`}
-            rows={1}
-            className="flex-1 bg-transparent px-2 py-1.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none resize-none min-h-[36px] max-h-28"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
+            placeholder={`Message ${currentBotName}... (Press Enter to send, Shift+Enter for newline)`}
+            rows={2}
+            className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none resize-none focus:ring-2 focus:ring-blue-500"
           />
           <button
-            onClick={() => handleSendMessage()}
-            disabled={!inputMessage.trim() || loading || debateLoading}
-            className={`p-2 rounded-xl text-white transition-all disabled:opacity-30 shrink-0 ${
-              activePersona === 'sofi'
-                ? 'bg-rose-500 hover:bg-rose-600'
-                : activePersona === 'riven'
-                ? 'bg-cyan-600 hover:bg-cyan-700'
-                : 'bg-amber-600 hover:bg-amber-700'
-            }`}
-            title="Send Message (Enter)"
+            type="submit"
+            disabled={!inputMessage.trim() || loading}
+            className="p-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition disabled:opacity-50"
           >
-            <Send className="w-3.5 h-3.5" />
+            <Send size={16} />
           </button>
-        </div>
+        </form>
       </div>
 
-      {/* ================= SESSIONS DRAWER ================= */}
-      {showSessionsDrawer && (
-        <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end transition-opacity">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 h-full shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col p-4 animate-in slide-in-from-right duration-200">
-            {/* Drawer Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+      {/* Modal: Bot Workshop (Create Custom Bot) */}
+      {showWorkshopModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-cyan-500" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Chat Sessions ({sessions.length})
-                </h3>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => {
-                    createNewSession(activePersona, true);
-                    setShowSessionsDrawer(false);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-semibold flex items-center gap-1 hover:bg-indigo-700"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>New Chat</span>
-                </button>
-                <button
-                  onClick={() => setShowSessionsDrawer(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Search sessions */}
-            <div className="my-3 relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search conversations..."
-                value={sessionSearch}
-                onChange={(e) => setSessionSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-transparent focus:border-indigo-500 outline-none text-slate-900 dark:text-slate-100"
-              />
-            </div>
-
-            {/* Sessions list */}
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {filteredSessions.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400">
-                  No sessions found. Start a new conversation!
+                <div className="p-2 rounded-xl bg-blue-600 text-white">
+                  <Bot size={18} />
                 </div>
-              ) : (
-                filteredSessions.map((s) => {
-                  const isCurrent = s.sessionId === sessionId;
-                  const pId = (s.personaId as PersonaId) || 'sofi';
-                  const pCfg = PERSONA_CONFIG[pId] || PERSONA_CONFIG.sofi;
-
-                  return (
-                    <div
-                      key={s.sessionId}
-                      onClick={() => handleSelectSession(s.sessionId)}
-                      className={`group p-3 rounded-xl border cursor-pointer transition-all ${
-                        isCurrent
-                          ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800'
-                          : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                          <span>{pCfg.avatarEmoji}</span>
-                          <span className="capitalize">{pCfg.name} Session</span>
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {new Date(s.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                          </span>
-                          <button
-                            onClick={(e) => handleDeleteSession(s.sessionId, e)}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-rose-500 transition-opacity"
-                            title="Delete session"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                        {s.lastMessagePreview || 'Empty conversation'}
-                      </p>
-
-                      <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                        <span>{s.messageCount} turns</span>
-                        {isCurrent && (
-                          <span className="text-indigo-600 dark:text-indigo-400 font-semibold uppercase tracking-wider">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= PERSISTENT MEMORY VAULT DRAWER ================= */}
-      {showMemoryDrawer && (
-        <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end transition-opacity">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 h-full shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col p-4 animate-in slide-in-from-right duration-200">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Brain className="w-4 h-4 text-indigo-500" />
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Persistent Memory Vault
-                  </h3>
-                  <p className="text-[10px] text-slate-400">
-                    Disk-cached long-term profile facts & persona directives
-                  </p>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Bot Workshop</h3>
+                  <p className="text-xs text-slate-500">Create a personalized AI bot for your workspace</p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowMemoryDrawer(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setShowWorkshopModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
+                <X size={18} />
               </button>
             </div>
 
-            {/* Category Filter Pills */}
-            <div className="py-3 flex flex-wrap gap-1 border-b border-slate-200/70 dark:border-slate-800">
-              {['all', 'preference', 'tech_stack', 'goal', 'habit', 'relationship', 'general'].map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium capitalize transition-colors ${
-                    selectedCategory === cat
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {cat.replace('_', ' ')}
-                </button>
-              ))}
-            </div>
-
-            {/* Facts and Persona Directives */}
-            <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1">
-              {/* Add Fact Form */}
-              <form
-                onSubmit={handleAddFact}
-                className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2"
-              >
-                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 block">
-                  + Add Fact to Long-Term Memory
-                </span>
-                <div className="flex gap-2">
-                  <select
-                    value={newFactCategory}
-                    onChange={(e) => setNewFactCategory(e.target.value as any)}
-                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs rounded-lg px-2 py-1.5 text-slate-700 dark:text-slate-200 outline-none"
-                  >
-                    <option value="preference">Preference</option>
-                    <option value="tech_stack">Tech Stack</option>
-                    <option value="goal">Goal</option>
-                    <option value="habit">Habit</option>
-                    <option value="relationship">Relationship</option>
-                    <option value="general">General</option>
-                  </select>
+            <form onSubmit={handleCreateBot} className="space-y-3 text-xs">
+              <div className="grid grid-cols-4 gap-2">
+                <div className="col-span-1">
+                  <label className="font-semibold block mb-1">Avatar</label>
                   <input
-                    type="text"
-                    placeholder="e.g. Prefers Next.js App Router..."
-                    value={newFactText}
-                    onChange={(e) => setNewFactText(e.target.value)}
-                    className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100 outline-none"
+                    value={workshopAvatar}
+                    onChange={(e) => setWorkshopAvatar(e.target.value)}
+                    className="w-full p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-center text-lg outline-none"
+                    placeholder="🤖"
                   />
-                  <button
-                    type="submit"
-                    disabled={!newFactText.trim() || isAddingFact}
-                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
-                  >
-                    Save
-                  </button>
                 </div>
-              </form>
-
-              {/* Stored Facts */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                  Learned Profile Facts ({filteredFacts.length})
-                </span>
-                {filteredFacts.length === 0 ? (
-                  <div className="text-xs text-slate-400 italic">No facts found in this category.</div>
-                ) : (
-                  filteredFacts.map((f) => {
-                    const color = CATEGORY_COLORS[f.category] || CATEGORY_COLORS.general;
-                    return (
-                      <div
-                        key={f.id}
-                        className={`p-2.5 rounded-xl border ${color.bg} ${color.border} text-xs space-y-1`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${color.text}`}
-                          >
-                            {f.category.replace('_', ' ')}
-                          </span>
-                          {f.sourcePersona && (
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              via {f.sourcePersona}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
-                          {f.fact}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
+                <div className="col-span-3">
+                  <label className="font-semibold block mb-1">Bot Name *</label>
+                  <input
+                    value={workshopName}
+                    onChange={(e) => setWorkshopName(e.target.value)}
+                    required
+                    placeholder="e.g. Sage, DevCoach, Piper"
+                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  />
+                </div>
               </div>
 
-              {/* Persona Directives Section */}
-              {memoryProfile?.personaNotes && (
-                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    Persona Directives & Notes
-                  </span>
+              <div>
+                <label className="font-semibold block mb-1">Role / Persona Title</label>
+                <input
+                  value={workshopRole}
+                  onChange={(e) => setWorkshopRole(e.target.value)}
+                  placeholder="e.g. Senior Backend Architect & Code Reviewer"
+                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                />
+              </div>
 
-                  {/* Sofi Notes */}
-                  {memoryProfile.personaNotes.sofiNotes && memoryProfile.personaNotes.sofiNotes.length > 0 && (
-                    <div className="p-3 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40 text-xs space-y-1">
-                      <span className="font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1 text-[11px]">
-                        <span>💖</span>
-                        <span>Sofi Nuances & Agreements</span>
-                      </span>
-                      {memoryProfile.personaNotes.sofiNotes.map((note, nIdx) => (
-                        <p key={nIdx} className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed">
-                          • {note}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Riven Notes */}
-                  {memoryProfile.personaNotes.rivenNotes && memoryProfile.personaNotes.rivenNotes.length > 0 && (
-                    <div className="p-3 rounded-xl bg-cyan-50/60 dark:bg-cyan-950/20 border border-cyan-200/60 dark:border-cyan-900/40 text-xs space-y-1">
-                      <span className="font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-1 text-[11px]">
-                        <span>🧭</span>
-                        <span>Riven Architectural Principles</span>
-                      </span>
-                      {memoryProfile.personaNotes.rivenNotes.map((note, nIdx) => (
-                        <p key={nIdx} className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed">
-                          • {note}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Lucifer Notes */}
-                  {memoryProfile.personaNotes.luciferNotes && memoryProfile.personaNotes.luciferNotes.length > 0 && (
-                    <div className="p-3 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-xs space-y-1">
-                      <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 text-[11px]">
-                        <span>🔥</span>
-                        <span>Lucifer Audit Pledges</span>
-                      </span>
-                      {memoryProfile.personaNotes.luciferNotes.map((note, nIdx) => (
-                        <p key={nIdx} className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed">
-                          • {note}
-                        </p>
-                      ))}
-                    </div>
-                  )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1">AI Provider</label>
+                  <select
+                    value={workshopProvider}
+                    onChange={(e) => setWorkshopProvider(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  >
+                    <option value="gemini">Google Gemini</option>
+                    <option value="groq">Groq Cloud</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="ollama">Ollama (Local)</option>
+                  </select>
                 </div>
-              )}
-            </div>
+                <div>
+                  <label className="font-semibold block mb-1">Model (Optional)</label>
+                  <input
+                    value={workshopModel}
+                    onChange={(e) => setWorkshopModel(e.target.value)}
+                    placeholder="default"
+                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1">System Instructions / Prompt</label>
+                <textarea
+                  value={workshopPrompt}
+                  onChange={(e) => setWorkshopPrompt(e.target.value)}
+                  rows={3}
+                  placeholder="Describe how this bot should speak, reason, and advise you..."
+                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowWorkshopModal(false)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingBot}
+                  className="px-4 py-1.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500"
+                >
+                  {savingBot ? 'Saving...' : 'Create Bot'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* ================= SUMMON DEBATE MODAL ================= */}
+      {/* Modal: BYOK Credential Vault */}
+      {showCredModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500 text-white">
+                  <Key size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">BYOK Key Vault</h3>
+                  <p className="text-xs text-slate-500">AES-256-GCM Encrypted Provider Credentials</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCredModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Existing Keys List */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Connected Keys:</span>
+              {credentials.length === 0 ? (
+                <div className="text-xs text-slate-500 py-2">No custom API keys connected yet. Default keys are being used.</div>
+              ) : (
+                credentials.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs"
+                  >
+                    <div>
+                      <div className="font-bold uppercase text-slate-800 dark:text-slate-200">{c.provider}</div>
+                      <div className="text-slate-500 font-mono text-[10px]">{c.maskedKey}</div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteCredential(c.id)}
+                      className="p-1 text-rose-500 hover:bg-rose-500/10 rounded"
+                      title="Revoke Key"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Connect New Key Form */}
+            <form onSubmit={handleSaveCredential} className="space-y-3 text-xs pt-2 border-t border-slate-200 dark:border-slate-800">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Add / Update Key:</span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1">Provider</label>
+                  <select
+                    value={credProvider}
+                    onChange={(e) => setCredProvider(e.target.value)}
+                    className="w-full p-2 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  >
+                    <option value="gemini">Google Gemini</option>
+                    <option value="groq">Groq Cloud</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="ollama">Ollama</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1">Key Label</label>
+                  <input
+                    value={credLabel}
+                    onChange={(e) => setCredLabel(e.target.value)}
+                    placeholder="e.g. My Personal Key"
+                    className="w-full p-2 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1">API Key *</label>
+                <input
+                  type="password"
+                  value={credKey}
+                  onChange={(e) => setCredKey(e.target.value)}
+                  required
+                  placeholder="sk-... or AIza..."
+                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCredModal(false)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCred}
+                  className="px-4 py-1.5 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-500"
+                >
+                  {savingCred ? 'Validating...' : 'Encrypt & Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Summon Council Debate */}
       {showDebateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-500 text-white">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Summon the Council Debate
-                  </h3>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Summon Council Deliberation</h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    All 3 personas deliberate on your decision or timeline sequentially
+                    Multiple personas deliberate on your decision or deadline sequentially
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowDebateModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
+              <button onClick={() => setShowDebateModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Deliberation Workflow Summary */}
-            <div className="grid grid-cols-3 gap-2 py-1 text-center text-[10px]">
-              <div className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 font-medium">
-                🧭 <strong>1. Riven</strong>
-                <div>Architecture & Tech</div>
-              </div>
-              <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-medium">
-                🔥 <strong>2. Lucifer</strong>
-                <div>Audits & Blind spots</div>
-              </div>
-              <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-medium">
-                💖 <strong>3. Sofi</strong>
-                <div>Humane Synthesis</div>
-              </div>
-            </div>
-
-            {/* Topic Input */}
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
-                What project decision, architecture question, or deadline should they debate?
+                What project decision or deadline should they debate?
               </label>
               <textarea
                 value={debateTopic}
@@ -1200,17 +1093,14 @@ export default function CouncilView({
               />
             </div>
 
-            {/* Quick Topic Chips */}
             <div className="space-y-1.5">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                Or pick a quick dilemma:
-              </span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Quick Prompts:</span>
               <div className="flex flex-wrap gap-1.5">
                 {DEBATE_SUGGESTIONS.map((sug, i) => (
                   <button
                     key={i}
                     onClick={() => setDebateTopic(sug)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-left transition-colors"
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                   >
                     {sug}
                   </button>
@@ -1218,11 +1108,10 @@ export default function CouncilView({
               </div>
             </div>
 
-            {/* Modal Actions */}
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => setShowDebateModal(false)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-400"
               >
                 Cancel
               </button>
@@ -1231,8 +1120,124 @@ export default function CouncilView({
                 disabled={!debateTopic.trim()}
                 className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white text-xs font-bold shadow-xs hover:opacity-95 disabled:opacity-50"
               >
-                ⚡ Start Council Debate
+                ⚡ Start Deliberation
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer: Sessions */}
+      {showSessionsDrawer && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-end z-50">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-900 h-full p-4 border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-cyan-500" />
+                <h3 className="font-bold text-sm">Chat Sessions</h3>
+              </div>
+              <button onClick={() => setShowSessionsDrawer(false)} className="p-1 text-slate-400 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+              <input
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                placeholder="Search sessions..."
+                className="w-full pl-8 pr-3 py-2 text-xs bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1.5">
+              {sessions
+                .filter((s) => !sessionSearch || (s.lastMessagePreview || '').toLowerCase().includes(sessionSearch.toLowerCase()))
+                .map((s) => (
+                  <div
+                    key={s.sessionId}
+                    onClick={() => {
+                      setSessionId(s.sessionId);
+                      loadSessionHistory(s.sessionId);
+                      setShowSessionsDrawer(false);
+                    }}
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition ${
+                      s.sessionId === sessionId
+                        ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800'
+                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                      {s.lastMessagePreview || 'Conversation'}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1">
+                      {new Date(s.updatedAt).toLocaleDateString()} • {s.messageCount} messages
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer: Memory Vault */}
+      {showMemoryDrawer && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-end z-50">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-900 h-full p-4 border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-indigo-500" />
+                <h3 className="font-bold text-sm">Persistent Memory</h3>
+              </div>
+              <button onClick={() => setShowMemoryDrawer(false)} className="p-1 text-slate-400 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Add Fact Form */}
+            <div className="space-y-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+              <span className="font-bold text-[11px] block">Record User Preference / Fact:</span>
+              <textarea
+                value={newFact}
+                onChange={(e) => setNewFact(e.target.value)}
+                placeholder="e.g. Prefers functional TypeScript, dislikes repetitive daily meetings..."
+                rows={2}
+                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none resize-none"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <select
+                  value={newFactCategory}
+                  onChange={(e) => setNewFactCategory(e.target.value as any)}
+                  className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px]"
+                >
+                  <option value="general">General</option>
+                  <option value="preference">Preference</option>
+                  <option value="goal">Goal</option>
+                  <option value="tech_stack">Tech Stack</option>
+                  <option value="habit">Habit</option>
+                </select>
+                <button
+                  onClick={handleAddFact}
+                  disabled={!newFact.trim() || isAddingFact}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  Save Fact
+                </button>
+              </div>
+            </div>
+
+            {/* Facts List */}
+            <div className="flex-1 overflow-y-auto space-y-2 text-xs">
+              {memoryProfile?.facts?.map((f) => (
+                <div
+                  key={f.id}
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"
+                >
+                  <span className="text-[10px] font-bold uppercase text-indigo-500">{f.category}</span>
+                  <div className="text-slate-800 dark:text-slate-200 mt-0.5">{f.fact}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

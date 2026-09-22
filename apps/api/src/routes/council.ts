@@ -93,7 +93,7 @@ publicRouter.get('/council/status', async (_req: Request, res: Response) => {
 privateRouter.post('/council/chat', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { message, persona = 'sofi', sessionId: rawSessionId } = req.body;
+    const { message, persona = 'sofi', botId, sessionId: rawSessionId } = req.body;
 
     if (!message || typeof message !== 'string') {
       return apiError(res, 'Message text is required', 400);
@@ -112,7 +112,7 @@ privateRouter.post('/council/chat', async (req: Request, res: Response) => {
       },
       body: JSON.stringify({
         persona,
-        botId: persona,
+        botId: botId || persona,
         message,
         sessionId,
         userContext,
@@ -130,6 +130,160 @@ privateRouter.post('/council/chat', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to communicate with Council';
     return apiError(res, message, 502);
+  }
+});
+
+/**
+ * GET /api/v1/council/bots
+ * List all custom and default bots for the current user
+ */
+privateRouter.get('/council/bots', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots`, {
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+    });
+
+    if (!councilResponse.ok) {
+      return apiResponse(res, []);
+    }
+
+    const data = await councilResponse.json();
+    return apiResponse(res, data.data || data || []);
+  } catch (_err) {
+    return apiResponse(res, []);
+  }
+});
+
+/**
+ * POST /api/v1/council/bots
+ * Create a new custom AI Bot
+ */
+privateRouter.post('/council/bots', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    if (!councilResponse.ok) {
+      return apiError(res, data?.error?.message || 'Failed to create bot', mapCouncilStatus(councilResponse.status));
+    }
+    return apiResponse(res, data.data || data, 201);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to create bot';
+    return apiError(res, msg, 502);
+  }
+});
+
+/**
+ * DELETE /api/v1/council/bots/:id
+ * Delete a custom bot
+ */
+privateRouter.delete('/council/bots/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to delete bot';
+    return apiError(res, msg, 502);
+  }
+});
+
+/**
+ * GET /api/v1/council/provider-credentials
+ * List connected BYOK credentials
+ */
+privateRouter.get('/council/provider-credentials', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/provider-credentials`, {
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+    });
+
+    if (!councilResponse.ok) {
+      return apiResponse(res, []);
+    }
+
+    const data = await councilResponse.json();
+    return apiResponse(res, data.data || data || []);
+  } catch (_err) {
+    return apiResponse(res, []);
+  }
+});
+
+/**
+ * POST /api/v1/council/provider-credentials
+ * Add or update an encrypted BYOK provider key
+ */
+privateRouter.post('/council/provider-credentials', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/provider-credentials`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    if (!councilResponse.ok) {
+      return apiError(res, data?.error?.message || 'Failed to save credential', mapCouncilStatus(councilResponse.status));
+    }
+    return apiResponse(res, data.data || data, 201);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to save credential';
+    return apiError(res, msg, 502);
+  }
+});
+
+/**
+ * DELETE /api/v1/council/provider-credentials/:id
+ * Revoke and delete a provider credential
+ */
+privateRouter.delete('/council/provider-credentials/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/provider-credentials/${encodeURIComponent(rawId)}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to revoke credential';
+    return apiError(res, msg, 502);
   }
 });
 
