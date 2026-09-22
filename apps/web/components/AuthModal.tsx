@@ -55,7 +55,9 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
 
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <img src="/Nox_logo.png" alt="NOX Logo" className="w-12 h-12 object-contain mx-auto" />
+          <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800/90 flex items-center justify-center p-2 shadow-xs mx-auto">
+            <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
+          </div>
           <h3 className="font-display font-bold text-2xl text-slate-900 dark:text-slate-100 tracking-wide">Sign In to NOX</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">Account credentials are provisioned by your Administrator.</p>
         </div>

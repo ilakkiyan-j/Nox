@@ -80,7 +80,9 @@ export default function Navigation({ activeTab, setActiveTab, onOpenProfile, cur
             className="flex items-center space-x-3 px-3 py-2 cursor-pointer group"
             onClick={() => setActiveTab('dashboard')}
           >
-            <img src="/Nox_logo.png" alt="NOX Logo" className="w-11 h-11 object-contain group-hover:scale-105 transition-transform shrink-0" />
+            <div className="w-11 h-11 rounded-xl bg-slate-950 border border-slate-800/90 flex items-center justify-center p-1.5 shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+              <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
+            </div>
             <div>
               <h1 className="font-display text-2xl font-extrabold tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono tracking-wide uppercase font-medium">Your Second Self</p>
