@@ -44,49 +44,32 @@ privateRouter.post('/council/chat', async (req: Request, res: Response) => {
     }
 
     // Fetch user context across Nox
-    const [user, tasks, habits, events, reminders] = await Promise.all([
-      db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
-      db.task.findMany({
-        where: { userId, status: { in: ['TODO', 'IN_PROGRESS'] } },
-        orderBy: { dueDate: 'asc' },
-        take: 15,
-        select: {
-          id: true,
-          title: true,
-          priority: true,
-          status: true,
-          dueDate: true,
-          goal: { select: { title: true } },
-        },
-      }),
-      db.habit.findMany({
-        where: { userId },
-        select: { id: true, title: true, streakCount: true },
-      }),
-      db.event.findMany({
-        where: { userId },
-        orderBy: { date: 'asc' },
-        take: 4,
-        select: { id: true, title: true, date: true, startTime: true },
-      }),
-      db.reminder.findMany({
-        where: { userId, isCompleted: false },
-        orderBy: { remindAt: 'asc' },
-        take: 4,
-        select: { id: true, title: true, remindAt: true },
-      }),
-    ]);
+ // Update the Promise.all in POST /api/v1/council/chat to also include goals, roadmaps, and learnings:
+const [user, tasks, habits, events, reminders, goals, roadmaps, learnings] = await Promise.all([
+  db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
+  db.task.findMany({ where: { userId, status: { in: ['TODO', 'IN_PROGRESS'] } }, orderBy: { dueDate: 'asc' }, take: 15 }),
+  db.habit.findMany({ where: { userId }, select: { id: true, title: true, streakCount: true } }),
+  db.event.findMany({ where: { userId }, orderBy: { date: 'asc' }, take: 4 }),
+  db.reminder.findMany({ where: { userId, isCompleted: false }, orderBy: { remindAt: 'asc' }, take: 4 }),
+  db.goal.findMany({ where: { userId, status: { in: ['IN_PROGRESS', 'NOT_STARTED'] } }, take: 8 }),
+  db.roadmap.findMany({ where: { userId, status: 'IN_PROGRESS' }, take: 5, include: { milestones: true, goal: true } }),
+  db.learning.findMany({ where: { userId, status: 'IN_PROGRESS' }, take: 5, include: { modules: true } }),
+]);
 
-    const userContext = {
-      userId,
-      userName: user?.name || 'Partner',
-      localTime: new Date().toLocaleString(),
-      activeTasksCount: tasks.length,
-      tasks,
-      habits,
-      upcomingEvents: events,
-      reminders,
-    };
+const userContext = {
+  userId,
+  userName: user?.name || 'Partner',
+  localTime: new Date().toLocaleString(),
+  activeTasksCount: tasks.length,
+  tasks,
+  habits,
+  upcomingEvents: events,
+  reminders,
+  goals,
+  roadmaps,
+  learning: learnings,
+};
+
 
     // Forward to Council
     const authHeader = req.headers.authorization || '';
