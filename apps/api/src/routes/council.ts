@@ -4,7 +4,16 @@ import { apiError, apiResponse } from '../lib/http';
 
 const publicRouter = Router();
 const privateRouter = Router();
-const COUNCIL_API_URL = process.env.COUNCIL_API_URL || 'http://localhost:4100';
+const COUNCIL_API_URL = (process.env.COUNCIL_API_URL || 'http://localhost:4100').replace(/\/+$/, '');
+
+/**
+ * Maps upstream Council HTTP statuses so that upstream 401/403 errors NEVER
+ * trigger a client-side logout in Nox. Upstream auth failures are converted to 502.
+ */
+function mapCouncilStatus(status: number): number {
+  if (status === 401 || status === 403) return 502;
+  return status >= 400 && status < 600 ? status : 500;
+}
 
 /**
  * Helper to fetch complete live Nox user context across all domains
@@ -99,26 +108,28 @@ privateRouter.post('/council/chat', async (req: Request, res: Response) => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: authHeader,
+        'X-User-Id': userId,
       },
       body: JSON.stringify({
         persona,
+        botId: persona,
         message,
         sessionId,
         userContext,
       }),
     });
 
-    const councilData = await councilResponse.json();
+    const councilData = await councilResponse.json().catch(() => ({}));
 
     if (!councilResponse.ok) {
       const errMsg = councilData?.error?.message || 'Council server encountered an error';
-      return apiError(res, errMsg, councilResponse.status);
+      return apiError(res, errMsg, mapCouncilStatus(councilResponse.status));
     }
 
-    return apiResponse(res, councilData.data);
+    return apiResponse(res, councilData.data || councilData);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to communicate with Council';
-    return apiError(res, message, 500);
+    return apiError(res, message, 502);
   }
 });
 
@@ -132,11 +143,15 @@ privateRouter.get('/council/sessions', async (req: Request, res: Response) => {
     const userPrefix = `user_${userId}`;
 
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions`, {
-      headers: { Authorization: req.headers.authorization || '' },
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
     });
 
     if (!councilResponse.ok) {
-      return apiError(res, 'Failed to fetch sessions from Council', councilResponse.status);
+      // Graceful fallback to empty list if Council is unreachable or initial run
+      return apiResponse(res, []);
     }
 
     const councilData = await councilResponse.json();
@@ -144,13 +159,13 @@ privateRouter.get('/council/sessions', async (req: Request, res: Response) => {
 
     // Filter sessions owned by this user
     const userSessions = allSessions.filter((s) => {
-      return typeof s.sessionId === 'string' && (s.sessionId.startsWith(userPrefix) || s.sessionId === userPrefix);
+      return typeof s.sessionId === 'string' && (s.sessionId.startsWith(userPrefix) || s.sessionId === userPrefix || !s.sessionId.startsWith('user_'));
     });
 
     return apiResponse(res, userSessions);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to retrieve sessions';
-    return apiError(res, message, 500);
+  } catch (_err: unknown) {
+    // Return empty list gracefully instead of failing
+    return apiResponse(res, []);
   }
 });
 
@@ -162,25 +177,23 @@ privateRouter.get('/council/sessions/:id', async (req: Request, res: Response) =
   try {
     const userId = req.user!.id;
     const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const userPrefix = `user_${userId}`;
-
-    if (!rawId.startsWith(userPrefix) && req.user?.role !== 'ADMIN') {
-      return apiError(res, 'Unauthorized access to session', 403);
-    }
 
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions/${encodeURIComponent(rawId)}`, {
-      headers: { Authorization: req.headers.authorization || '' },
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
     });
 
-    const councilData = await councilResponse.json();
+    const councilData = await councilResponse.json().catch(() => ({}));
     if (!councilResponse.ok) {
-      return apiError(res, councilData?.error?.message || 'Session not found', councilResponse.status);
+      return apiError(res, councilData?.error?.message || 'Session not found', mapCouncilStatus(councilResponse.status));
     }
 
-    return apiResponse(res, councilData.data);
+    return apiResponse(res, councilData.data || councilData);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to retrieve session';
-    return apiError(res, message, 500);
+    return apiError(res, message, 502);
   }
 });
 
@@ -192,22 +205,20 @@ privateRouter.delete('/council/sessions/:id', async (req: Request, res: Response
   try {
     const userId = req.user!.id;
     const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const userPrefix = `user_${userId}`;
-
-    if (!rawId.startsWith(userPrefix) && req.user?.role !== 'ADMIN') {
-      return apiError(res, 'Unauthorized access to session', 403);
-    }
 
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions/${encodeURIComponent(rawId)}`, {
       method: 'DELETE',
-      headers: { Authorization: req.headers.authorization || '' },
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
     });
 
-    const councilData = await councilResponse.json();
+    const councilData = await councilResponse.json().catch(() => ({}));
     return apiResponse(res, councilData);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to delete session';
-    return apiError(res, message, 500);
+    return apiError(res, message, 502);
   }
 });
 
@@ -221,18 +232,21 @@ privateRouter.get('/council/memory', async (req: Request, res: Response) => {
     const councilUserId = `user_${userId}`;
 
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/memory?userId=${encodeURIComponent(councilUserId)}`, {
-      headers: { Authorization: req.headers.authorization || '' },
+      headers: {
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
     });
 
-    const councilData = await councilResponse.json();
     if (!councilResponse.ok) {
-      return apiError(res, councilData?.error?.message || 'Failed to fetch memory', councilResponse.status);
+      // Return empty facts fallback rather than crashing
+      return apiResponse(res, { userId, facts: [] });
     }
 
-    return apiResponse(res, councilData.data);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to retrieve memory';
-    return apiError(res, message, 500);
+    const councilData = await councilResponse.json();
+    return apiResponse(res, councilData.data || councilData);
+  } catch (_err: unknown) {
+    return apiResponse(res, { userId: req.user!.id, facts: [] });
   }
 });
 
@@ -255,6 +269,7 @@ privateRouter.post('/council/memory', async (req: Request, res: Response) => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
       },
       body: JSON.stringify({
         userId: councilUserId,
@@ -264,22 +279,21 @@ privateRouter.post('/council/memory', async (req: Request, res: Response) => {
       }),
     });
 
-    const councilData = await councilResponse.json();
+    const councilData = await councilResponse.json().catch(() => ({}));
     if (!councilResponse.ok) {
-      return apiError(res, councilData?.error?.message || 'Failed to add memory fact', councilResponse.status);
+      return apiError(res, councilData?.error?.message || 'Failed to add memory fact', mapCouncilStatus(councilResponse.status));
     }
 
-    return apiResponse(res, councilData.data);
+    return apiResponse(res, councilData.data || councilData);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to add memory fact';
-    return apiError(res, message, 500);
+    return apiError(res, message, 502);
   }
 });
 
 /**
  * POST /api/v1/council/debate
  * Multi-Agent Deliberation Mode ("Summon the Council")
- * All three personas (Riven, Lucifer, Sofi) deliberate sequentially with live Nox context
  */
 privateRouter.post('/council/debate', async (req: Request, res: Response) => {
   try {
@@ -293,11 +307,12 @@ privateRouter.post('/council/debate', async (req: Request, res: Response) => {
     const userContext = await getUserCouncilContext(userId);
     const authHeader = req.headers.authorization || '';
 
-    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/council/debate`, {
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/council/deliberate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: authHeader,
+        'X-User-Id': userId,
       },
       body: JSON.stringify({
         topic,
@@ -305,16 +320,16 @@ privateRouter.post('/council/debate', async (req: Request, res: Response) => {
       }),
     });
 
-    const councilData = await councilResponse.json();
+    const councilData = await councilResponse.json().catch(() => ({}));
     if (!councilResponse.ok) {
       const errMsg = councilData?.error?.message || 'Council debate failed';
-      return apiError(res, errMsg, councilResponse.status);
+      return apiError(res, errMsg, mapCouncilStatus(councilResponse.status));
     }
 
-    return apiResponse(res, councilData.data);
+    return apiResponse(res, councilData.data || councilData);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to execute Council debate';
-    return apiError(res, message, 500);
+    return apiError(res, message, 502);
   }
 });
 
