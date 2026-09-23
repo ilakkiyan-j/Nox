@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { createApp } from './app';
+import { startCouncilKeepAliveWorker } from './routes/council';
 
 const PORT = process.env.PORT || 4000;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -13,4 +14,5 @@ const app = createApp();
 
 app.listen(PORT, () => {
   console.log(`🚀 NOX API Backend running on http://localhost:${PORT}`);
+  startCouncilKeepAliveWorker();
 });

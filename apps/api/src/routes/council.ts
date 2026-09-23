@@ -64,12 +64,17 @@ function ensureUserSessionId(userId: string, requestedSessionId?: string): strin
 
 /**
  * GET /api/v1/council/status
- * Public healthcheck ping to Council server
+ * Public healthcheck ping to Council server.
+ * Supports ?wake=true to wait up to 45s for Render container spin-up.
  */
-publicRouter.get('/council/status', async (_req: Request, res: Response) => {
+publicRouter.get('/council/status', async (req: Request, res: Response) => {
+  const isWake = req.query.wake === 'true';
+  const timeoutMs = isWake ? 45000 : 10000;
+  const startTime = Date.now();
+
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     // 1. Try unauthenticated public /health root endpoint first
     let councilRes = await fetch(`${COUNCIL_API_URL}/health`, {
@@ -84,13 +89,47 @@ publicRouter.get('/council/status', async (_req: Request, res: Response) => {
     }
     clearTimeout(timeoutId);
 
+    const latencyMs = Date.now() - startTime;
+
     if (councilRes && councilRes.ok) {
       const data = await councilRes.json().catch(() => ({ status: 'ok' }));
-      return apiResponse(res, { online: true, ...data });
+      return apiResponse(res, { online: true, latencyMs, ...data });
     }
-    return apiResponse(res, { online: false, message: 'Council service responded with non-200' });
+    return apiResponse(res, { online: false, latencyMs, message: 'Council service responded with non-200' });
   } catch (_err) {
-    return apiResponse(res, { online: false, message: 'Council service offline' });
+    const latencyMs = Date.now() - startTime;
+    return apiResponse(res, { online: false, latencyMs, message: 'Council service offline' });
+  }
+});
+
+/**
+ * GET /api/v1/council/ping
+ * Dedicated ping endpoint returning live latency and status
+ */
+publicRouter.get('/council/ping', async (req: Request, res: Response) => {
+  const isWake = req.query.wake === 'true';
+  const timeoutMs = isWake ? 45000 : 12000;
+  const startTime = Date.now();
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const councilRes = await fetch(`${COUNCIL_API_URL}/health`, {
+      signal: controller.signal,
+    }).catch(() => null);
+    clearTimeout(timeoutId);
+
+    const latencyMs = Date.now() - startTime;
+
+    if (councilRes && councilRes.ok) {
+      const data = await councilRes.json().catch(() => ({ status: 'ok' }));
+      return apiResponse(res, { online: true, latencyMs, timestamp: new Date().toISOString(), ...data });
+    }
+    return apiResponse(res, { online: false, latencyMs, timestamp: new Date().toISOString() });
+  } catch (_err) {
+    const latencyMs = Date.now() - startTime;
+    return apiResponse(res, { online: false, latencyMs, timestamp: new Date().toISOString() });
   }
 });
 
@@ -717,5 +756,30 @@ privateRouter.post('/council/debate', async (req: Request, res: Response) => {
     return apiError(res, message, 502);
   }
 });
+
+/**
+ * Starts an automated 10-minute background keep-alive heartbeat
+ * to prevent Render free-tier containers from idling into sleep mode.
+ */
+export function startCouncilKeepAliveWorker(): NodeJS.Timeout {
+  const intervalMs = 10 * 60 * 1000; // 10 minutes
+  console.log(`[NOX Keep-Alive] Initializing Council heartbeat worker for ${COUNCIL_API_URL} (every 10m)...`);
+
+  // Initial gentle wake on boot
+  fetch(`${COUNCIL_API_URL}/health`).catch(() => {});
+
+  const timer = setInterval(async () => {
+    try {
+      const res = await fetch(`${COUNCIL_API_URL}/health`);
+      if (res.ok) {
+        console.log(`[NOX Keep-Alive] Council ping successful at ${new Date().toLocaleTimeString()} (status: 200)`);
+      }
+    } catch (_err) {
+      // Ignore background errors
+    }
+  }, intervalMs);
+
+  return timer;
+}
 
 export { publicRouter as councilPublicRouter, privateRouter as councilPrivateRouter };

@@ -206,6 +206,11 @@ export default function CouncilView({
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [pingLatency, setPingLatency] = useState<number | null>(null);
+  const [isPinging, setIsPinging] = useState(false);
+  const [wakeSecondsElapsed, setWakeSecondsElapsed] = useState(0);
+  const [wakeError, setWakeError] = useState<string | null>(null);
+  const [dismissStandbyBanner, setDismissStandbyBanner] = useState(false);
 
   // Drawers & Deliberation
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
@@ -270,11 +275,61 @@ export default function CouncilView({
 
   const checkCouncilStatus = async () => {
     try {
+      const startTime = Date.now();
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/status`);
+      const latency = Date.now() - startTime;
       const json = await res.json();
-      setIsOnline(Boolean(json?.data?.online));
+      const online = Boolean(json?.data?.online);
+      setIsOnline(online);
+      if (online) {
+        setPingLatency(json?.data?.latencyMs || latency);
+      }
     } catch {
       setIsOnline(false);
+    }
+  };
+
+  const handleWakeOrPingCouncil = async (isManualWake: boolean = false) => {
+    setIsPinging(true);
+    setWakeError(null);
+    setWakeSecondsElapsed(0);
+
+    const timer = setInterval(() => {
+      setWakeSecondsElapsed((prev) => prev + 1);
+    }, 1000);
+
+    try {
+      const startTime = Date.now();
+      const endpoint = isManualWake
+        ? `${API_BASE_URL}/api/v1/council/status?wake=true`
+        : `${API_BASE_URL}/api/v1/council/ping`;
+
+      const res = await fetchWithUser(endpoint);
+      const latency = Date.now() - startTime;
+
+      if (res.ok) {
+        const json = await res.json();
+        const online = Boolean(json?.data?.online ?? json?.online);
+        setIsOnline(online);
+        setPingLatency(json?.data?.latencyMs || latency);
+
+        if (online) {
+          // Re-sync all state from Council
+          fetchBots();
+          fetchCredentials();
+          fetchSessions();
+          fetchMemory();
+        }
+      } else {
+        setIsOnline(false);
+        setWakeError(`Council ping failed (HTTP ${res.status})`);
+      }
+    } catch (err: any) {
+      setIsOnline(false);
+      setWakeError(err?.message || 'Failed to connect to Council');
+    } finally {
+      clearInterval(timer);
+      setIsPinging(false);
     }
   };
 
@@ -832,11 +887,44 @@ export default function CouncilView({
             </span>
           </button>
 
-          {/* Online Indicator */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 text-[11px] font-mono">
-            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-            <span>{isOnline ? 'Council Online' : 'Standby'}</span>
-          </div>
+          {/* Interactive Ping / Wake Controller */}
+          <button
+            onClick={() => handleWakeOrPingCouncil(!isOnline)}
+            disabled={isPinging}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono transition shadow-xs ${
+              isPinging
+                ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400 cursor-wait'
+                : isOnline
+                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/40 text-amber-600 dark:text-amber-400 animate-pulse'
+            }`}
+            title={
+              isPinging
+                ? `Waking Council container... elapsed ${wakeSecondsElapsed}s`
+                : isOnline
+                ? `Council is live (${pingLatency ? `${pingLatency}ms` : 'active'}). Click to re-ping latency.`
+                : 'Council is on Standby (Render free tier). Click to wake container.'
+            }
+          >
+            {isPinging ? (
+              <>
+                <RefreshCw size={12} className="animate-spin text-amber-500" />
+                <span>Waking... ({wakeSecondsElapsed}s)</span>
+              </>
+            ) : isOnline ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Online{pingLatency ? ` (${pingLatency}ms)` : ''}</span>
+                <RefreshCw size={10} className="opacity-60 hover:opacity-100" />
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span className="font-semibold">Standby • Wake</span>
+                <RefreshCw size={10} className="opacity-70" />
+              </>
+            )}
+          </button>
 
           {/* + Create Bot Trigger */}
           <button
@@ -852,6 +940,35 @@ export default function CouncilView({
       {/* VIEW 1: CHAT STUDIO */}
       {studioView === 'chat' && (
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Standby Wake Alert Banner */}
+          {isOnline === false && !dismissStandbyBanner && (
+            <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-800 dark:text-amber-200 text-xs shrink-0">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={15} className="text-amber-500 shrink-0" />
+                <span>
+                  <strong>Council Standby:</strong> The AI Council service is sleeping on Render free-tier.
+                  {wakeError && <span className="ml-1 text-rose-500 font-mono">({wakeError})</span>}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleWakeOrPingCouncil(true)}
+                  disabled={isPinging}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+                >
+                  <RefreshCw size={12} className={isPinging ? 'animate-spin' : ''} />
+                  <span>{isPinging ? `Waking... (${wakeSecondsElapsed}s)` : 'Wake Council Now'}</span>
+                </button>
+                <button
+                  onClick={() => setDismissStandbyBanner(true)}
+                  className="p-1 text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-white rounded"
+                  title="Dismiss notice"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          )}
           {/* Active Bot Bar & Tabs */}
           <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             {/* Horizontal Bot Switcher */}
