@@ -63,74 +63,135 @@ function ensureUserSessionId(userId: string, requestedSessionId?: string): strin
 }
 
 /**
- * GET /api/v1/council/status
- * Public healthcheck ping to Council server.
- * Supports ?wake=true to wait up to 45s for Render container spin-up.
+ * Probes Council health endpoint with timeout.
  */
-publicRouter.get('/council/status', async (req: Request, res: Response) => {
-  const isWake = req.query.wake === 'true';
-  const timeoutMs = isWake ? 45000 : 10000;
-  const startTime = Date.now();
-
+async function probeCouncilHealth(timeoutMs: number = 5000): Promise<{ ok: boolean; data?: any; status?: number }> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    // 1. Try unauthenticated public /health root endpoint first
-    let councilRes = await fetch(`${COUNCIL_API_URL}/health`, {
+    let res = await fetch(`${COUNCIL_API_URL}/health`, {
       signal: controller.signal,
     }).catch(() => null);
 
-    // 2. Fallback to /api/v1/health
-    if (!councilRes || !councilRes.ok) {
-      councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/health`, {
+    if (!res || !res.ok) {
+      res = await fetch(`${COUNCIL_API_URL}/api/v1/health`, {
         signal: controller.signal,
       }).catch(() => null);
     }
+
     clearTimeout(timeoutId);
 
-    const latencyMs = Date.now() - startTime;
-
-    if (councilRes && councilRes.ok) {
-      const data = await councilRes.json().catch(() => ({ status: 'ok' }));
-      return apiResponse(res, { online: true, latencyMs, ...data });
+    if (res && res.ok) {
+      const data = await res.json().catch(() => ({ status: 'ok' }));
+      return { ok: true, data, status: res.status };
     }
-    return apiResponse(res, { online: false, latencyMs, message: 'Council service responded with non-200' });
+    return { ok: false, status: res?.status };
   } catch (_err) {
-    const latencyMs = Date.now() - startTime;
-    return apiResponse(res, { online: false, latencyMs, message: 'Council service offline' });
+    return { ok: false };
   }
+}
+
+/**
+ * GET /api/v1/council/status
+ * Public healthcheck ping to Council server.
+ * When ?wake=true is passed, actively polls every 2.5s for up to 50s to wait for Render cold boot.
+ */
+publicRouter.get('/council/status', async (req: Request, res: Response) => {
+  const isWake = req.query.wake === 'true';
+  const startTime = Date.now();
+
+  if (!isWake) {
+    const result = await probeCouncilHealth(8000);
+    const latencyMs = Date.now() - startTime;
+    if (result.ok) {
+      return apiResponse(res, { online: true, latencyMs, ...result.data });
+    }
+    return apiResponse(res, {
+      online: false,
+      latencyMs,
+      message: result.status ? `Council responded with HTTP ${result.status}` : 'Council service offline',
+    });
+  }
+
+  // Active Wake loop: Render container cold start takes 25-40 seconds
+  const maxWaitMs = 50000;
+  const pollIntervalMs = 2500;
+  let attempts = 0;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    attempts++;
+    const result = await probeCouncilHealth(4000);
+    if (result.ok) {
+      const totalTimeMs = Date.now() - startTime;
+      return apiResponse(res, {
+        online: true,
+        latencyMs: totalTimeMs,
+        attempts,
+        woken: true,
+        ...result.data,
+      });
+    }
+    // Wait before next probe
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  const latencyMs = Date.now() - startTime;
+  return apiResponse(res, {
+    online: false,
+    latencyMs,
+    attempts,
+    message: 'Timeout waiting for Council container to wake up (50s elapsed)',
+  });
 });
 
 /**
  * GET /api/v1/council/ping
- * Dedicated ping endpoint returning live latency and status
+ * Dedicated ping endpoint returning live latency and status with optional wake loop
  */
 publicRouter.get('/council/ping', async (req: Request, res: Response) => {
   const isWake = req.query.wake === 'true';
-  const timeoutMs = isWake ? 45000 : 12000;
   const startTime = Date.now();
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    const councilRes = await fetch(`${COUNCIL_API_URL}/health`, {
-      signal: controller.signal,
-    }).catch(() => null);
-    clearTimeout(timeoutId);
-
+  if (!isWake) {
+    const result = await probeCouncilHealth(8000);
     const latencyMs = Date.now() - startTime;
-
-    if (councilRes && councilRes.ok) {
-      const data = await councilRes.json().catch(() => ({ status: 'ok' }));
-      return apiResponse(res, { online: true, latencyMs, timestamp: new Date().toISOString(), ...data });
-    }
-    return apiResponse(res, { online: false, latencyMs, timestamp: new Date().toISOString() });
-  } catch (_err) {
-    const latencyMs = Date.now() - startTime;
-    return apiResponse(res, { online: false, latencyMs, timestamp: new Date().toISOString() });
+    return apiResponse(res, {
+      online: result.ok,
+      latencyMs,
+      timestamp: new Date().toISOString(),
+      ...(result.data || {}),
+    });
   }
+
+  // Wake loop for ping
+  const maxWaitMs = 50000;
+  const pollIntervalMs = 2500;
+  let attempts = 0;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    attempts++;
+    const result = await probeCouncilHealth(4000);
+    if (result.ok) {
+      return apiResponse(res, {
+        online: true,
+        latencyMs: Date.now() - startTime,
+        attempts,
+        woken: true,
+        timestamp: new Date().toISOString(),
+        ...result.data,
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  return apiResponse(res, {
+    online: false,
+    latencyMs: Date.now() - startTime,
+    attempts,
+    timestamp: new Date().toISOString(),
+    message: 'Council wake-up timed out after 50s',
+  });
 });
 
 /**

@@ -1,0 +1,24 @@
+name: Render Containers Keep-Alive Heartbeat
+
+on:
+  schedule:
+    # Run every 12 minutes to beat Render's 15-minute inactivity sleep threshold
+    - cron: '*/12 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  keep-alive:
+    name: Ping Nox API & Council Services
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Nox API Server
+        run: |
+          echo "Pinging Nox API (Render)..."
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "https://nox-a1nr.onrender.com/api/v1/council/status" || echo "FAILED")
+          echo "Nox API responded with HTTP: $STATUS_CODE"
+
+      - name: Ping Council V2 Server
+        run: |
+          echo "Pinging Council V2 (Render)..."
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "https://council-cy4r.onrender.com/health" || echo "FAILED")
+          echo "Council V2 responded with HTTP: $STATUS_CODE"

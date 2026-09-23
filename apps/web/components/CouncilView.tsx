@@ -298,6 +298,13 @@ export default function CouncilView({
       setWakeSecondsElapsed((prev) => prev + 1);
     }, 1000);
 
+    // Direct gentle browser ping to Council Render domain (CORS enabled)
+    // This immediately primes Render router to boot container in parallel
+    fetch('https://council-cy4r.onrender.com/health', {
+      mode: 'cors',
+      signal: AbortSignal.timeout(45000),
+    }).catch(() => {});
+
     try {
       const startTime = Date.now();
       const endpoint = isManualWake
@@ -319,6 +326,8 @@ export default function CouncilView({
           fetchCredentials();
           fetchSessions();
           fetchMemory();
+        } else {
+          setWakeError(json?.data?.message || 'Council container wake-up timed out');
         }
       } else {
         setIsOnline(false);
@@ -946,8 +955,15 @@ export default function CouncilView({
               <div className="flex items-center gap-2">
                 <AlertCircle size={15} className="text-amber-500 shrink-0" />
                 <span>
-                  <strong>Council Standby:</strong> The AI Council service is sleeping on Render free-tier.
-                  {wakeError && <span className="ml-1 text-rose-500 font-mono">({wakeError})</span>}
+                  <strong>Council Standby:</strong>{' '}
+                  {isPinging
+                    ? wakeSecondsElapsed < 12
+                      ? 'Triggering Render container start...'
+                      : wakeSecondsElapsed < 28
+                      ? 'Render container booting (~25-35s typical for cold start)...'
+                      : 'Almost ready, waiting for port to accept traffic...'
+                    : 'The AI Council service is sleeping on Render free-tier.'}
+                  {wakeError && !isPinging && <span className="ml-1 text-rose-500 font-mono">({wakeError})</span>}
                 </span>
               </div>
               <div className="flex items-center gap-2">
