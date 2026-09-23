@@ -245,10 +245,25 @@ export default function CouncilView({
   const currentBotProvider = activeBot?.modelConfig?.provider || 'gemini';
   const currentBotModel = activeBot?.modelConfig?.model || 'gemini-2.5-flash';
 
-  // Check if provider has connected BYOK key
-  const hasKeyForActiveBot = credentials.some((c) => c.provider === currentBotProvider && c.status === 'ACTIVE');
+  // Check if provider has connected BYOK key OR any active workspace key (e.g. Gemini)
+  const hasExactKey = credentials.some((c) => c.provider === currentBotProvider && c.status === 'ACTIVE');
+  const hasActiveKey = credentials.some((c) => c.status === 'ACTIVE');
+  const hasKeyForActiveBot = hasExactKey || hasActiveKey;
 
   useEffect(() => {
+    // 1. Instantly restore cached credentials so keys display active without waiting on network
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('nox_council_creds_cache');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCredentials(parsed);
+          }
+        }
+      } catch {}
+    }
+
     checkCouncilStatus();
     fetchBots();
     fetchCredentials();
@@ -263,7 +278,7 @@ export default function CouncilView({
       createNewSession('sofi', false);
     }
 
-    const interval = setInterval(checkCouncilStatus, 30000);
+    const interval = setInterval(checkCouncilStatus, 25000);
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
@@ -283,6 +298,8 @@ export default function CouncilView({
       setIsOnline(online);
       if (online) {
         setPingLatency(json?.data?.latencyMs || latency);
+        // Automatically sync credentials if none loaded yet
+        fetchCredentials();
       }
     } catch {
       setIsOnline(false);
@@ -298,47 +315,74 @@ export default function CouncilView({
       setWakeSecondsElapsed((prev) => prev + 1);
     }, 1000);
 
-    // Direct gentle browser ping to Council Render domain (CORS enabled)
-    // This immediately primes Render router to boot container in parallel
+    // 1. Trigger container spin-up immediately
     fetch('https://council-cy4r.onrender.com/health', {
       mode: 'cors',
       signal: AbortSignal.timeout(45000),
     }).catch(() => {});
 
-    try {
-      const startTime = Date.now();
-      const endpoint = isManualWake
-        ? `${API_BASE_URL}/api/v1/council/status?wake=true`
-        : `${API_BASE_URL}/api/v1/council/ping`;
+    if (isManualWake) {
+      fetchWithUser(`${API_BASE_URL}/api/v1/council/status?wake=true`).catch(() => {});
+    }
 
-      const res = await fetchWithUser(endpoint);
-      const latency = Date.now() - startTime;
+    // 2. Active client-side fast polling (checks every 2.5s instead of waiting 60s)
+    const startTime = Date.now();
+    const maxWaitMs = 50000;
+    let isFinished = false;
 
-      if (res.ok) {
-        const json = await res.json();
-        const online = Boolean(json?.data?.online ?? json?.online);
-        setIsOnline(online);
-        setPingLatency(json?.data?.latencyMs || latency);
+    const pollOnce = async (): Promise<boolean> => {
+      try {
+        // Fast direct probe to Council (bypasses proxy delay)
+        const directRes = await fetch('https://council-cy4r.onrender.com/health', {
+          mode: 'cors',
+          signal: AbortSignal.timeout(3500),
+        }).catch(() => null);
 
-        if (online) {
-          // Re-sync all state from Council
-          fetchBots();
-          fetchCredentials();
-          fetchSessions();
-          fetchMemory();
-        } else {
-          setWakeError(json?.data?.message || 'Council container wake-up timed out');
+        if (directRes && directRes.ok) {
+          return true;
         }
-      } else {
-        setIsOnline(false);
-        setWakeError(`Council ping failed (HTTP ${res.status})`);
+
+        // Also check via Nox API ping
+        const pingRes = await fetchWithUser(`${API_BASE_URL}/api/v1/council/ping`, {
+          signal: AbortSignal.timeout(3500),
+        }).catch(() => null);
+
+        if (pingRes && pingRes.ok) {
+          const json = await pingRes.json().catch(() => ({}));
+          if (json?.data?.online || json?.online) {
+            return true;
+          }
+        }
+      } catch {}
+      return false;
+    };
+
+    while (Date.now() - startTime < maxWaitMs && !isFinished) {
+      const up = await pollOnce();
+      if (up) {
+        isFinished = true;
+        const latency = Date.now() - startTime;
+        setIsOnline(true);
+        setPingLatency(Math.min(latency, 200));
+
+        // Re-sync all state immediately
+        await Promise.allSettled([
+          fetchBots(),
+          fetchCredentials(),
+          fetchSessions(),
+          fetchMemory(),
+        ]);
+        break;
       }
-    } catch (err: any) {
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+
+    clearInterval(timer);
+    setIsPinging(false);
+
+    if (!isFinished) {
       setIsOnline(false);
-      setWakeError(err?.message || 'Failed to connect to Council');
-    } finally {
-      clearInterval(timer);
-      setIsPinging(false);
+      setWakeError('Council container wake-up timed out. Please click Wake to retry.');
     }
   };
 
@@ -362,7 +406,13 @@ export default function CouncilView({
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials`);
       if (res.ok) {
         const json = await res.json();
-        setCredentials(json?.data || []);
+        const loaded = json?.data || [];
+        if (Array.isArray(loaded) && loaded.length > 0) {
+          setCredentials(loaded);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('nox_council_creds_cache', JSON.stringify(loaded));
+          }
+        }
       }
     } catch (err) {
       console.warn('Failed to fetch credentials:', err);

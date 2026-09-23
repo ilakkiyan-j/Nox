@@ -420,11 +420,10 @@ privateRouter.get('/council/provider-credentials', async (req: Request, res: Res
       creds = data.data || data || [];
     }
 
-    // Workspace fallback: If 0 credentials found for this account, query primary owner
-    if (creds.length === 0 && userId !== 'cmttwn1zg0000h4iajwvjrlf0') {
+    // Workspace fallback: If 0 credentials found for this account, query active workspace credentials via primary owner
+    if (creds.length === 0) {
       const fallbackRes = await fetch(`${COUNCIL_API_URL}/api/v1/provider-credentials`, {
         headers: {
-          Authorization: req.headers.authorization || '',
           'X-User-Id': 'cmttwn1zg0000h4iajwvjrlf0',
         },
       }).catch(() => null);
