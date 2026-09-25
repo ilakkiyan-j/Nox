@@ -282,6 +282,22 @@ export default function CouncilView({
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
+  // Active in-session keep-alive heartbeat: runs every 3 minutes while Nox is open
+  // This guarantees Council will NEVER sleep during an active work session
+  useEffect(() => {
+    const keepAlive = () => {
+      fetch('https://council-cy4r.onrender.com/health', {
+        mode: 'cors',
+        signal: AbortSignal.timeout(10000),
+      }).catch(() => {});
+
+      fetchWithUser(`${API_BASE_URL}/api/v1/council/ping`).catch(() => {});
+    };
+
+    const keepAliveInterval = setInterval(keepAlive, 3 * 60 * 1000);
+    return () => clearInterval(keepAliveInterval);
+  }, []);
+
   useEffect(() => {
     if (studioView === 'chat') {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -315,74 +331,99 @@ export default function CouncilView({
       setWakeSecondsElapsed((prev) => prev + 1);
     }, 1000);
 
-    // 1. Trigger container spin-up immediately
-    fetch('https://council-cy4r.onrender.com/health', {
-      mode: 'cors',
-      signal: AbortSignal.timeout(45000),
-    }).catch(() => {});
-
-    if (isManualWake) {
-      fetchWithUser(`${API_BASE_URL}/api/v1/council/status?wake=true`).catch(() => {});
-    }
-
-    // 2. Active client-side fast polling (checks every 2.5s instead of waiting 60s)
     const startTime = Date.now();
     const maxWaitMs = 50000;
     let isFinished = false;
 
-    const pollOnce = async (): Promise<boolean> => {
+    // Helper to finish waking and re-sync state immediately
+    const onWakeSuccess = async (latencyMs?: number) => {
+      if (isFinished) return;
+      isFinished = true;
+      clearInterval(timer);
+      setIsOnline(true);
+      if (latencyMs) setPingLatency(Math.min(latencyMs, 250));
+      setIsPinging(false);
+
+      // Re-sync all state from Council immediately
+      await Promise.allSettled([
+        fetchBots(),
+        fetchCredentials(),
+        fetchSessions(),
+        fetchMemory(),
+      ]);
+    };
+
+    // 1. Kick off backend wake request with open connection
+    if (isManualWake) {
+      fetchWithUser(`${API_BASE_URL}/api/v1/council/status?wake=true`, {
+        signal: AbortSignal.timeout(52000),
+      })
+        .then(async (res) => {
+          if (res.ok) {
+            const json = await res.json().catch(() => ({}));
+            if (json?.data?.online) {
+              onWakeSuccess(json?.data?.latencyMs || Date.now() - startTime);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 2. Direct gentle browser ping to Render (CORS enabled)
+    fetch('https://council-cy4r.onrender.com/health', {
+      mode: 'cors',
+      signal: AbortSignal.timeout(50000),
+    })
+      .then((res) => {
+        if (res.ok) {
+          onWakeSuccess(Date.now() - startTime);
+        }
+      })
+      .catch(() => {});
+
+    // 3. Fast recurring probe loop (checks every 2s with 8s probe timeout)
+    while (Date.now() - startTime < maxWaitMs && !isFinished) {
       try {
-        // Fast direct probe to Council (bypasses proxy delay)
         const directRes = await fetch('https://council-cy4r.onrender.com/health', {
           mode: 'cors',
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(8000),
         }).catch(() => null);
 
         if (directRes && directRes.ok) {
-          return true;
+          await onWakeSuccess(Date.now() - startTime);
+          break;
         }
 
-        // Also check via Nox API ping
         const pingRes = await fetchWithUser(`${API_BASE_URL}/api/v1/council/ping`, {
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(8000),
         }).catch(() => null);
 
         if (pingRes && pingRes.ok) {
           const json = await pingRes.json().catch(() => ({}));
           if (json?.data?.online || json?.online) {
-            return true;
+            await onWakeSuccess(Date.now() - startTime);
+            break;
           }
         }
       } catch {}
-      return false;
-    };
 
-    while (Date.now() - startTime < maxWaitMs && !isFinished) {
-      const up = await pollOnce();
-      if (up) {
-        isFinished = true;
-        const latency = Date.now() - startTime;
-        setIsOnline(true);
-        setPingLatency(Math.min(latency, 200));
-
-        // Re-sync all state immediately
-        await Promise.allSettled([
-          fetchBots(),
-          fetchCredentials(),
-          fetchSessions(),
-          fetchMemory(),
-        ]);
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 2500));
+      if (isFinished) break;
+      await new Promise((r) => setTimeout(r, 2000));
     }
 
-    clearInterval(timer);
-    setIsPinging(false);
-
     if (!isFinished) {
+      clearInterval(timer);
+      setIsPinging(false);
+      // Final sanity sync check before declaring failure
+      try {
+        const finalCheck = await fetch('https://council-cy4r.onrender.com/health', { mode: 'cors' });
+        if (finalCheck.ok) {
+          onWakeSuccess(Date.now() - startTime);
+          return;
+        }
+      } catch {}
       setIsOnline(false);
-      setWakeError('Council container wake-up timed out. Please click Wake to retry.');
+      setWakeError('Council container cold start timed out. Click to retry.');
     }
   };
 
@@ -1342,7 +1383,7 @@ export default function CouncilView({
             {displayedBots.map((b) => {
               const prov = b.modelConfig?.provider || 'gemini';
               const mod = b.modelConfig?.model || 'default';
-              const keyActive = credentials.some((c) => c.provider === prov && c.status === 'ACTIVE');
+              const keyActive = credentials.some((c) => (c.provider === prov || c.status === 'ACTIVE') && c.status === 'ACTIVE');
 
               return (
                 <div
