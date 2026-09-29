@@ -24,8 +24,8 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
   const [role, setRole] = useState('USER');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setErrorMsg('');
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`);
@@ -39,12 +39,12 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
       setErrorMsg('Cannot connect to backend API server');
       console.error(err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(true);
   }, []);
 
   const handleGeneratePassword = () => {

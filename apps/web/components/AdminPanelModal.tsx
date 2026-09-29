@@ -23,8 +23,8 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
   const [role, setRole] = useState('USER');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setErrorMsg('');
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`);
@@ -38,12 +38,12 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
       setErrorMsg('Cannot connect to backend API server');
       console.error(err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isOpen) fetchUsers();
+    if (isOpen) fetchUsers(true);
   }, [isOpen]);
 
   if (!isOpen) return null;

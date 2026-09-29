@@ -63,7 +63,7 @@ export default function Home() {
       setCurrentUser(user);
       if (user?.role === 'ADMIN') setAdminMode(true);
       setViewMode('app');
-      fetchAllData();
+      fetchAllData(true);
     } else {
       setCurrentUser(null);
       clearAuth();
@@ -72,7 +72,112 @@ export default function Home() {
     }
   };
 
-  const fetchAllData = async () => {
+  const fetchDashboard = async (silent = true) => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/dashboard`);
+      if (res.status === 401) { handleSignOut(); setIsAuthOpen(true); return; }
+      const data = await res.json();
+      if (data?.success) setDashboardData(data.data);
+    } catch (err) {
+      console.error('Fetch dashboard error:', err);
+    }
+  };
+
+  const fetchGoals = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/goals`);
+      const data = await res.json();
+      if (data?.success) setGoals(data.data);
+    } catch (err) {
+      console.error('Fetch goals error:', err);
+    }
+  };
+
+  const fetchRoadmaps = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/roadmaps`);
+      const data = await res.json();
+      if (data?.success) setRoadmaps(data.data);
+    } catch (err) {
+      console.error('Fetch roadmaps error:', err);
+    }
+  };
+
+  const fetchTasks = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/tasks`);
+      const data = await res.json();
+      if (data?.success) setTasks(data.data);
+    } catch (err) {
+      console.error('Fetch tasks error:', err);
+    }
+  };
+
+  const fetchLearning = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/learning`);
+      const data = await res.json();
+      if (data?.success) setLearning(data.data);
+    } catch (err) {
+      console.error('Fetch learning error:', err);
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/events`);
+      const data = await res.json();
+      if (data?.success) setEvents(data.data);
+    } catch (err) {
+      console.error('Fetch events error:', err);
+    }
+  };
+
+  const fetchHabits = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/habits`);
+      const data = await res.json();
+      if (data?.success) setHabits(data.data);
+    } catch (err) {
+      console.error('Fetch habits error:', err);
+    }
+  };
+
+  const fetchNotesAndFolders = async () => {
+    try {
+      const [notesRes, foldersRes] = await Promise.all([
+        fetchWithUser(`${API_BASE}/notes`),
+        fetchWithUser(`${API_BASE}/folders`),
+      ]);
+      const [notesData, foldersData] = await Promise.all([notesRes.json(), foldersRes.json()]);
+      if (notesData?.success) setNotes(notesData.data);
+      if (foldersData?.success) setFolders(foldersData.data);
+    } catch (err) {
+      console.error('Fetch notes error:', err);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/notifications`);
+      const data = await res.json();
+      if (data?.success) setNotifications(data.data);
+    } catch (err) {
+      console.error('Fetch notifications error:', err);
+    }
+  };
+
+  const fetchReminders = async () => {
+    try {
+      const res = await fetchWithUser(`${API_BASE}/reminders`);
+      const data = await res.json();
+      if (data?.success) setReminders(data.data);
+    } catch (err) {
+      console.error('Fetch reminders error:', err);
+    }
+  };
+
+  const fetchAllData = async (isInitial = false) => {
     const token = getToken();
     if (!token) {
       handleSignOut();
@@ -80,7 +185,9 @@ export default function Home() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (isInitial) {
+      setLoading(true);
+    }
     try {
       const responses = await Promise.all([
         fetchWithUser(`${API_BASE}/dashboard`),
@@ -149,7 +256,7 @@ export default function Home() {
 
       const handleFocus = () => {
         const token = getToken();
-        if (token) fetchAllData();
+        if (token) fetchAllData(false);
       };
       window.addEventListener('focus', handleFocus);
 
@@ -159,7 +266,7 @@ export default function Home() {
         setCurrentUser(user);
         if (user?.role === 'ADMIN') setAdminMode(true);
         setViewMode('app');
-        fetchAllData();
+        fetchAllData(true);
       } else {
         setViewMode('landing');
         setLoading(false);
@@ -188,7 +295,7 @@ export default function Home() {
       setAdminMode(false);
     }
     setViewMode('app');
-    setTimeout(() => fetchAllData(), 100);
+    setTimeout(() => fetchAllData(true), 100);
   };
 
   const renderActiveView = () => {
@@ -199,7 +306,7 @@ export default function Home() {
             data={dashboardData}
             loading={loading}
             onNavigate={(tab) => setActiveTab(tab)}
-            onRefresh={fetchAllData}
+            onRefresh={() => fetchDashboard(true)}
           />
         );
       case 'council':
@@ -209,13 +316,36 @@ export default function Home() {
             tasks={tasks}
             events={events}
             habits={habits}
-            onRefresh={fetchAllData}
+            onRefresh={() => {
+              fetchTasks();
+              fetchEvents();
+              fetchHabits();
+              fetchDashboard(true);
+            }}
           />
         );
       case 'goals':
-        return <GoalsView goals={goals} onRefresh={fetchAllData} />;
+        return (
+          <GoalsView
+            goals={goals}
+            onRefresh={() => {
+              fetchGoals();
+              fetchDashboard(true);
+            }}
+          />
+        );
       case 'roadmaps':
-        return <RoadmapsView roadmaps={roadmaps} goals={goals} onRefresh={fetchAllData} />;
+        return (
+          <RoadmapsView
+            roadmaps={roadmaps}
+            goals={goals}
+            onRefresh={() => {
+              fetchRoadmaps();
+              fetchGoals();
+              fetchDashboard(true);
+            }}
+          />
+        );
       case 'tasks':
         return (
           <TasksView
@@ -224,28 +354,53 @@ export default function Home() {
             roadmaps={roadmaps}
             learning={learning}
             events={events}
-            onRefresh={fetchAllData}
+            onRefresh={() => {
+              fetchTasks();
+              fetchDashboard(true);
+            }}
           />
         );
       case 'learning':
-        return <LearningView learning={learning} onRefresh={fetchAllData} />;
+        return (
+          <LearningView
+            learning={learning}
+            onRefresh={() => {
+              fetchLearning();
+              fetchDashboard(true);
+            }}
+          />
+        );
       case 'events':
         return (
           <EventsView
             events={events}
-            onRefresh={fetchAllData}
+            onRefresh={() => {
+              fetchEvents();
+              fetchDashboard(true);
+            }}
             onNavigate={(tab) => setActiveTab(tab)}
           />
         );
       case 'habits':
-        return <HabitsView habits={habits} onRefresh={fetchAllData} />;
+        return (
+          <HabitsView
+            habits={habits}
+            onRefresh={() => {
+              fetchHabits();
+              fetchDashboard(true);
+            }}
+          />
+        );
       case 'notes':
         return (
           <NotesView
             notes={notes}
             folders={folders}
             onOpenQuickCapture={() => setIsQuickCaptureOpen(true)}
-            onRefresh={fetchAllData}
+            onRefresh={() => {
+              fetchNotesAndFolders();
+              fetchDashboard(true);
+            }}
           />
         );
       case 'time':
@@ -255,18 +410,27 @@ export default function Home() {
           <RemindersView
             reminders={reminders}
             events={events}
-            onRefresh={fetchAllData}
+            onRefresh={() => {
+              fetchReminders();
+              fetchEvents();
+              fetchDashboard(true);
+            }}
           />
         );
       case 'notifications':
-        return <NotificationsView notifications={notifications} onRefresh={fetchAllData} />;
+        return (
+          <NotificationsView
+            notifications={notifications}
+            onRefresh={fetchNotifications}
+          />
+        );
       default:
         return (
           <DashboardView
             data={dashboardData}
             loading={loading}
             onNavigate={(tab) => setActiveTab(tab)}
-            onRefresh={fetchAllData}
+            onRefresh={() => fetchDashboard(true)}
           />
         );
     }
@@ -308,7 +472,7 @@ export default function Home() {
               onOpenSearch={() => setIsSearchOpen(true)}
               onOpenQuickCapture={() => setIsQuickCaptureOpen(true)}
               notifications={notifications}
-              onRefreshNotifications={fetchAllData}
+              onRefreshNotifications={fetchNotifications}
               onBackToLanding={handleSignOut}
               onOpenProfile={() => setIsProfileOpen(true)}
               currentUser={currentUser}
@@ -334,7 +498,11 @@ export default function Home() {
           <QuickCaptureModal
             isOpen={isQuickCaptureOpen}
             onClose={() => setIsQuickCaptureOpen(false)}
-            onSaved={fetchAllData}
+            onSaved={() => {
+              fetchNotesAndFolders();
+              fetchTasks();
+              fetchDashboard(true);
+            }}
             folders={folders}
           />
 
