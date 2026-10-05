@@ -36,7 +36,7 @@ export function createApp() {
     res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
     res.setHeader(
       'Permissions-Policy',
-      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), sync-xhr=()',
+      'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), midi=(), sync-xhr=()',
     );
     if (isProduction) {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -104,6 +104,7 @@ export function createApp() {
   app.use('/api/v1', healthRouter);
   app.use('/api/v1', authPublicRouter);
   app.use('/api/v1', councilPublicRouter);
+  app.use('/audio', councilPublicRouter);
   app.use('/api/v1', messagesPublicRouter);
 
   // All routes below /api/v1 require authentication.

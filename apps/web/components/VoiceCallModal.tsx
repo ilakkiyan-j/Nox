@@ -121,6 +121,37 @@ export default function VoiceCallModal({
     };
   }, [callConnected, isOpen, isHoldingToTalk, inputMode]);
 
+  const speakWithBrowserTts = (text: string, onComplete?: () => void) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.05;
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(
+        (v) =>
+          (v.name.includes('Natural') ||
+            v.name.includes('Female') ||
+            v.name.includes('Samantha') ||
+            v.name.includes('Ava') ||
+            v.name.includes('Google UK English Female') ||
+            v.name.includes('Zira')) &&
+          v.lang.startsWith('en')
+      ) || voices.find((v) => v.lang.startsWith('en'));
+      if (preferred) utterance.voice = preferred;
+
+      utterance.onend = () => {
+        onComplete?.();
+      };
+      utterance.onerror = () => {
+        onComplete?.();
+      };
+      window.speechSynthesis.speak(utterance);
+    } else {
+      onComplete?.();
+    }
+  };
+
   const handleStartCall = async () => {
     setCallConnected(true);
     setMicError(null);
@@ -138,17 +169,20 @@ export default function VoiceCallModal({
       setCallDuration((prev) => prev + 1);
     }, 1000);
 
-    // 3. Play greeting aloud
-    await playVoiceAudio(`Hey Ilakkiyan! I'm right here with you. Ready for our live session?`);
-
-    // 4. Request microphone & initialize speech recognition
+    // 3. Request microphone & initialize speech recognition immediately
     initSpeechRecognition();
+
+    // 4. Play greeting aloud concurrently (non-blocking)
+    playVoiceAudio(`Hey Ilakkiyan! I'm right here with you. Ready for our live session?`);
   };
 
   const handleEndCall = () => {
     shouldListenRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
@@ -157,6 +191,7 @@ export default function VoiceCallModal({
       try { recognitionRef.current.stop(); } catch (_) {}
     }
     setIsSpeaking(false);
+    isSpeakingRef.current = false;
     setIsListening(false);
     setIsThinking(false);
     setIsHoldingToTalk(false);
@@ -164,6 +199,7 @@ export default function VoiceCallModal({
   };
 
   const initSpeechRecognition = () => {
+    if (typeof window === 'undefined') return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setMicError('Web Speech API is not supported in this browser. You can type spoken messages below.');
@@ -220,13 +256,12 @@ export default function VoiceCallModal({
       };
 
       recognition.onerror = (err: any) => {
-        console.warn('Speech recognition event:', err?.error);
         if (err?.error === 'not-allowed') {
-          setMicError('Microphone permission blocked. Please enable microphone permissions.');
+          setMicError('Microphone permission blocked. Please enable microphone permissions in your browser.');
           setIsListening(false);
           shouldListenRef.current = false;
         } else if (err?.error === 'no-speech') {
-          // Normal timeout on quiet - will auto-restart if shouldListen is true
+          // Normal timeout on quiet pauses
         }
       };
 
@@ -234,9 +269,13 @@ export default function VoiceCallModal({
         setIsListening(false);
         // Auto-restart if we should still be listening and bot is not speaking
         if (shouldListenRef.current && !isSpeakingRef.current && inputMode === 'open-mic') {
-          try {
-            recognition.start();
-          } catch (_) {}
+          setTimeout(() => {
+            if (shouldListenRef.current && !isSpeakingRef.current) {
+              try {
+                recognition.start();
+              } catch (_) {}
+            }
+          }, 150);
         }
       };
 
@@ -319,21 +358,35 @@ export default function VoiceCallModal({
       setIsSpeaking(true);
       isSpeakingRef.current = true;
       
-      // Pause speech recognition while bot is speaking to avoid hearing itself
+      // Pause speech recognition while bot is speaking to avoid feedback loops
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (_) {}
       }
 
+      const onFinish = () => {
+        setIsSpeaking(false);
+        isSpeakingRef.current = false;
+        if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (_) {}
+        }
+      };
+
       let targetUrl = directAudioUrl;
 
       if (!targetUrl) {
-        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/voice/test`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
-        });
-        const data = await res.json();
-        targetUrl = data?.data?.audioUrl;
+        try {
+          const res = await fetchWithUser(`${API_BASE_URL}/api/v1/voice/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            targetUrl = data?.data?.audioUrl;
+          }
+        } catch (_) {}
       }
 
       if (targetUrl) {
@@ -341,34 +394,26 @@ export default function VoiceCallModal({
         const audio = new Audio(fullUrl);
         audioPlayerRef.current = audio;
 
-        audio.onended = () => {
-          setIsSpeaking(false);
-          isSpeakingRef.current = false;
-          // Automatically re-listen in Open Mic mode
-          if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
-            try {
-              recognitionRef.current.start();
-            } catch (_) {}
-          }
-        };
-
+        audio.onended = onFinish;
         audio.onerror = () => {
-          setIsSpeaking(false);
-          isSpeakingRef.current = false;
-          if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
-            try { recognitionRef.current.start(); } catch (_) {}
-          }
+          speakWithBrowserTts(text, onFinish);
         };
 
-        await audio.play();
+        try {
+          await audio.play();
+        } catch (_) {
+          speakWithBrowserTts(text, onFinish);
+        }
       } else {
-        setIsSpeaking(false);
-        isSpeakingRef.current = false;
+        speakWithBrowserTts(text, onFinish);
       }
     } catch (err) {
       console.error('TTS playback error:', err);
       setIsSpeaking(false);
       isSpeakingRef.current = false;
+      if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch (_) {}
+      }
     }
   };
 
@@ -396,6 +441,7 @@ export default function VoiceCallModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           botId: botSlug,
+          persona: botSlug,
           message: userText.trim(),
           conversationId,
         }),
@@ -404,6 +450,10 @@ export default function VoiceCallModal({
       setIsThinking(false);
 
       if (data.success && data.data) {
+        if (data.data.conversationId) {
+          setConversationId(data.data.conversationId);
+        }
+
         const botMsg: CallMessage = {
           id: `b_${Date.now()}`,
           sender: 'bot',
@@ -413,16 +463,35 @@ export default function VoiceCallModal({
         };
         setMessages((prev) => [...prev, botMsg]);
 
-        // Play audio directly
+        // Play audio directly with browser TTS fallback
         if (data.data.audioUrl) {
           playVoiceAudio(botMsg.text, data.data.audioUrl);
         } else {
           playVoiceAudio(botMsg.text);
         }
+      } else {
+        const errorText = data?.error?.message || "I couldn't complete that voice turn. Let's try again.";
+        const botMsg: CallMessage = {
+          id: `b_${Date.now()}`,
+          sender: 'bot',
+          text: errorText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, botMsg]);
+        playVoiceAudio(errorText);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Voice call turn error:', err);
       setIsThinking(false);
+      const fallbackText = "I'm having trouble connecting to the voice service right now. Please try again in a moment.";
+      const botMsg: CallMessage = {
+        id: `b_${Date.now()}`,
+        sender: 'bot',
+        text: fallbackText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, botMsg]);
+      playVoiceAudio(fallbackText);
     }
   };
 

@@ -984,4 +984,21 @@ export function startCouncilKeepAliveWorker(): NodeJS.Timeout {
   return timer;
 }
 
+// GET /api/v1/audio/:filename - Public audio proxy to Council
+publicRouter.get('/audio/:filename', async (req: Request, res: Response) => {
+  try {
+    const filename = Array.isArray(req.params.filename) ? req.params.filename[0] : req.params.filename;
+    const upstreamRes = await fetch(`${COUNCIL_API_URL}/audio/${encodeURIComponent(filename)}`);
+    if (!upstreamRes.ok) {
+      return res.status(upstreamRes.status).send('Audio not found');
+    }
+    const contentType = upstreamRes.headers.get('content-type') || 'audio/mpeg';
+    res.setHeader('Content-Type', contentType);
+    const arrayBuffer = await upstreamRes.arrayBuffer();
+    return res.status(200).send(Buffer.from(arrayBuffer));
+  } catch (err: unknown) {
+    return res.status(502).send('Failed to stream audio file');
+  }
+});
+
 export { publicRouter as councilPublicRouter, privateRouter as councilPrivateRouter };
