@@ -44,15 +44,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
 
   const [animatingHabitId, setAnimatingHabitId] = useState<string | null>(null);
 
-  if (loading && !data) {
-    return (
-      <div className="p-12 text-center text-slate-500 dark:text-slate-400 space-y-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs max-w-xl mx-auto my-8">
-        <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-        <p className="text-sm font-medium">Loading your personal command center...</p>
-      </div>
-    );
-  }
-
+  // Destructure data safely — hooks must come BEFORE any early returns
   const {
     tasks = [],
     activeGoals = [],
@@ -93,6 +85,27 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
     const goalsCount = activeGoals.length;
     return Math.min(100, (completedTasksToday * 15) + (activeHabitStreaks * 10) + (goalsCount * 5) + 30);
   }, [tasks, habits, activeGoals]);
+
+  // Generate 14-day history dates for habit heatmap
+  const habitPastDays = useMemo(() => {
+    const days: string[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(d.toISOString().split('T')[0]);
+    }
+    return days;
+  }, []);
+
+  // Early return AFTER all hooks — safe for React's hook ordering rules
+  if (loading && !data) {
+    return (
+      <div className="p-12 text-center text-slate-500 dark:text-slate-400 space-y-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs max-w-xl mx-auto my-8">
+        <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p className="text-sm font-medium">Loading your personal command center...</p>
+      </div>
+    );
+  }
 
   const handleHabitCheckin = async (habitId: string) => {
     try {
@@ -152,17 +165,6 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
       },
     });
   };
-
-  // Generate 14-day history dates for habit heatmap
-  const habitPastDays = useMemo(() => {
-    const days: string[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      days.push(d.toISOString().split('T')[0]);
-    }
-    return days;
-  }, []);
 
   return (
     <div className="space-y-6 w-full max-w-full min-w-0 overflow-hidden">
