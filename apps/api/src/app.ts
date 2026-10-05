@@ -21,7 +21,7 @@ import remindersRouter from './routes/reminders';
 import notificationsRouter from './routes/notifications';
 import timeRouter from './routes/time';
 import searchRouter from './routes/search';
-import messagesRouter from './routes/messages';
+import { messagesPublicRouter, messagesPrivateRouter } from './routes/messages';
 import { councilPublicRouter, councilPrivateRouter } from './routes/council';
 
 export function createApp() {
@@ -104,6 +104,7 @@ export function createApp() {
   app.use('/api/v1', healthRouter);
   app.use('/api/v1', authPublicRouter);
   app.use('/api/v1', councilPublicRouter);
+  app.use('/api/v1', messagesPublicRouter);
 
   // All routes below /api/v1 require authentication.
   app.use('/api/v1', requireAuth);
@@ -119,7 +120,7 @@ export function createApp() {
   app.use('/api/v1', notesRouter);
   app.use('/api/v1', remindersRouter);
   app.use('/api/v1', notificationsRouter);
-  app.use('/api/v1', messagesRouter);
+  app.use('/api/v1', messagesPrivateRouter);
   app.use('/api/v1', timeRouter);
   app.use('/api/v1', searchRouter);
   app.use('/api/v1', councilPrivateRouter);

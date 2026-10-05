@@ -4,7 +4,85 @@ import { apiError, apiResponse, HttpError } from '../lib/http';
 import { getOwnedMessage } from '../lib/ownership';
 import { isSafeString, limitString, parseSafeUrl } from '../lib/validate';
 
-const router = Router();
+export const messagesPublicRouter = Router();
+export const messagesPrivateRouter = Router();
+const router = messagesPrivateRouter;
+
+// POST /api/v1/messages/telegram — Public Telegram Webhook Endpoint
+messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Response) => {
+  try {
+    const update = req.body ?? {};
+    const msg = update?.message || update?.channel_post || update?.edited_message;
+    if (!msg) {
+      return res.status(200).json({ ok: true });
+    }
+
+    const text = typeof msg.text === 'string' ? msg.text : typeof msg.caption === 'string' ? msg.caption : '';
+    if (!text && !msg.document && !msg.photo) {
+      return res.status(200).json({ ok: true });
+    }
+
+    // Identify user: look for first active user or admin
+    let user = await db.user.findFirst({
+      where: { role: 'ADMIN' },
+      select: { id: true },
+    });
+    if (!user) {
+      user = await db.user.findFirst({
+        select: { id: true },
+      });
+    }
+
+    if (!user) {
+      return res.status(200).json({ ok: true });
+    }
+
+    // Extract sender name
+    const senderName = msg.from
+      ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'Telegram User'
+      : msg.chat?.title || 'Telegram';
+
+    // Auto extract URL if any
+    let validatedUrl: string | null = null;
+    if (text) {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const match = urlRegex.exec(String(text));
+      if (match) {
+        const urlCheck = parseSafeUrl(match[0]);
+        if (urlCheck.ok) {
+          validatedUrl = urlCheck.value ?? null;
+        }
+      }
+    }
+
+    const content = text || (msg.document ? `[Document: ${msg.document.file_name || 'file'}]` : '[Photo/Media]');
+
+    await db.message.create({
+      data: {
+        userId: user.id,
+        content: limitString(content.trim(), 10000),
+        source: 'TELEGRAM',
+        sender: limitString(senderName, 100),
+        url: validatedUrl,
+        metadata: JSON.stringify(update),
+      },
+    });
+
+    // Directly reply back in Telegram via webhook response
+    if (msg.chat?.id) {
+      return res.status(200).json({
+        method: 'sendMessage',
+        chat_id: msg.chat.id,
+        text: '✅ Saved to NOX Messages!',
+      });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('Telegram webhook error:', err);
+    return res.status(200).json({ ok: true });
+  }
+});
 
 // GET /api/v1/messages — list messages
 router.get('/messages', async (req: Request, res: Response) => {
