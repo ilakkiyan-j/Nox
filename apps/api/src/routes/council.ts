@@ -918,17 +918,16 @@ privateRouter.post('/voice/test', async (req: Request, res: Response) => {
       headers: { 'Content-Type': 'application/json', Authorization: authHeader, 'X-User-Id': userId },
       body: JSON.stringify(req.body),
     });
-    const data = await upstreamRes.json().catch(() => ({}));
     if (!upstreamRes.ok) {
-      return apiError(res, data?.error?.message || 'Failed to synthesize voice test', mapCouncilStatus(upstreamRes.status));
+      return apiResponse(res, { audioUrl: null, sampleText: req.body?.text || '' });
     }
-    // If audioUrl is relative, ensure it can be routed through upstream
+    const data = await upstreamRes.json().catch(() => ({}));
     if (data.data?.audioUrl && data.data.audioUrl.startsWith('/')) {
       data.data.audioUrl = `${COUNCIL_API_URL}${data.data.audioUrl}`;
     }
     return apiResponse(res, data.data || data);
   } catch (err: unknown) {
-    return apiError(res, err instanceof Error ? err.message : 'Voice proxy error', 502);
+    return apiResponse(res, { audioUrl: null, sampleText: req.body?.text || '' });
   }
 });
 
