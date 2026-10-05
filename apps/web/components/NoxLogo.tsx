@@ -14,35 +14,31 @@ export default function NoxLogo({
   showText = false,
 }: NoxLogoProps) {
   const sizeMap = {
-    xs: { box: 'w-6 h-6 rounded-md p-0.5', text: 'text-sm', sub: 'text-[8px]' },
-    sm: { box: 'w-8 h-8 rounded-lg p-1', text: 'text-base', sub: 'text-[9px]' },
-    md: { box: 'w-10 h-10 rounded-xl p-1', text: 'text-xl', sub: 'text-[10px]' },
-    lg: { box: 'w-14 h-14 rounded-2xl p-1.5', text: 'text-2xl', sub: 'text-xs' },
-    xl: { box: 'w-20 h-20 rounded-3xl p-2', text: 'text-4xl', sub: 'text-sm' },
+    xs: { img: 'w-7 h-7 rounded-lg', text: 'text-sm', sub: 'text-[8px]' },
+    sm: { img: 'w-9 h-9 rounded-xl', text: 'text-base', sub: 'text-[9px]' },
+    md: { img: 'w-12 h-12 rounded-2xl', text: 'text-2xl', sub: 'text-[10px]' },
+    lg: { img: 'w-16 h-16 rounded-2xl', text: 'text-3xl', sub: 'text-xs' },
+    xl: { img: 'w-24 h-24 rounded-3xl', text: 'text-5xl', sub: 'text-sm' },
   };
 
-  const { box, text, sub } = sizeMap[size] || sizeMap.md;
+  const { img, text, sub } = sizeMap[size] || sizeMap.md;
 
   const logoImage = (
-    <div
-      className={`${box} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 overflow-hidden`}
-    >
-      <img
-        src="/Nox_logo.png"
-        alt="NOX Logo"
-        className="w-full h-full object-contain"
-      />
-    </div>
+    <img
+      src="/Nox_logo.png"
+      alt="NOX Logo"
+      className={`${img} object-cover shadow-xs shrink-0 transition-transform group-hover:scale-105`}
+    />
   );
 
   if (!showText) {
-    return <div className={`inline-flex items-center ${className}`}>{logoImage}</div>;
+    return <div className={`inline-flex items-center shrink-0 ${className}`}>{logoImage}</div>;
   }
 
   return (
-    <div className={`flex items-center space-x-3 cursor-pointer group ${className}`}>
+    <div className={`flex items-center space-x-3.5 cursor-pointer group ${className}`}>
       {logoImage}
-      <div className="flex flex-col">
+      <div className="flex flex-col justify-center">
         <span className={`font-display ${text} font-black tracking-wider text-slate-900 dark:text-slate-100 leading-none`}>
           NOX
         </span>
