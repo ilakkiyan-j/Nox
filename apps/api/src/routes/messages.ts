@@ -8,7 +8,9 @@ export const messagesPublicRouter = Router();
 export const messagesPrivateRouter = Router();
 const router = messagesPrivateRouter;
 
-// POST /api/v1/messages/telegram — Public Telegram Webhook Endpoint
+import { COUNCIL_API_URL, getUserCouncilContext } from './council';
+
+// POST /api/v1/messages/telegram — Public Telegram Webhook Endpoint (Supports ?persona=sofi or custom bot)
 messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Response) => {
   try {
     const update = req.body ?? {};
@@ -22,18 +24,24 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       return res.status(200).json({ ok: true });
     }
 
+    // Determine target persona (e.g. ?persona=sofi or /sofi message command)
+    let requestedPersona = (req.query.persona as string) || (req.query.bot as string) || '';
+    if (!requestedPersona && text.startsWith('/sofi')) {
+      requestedPersona = 'sofi';
+    }
+
     // Identify user: prioritize real user account (e.g. non-internal email) or most recent active user
     let user = await db.user.findFirst({
       where: {
         NOT: { email: { endsWith: '@nox.internal' } },
       },
       orderBy: { createdAt: 'desc' },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!user) {
       user = await db.user.findFirst({
         orderBy: { createdAt: 'desc' },
-        select: { id: true },
+        select: { id: true, name: true },
       });
     }
 
@@ -46,7 +54,65 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'Telegram User'
       : msg.chat?.title || 'Telegram';
 
-    // Auto extract URL if any
+    // ---- 1. If routed to an AI Persona (e.g. Sofi) ----
+    if (requestedPersona) {
+      const cleanPrompt = text.replace(/^\/sofi\s*/i, '').trim() || text;
+
+      try {
+        const userContext = await getUserCouncilContext(user.id);
+        const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': user.id,
+          },
+          body: JSON.stringify({
+            persona: requestedPersona.toLowerCase(),
+            botId: requestedPersona.toLowerCase(),
+            message: cleanPrompt,
+            sessionId: `telegram_${msg.chat.id}`,
+            userContext,
+          }),
+        });
+
+        const councilData = await councilRes.json().catch(() => ({}));
+        const replyText =
+          councilData?.data?.reply ||
+          councilData?.reply ||
+          `Hi ${user.name || 'there'}! I'm Sofi. I'm connected to your NOX OS. How can I help you today?`;
+
+        // Save conversation message
+        await db.message.create({
+          data: {
+            userId: user.id,
+            content: `[Sofi Chat] User: ${cleanPrompt}\nSofi: ${replyText}`,
+            source: 'TELEGRAM',
+            sender: `Sofi (${senderName})`,
+            metadata: JSON.stringify({ update, persona: requestedPersona }),
+          },
+        });
+
+        if (msg.chat?.id) {
+          return res.status(200).json({
+            method: 'sendMessage',
+            chat_id: msg.chat.id,
+            text: replyText,
+          });
+        }
+      } catch (aiErr) {
+        console.error('Council AI Error in Telegram Webhook:', aiErr);
+        if (msg.chat?.id) {
+          return res.status(200).json({
+            method: 'sendMessage',
+            chat_id: msg.chat.id,
+            text: "💖 I'm waking up my Council brain. Please give me a moment and message me again!",
+          });
+        }
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ---- 2. Standard Message / Share Ingest Mode ----
     let validatedUrl: string | null = null;
     if (text) {
       const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -72,7 +138,6 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       },
     });
 
-    // Directly reply back in Telegram via webhook response
     if (msg.chat?.id) {
       return res.status(200).json({
         method: 'sendMessage',

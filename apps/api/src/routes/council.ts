@@ -4,7 +4,7 @@ import { apiError, apiResponse } from '../lib/http';
 
 const publicRouter = Router();
 const privateRouter = Router();
-const COUNCIL_API_URL = (process.env.COUNCIL_API_URL || 'http://localhost:4100').replace(/\/+$/, '');
+export const COUNCIL_API_URL = (process.env.COUNCIL_API_URL || 'http://localhost:4100').replace(/\/+$/, '');
 
 /**
  * Maps upstream Council HTTP statuses so that upstream 401/403 errors NEVER
@@ -18,7 +18,7 @@ function mapCouncilStatus(status: number): number {
 /**
  * Helper to fetch complete live Nox user context across all domains
  */
-async function getUserCouncilContext(userId: string) {
+export async function getUserCouncilContext(userId: string) {
   const [user, tasks, habits, events, reminders, goals, roadmaps, learnings] = await Promise.all([
     db.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
     db.task.findMany({ where: { userId, status: { in: ['TODO', 'IN_PROGRESS'] } }, orderBy: { dueDate: 'asc' }, take: 35 }),
