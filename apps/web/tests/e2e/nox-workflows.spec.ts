@@ -105,21 +105,20 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
   test('should toggle interface theme between Light and Dark modes', async ({ page }) => {
     await enterWorkstation(page);
 
-    const themeToggleBtn = page.locator('button[title*="Switch to"]').first();
-    await expect(themeToggleBtn).toBeVisible();
-
-    const initialTitle = (await themeToggleBtn.getAttribute('title')) || '';
-    await themeToggleBtn.click();
-
     const htmlElem = page.locator('html');
-    if (initialTitle.toLowerCase().includes('light')) {
+    const isDarkInitially = await htmlElem.evaluate((el) => el.classList.contains('dark'));
+
+    const toggleBtn = page.locator('button[title*="Switch to"]').first();
+    await expect(toggleBtn).toBeVisible();
+    await toggleBtn.click();
+
+    await page.waitForTimeout(400);
+
+    if (isDarkInitially) {
       await expect(htmlElem).not.toHaveClass(/dark/);
     } else {
       await expect(htmlElem).toHaveClass(/dark/);
     }
-
-    // Toggle back
-    await themeToggleBtn.click();
   });
 
   test('should navigate across primary workstation tabs', async ({ page }) => {
