@@ -25,6 +25,7 @@ import NotificationsView from '../components/NotificationsView';
 import TimeView from '../components/TimeView';
 import RemindersView from '../components/RemindersView';
 import CouncilView from '../components/CouncilView';
+import MessagesView from '../components/MessagesView';
 import { API_BASE_URL, fetchWithUser, clearAuth, getToken, getStoredUser, setStoredUser } from '../lib/api';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
@@ -389,6 +390,13 @@ export default function Home() {
               fetchHabits();
               fetchDashboard(true);
             }}
+          />
+        );
+      case 'messages':
+        return (
+          <MessagesView
+            onNavigate={(tab) => setActiveTab(tab)}
+            currentUser={currentUser}
           />
         );
       case 'notes':

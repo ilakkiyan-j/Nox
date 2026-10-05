@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Target,
   CheckSquare,
@@ -17,6 +17,11 @@ import {
   Plus,
   BookOpen,
   Clock,
+  Sparkles,
+  MessageSquare,
+  Compass,
+  Check,
+  TrendingUp,
 } from 'lucide-react';
 import { NavTab } from './Navigation';
 import ConfirmModal from './ConfirmModal';
@@ -37,6 +42,8 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
+  const [animatingHabitId, setAnimatingHabitId] = useState<string | null>(null);
+
   if (loading && !data) {
     return (
       <div className="p-12 text-center text-slate-500 dark:text-slate-400 space-y-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs max-w-xl mx-auto my-8">
@@ -56,16 +63,50 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
     reminders = [],
   } = data || {};
 
+  // Time of Day Greeting
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return { text: 'Good morning', icon: '🌅' };
+    if (hour < 17) return { text: 'Good afternoon', icon: '☀️' };
+    if (hour < 21) return { text: 'Good evening', icon: '🌆' };
+    return { text: 'Good night', icon: '🌙' };
+  }, []);
+
+  // Today Date & Stats
+  const todayKey = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, []);
+
+  const todayEnd = useMemo(() => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  }, []);
+
+  // Momentum score calculation
+  const momentumScore = useMemo(() => {
+    const completedTasksToday = tasks.filter((t: any) => t.status === 'COMPLETED').length;
+    const activeHabitStreaks = habits.filter((h: any) => h.streakCount > 0).length;
+    const goalsCount = activeGoals.length;
+    return Math.min(100, (completedTasksToday * 15) + (activeHabitStreaks * 10) + (goalsCount * 5) + 30);
+  }, [tasks, habits, activeGoals]);
+
   const handleHabitCheckin = async (habitId: string) => {
     try {
+      setAnimatingHabitId(habitId);
       await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),
       });
+      setTimeout(() => setAnimatingHabitId(null), 1000);
       onRefresh();
     } catch (err) {
       console.error(err);
+      setAnimatingHabitId(null);
     }
   };
 
@@ -112,35 +153,78 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
     });
   };
 
+  // Generate 14-day history dates for habit heatmap
+  const habitPastDays = useMemo(() => {
+    const days: string[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(d.toISOString().split('T')[0]);
+    }
+    return days;
+  }, []);
+
   return (
     <div className="space-y-6 w-full max-w-full min-w-0 overflow-hidden">
-      {/* Hero Welcome Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-slate-50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 border border-slate-200/90 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs transition-colors">
-        <div>
-          <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">
-            <Zap className="w-4 h-4" />
-            <span>Personal Command Center</span>
-          </div>
-          <h1 className="font-display text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-slate-100">What matters to you right now?</h1>
-          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
-            NOX captures your personal context so you stay intentional, organized, and focused on high-leverage outcomes.
-          </p>
-        </div>
+      {/* Executive Daily Briefing & Telemetry Banner */}
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-slate-50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs relative overflow-hidden transition-colors">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <span className="text-base">{greeting.icon}</span>
+              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                {greeting.text}, Partner
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold">
+                {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+              </span>
+            </div>
 
-        <button
-          onClick={() => onNavigate('time')}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-2 shadow-sm shadow-indigo-500/20 w-fit transition-all shrink-0"
-        >
-          <span>View Vertical Time Feed</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
+            <h1 className="font-display text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+              Personal Command Center
+            </h1>
+
+            <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
+              You have <strong className="text-slate-900 dark:text-slate-100">{tasks.length} active tasks</strong>,{' '}
+              <strong className="text-slate-900 dark:text-slate-100">{upcomingEvents.length} calendar events</strong>, and{' '}
+              <strong className="text-slate-900 dark:text-slate-100">{habits.length} habits</strong> tracking on your trajectory.
+            </p>
+          </div>
+
+          {/* Quick Action Navigation Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => onNavigate('messages')}
+              className="px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Messages Stream</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('events')}
+              className="px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Gantt Timeline</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('time')}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm shadow-indigo-500/20 transition-all cursor-pointer"
+            >
+              <span>Vertical Time Flow</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Command Pulse Metric Ribbon */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* Telemetry Metric Ribbon */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
           onClick={() => onNavigate('tasks')}
-          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 flex items-center justify-between transition-all group text-left"
+          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-600 flex items-center justify-between transition-all group text-left shadow-2xs"
         >
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Focus Tasks</span>
@@ -153,7 +237,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
 
         <button
           onClick={() => onNavigate('goals')}
-          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 flex items-center justify-between transition-all group text-left"
+          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 flex items-center justify-between transition-all group text-left shadow-2xs"
         >
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Goals</span>
@@ -165,8 +249,21 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
         </button>
 
         <button
+          onClick={() => onNavigate('events')}
+          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-rose-400 dark:hover:border-rose-600 flex items-center justify-between transition-all group text-left shadow-2xs"
+        >
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Events</span>
+            <span className="text-lg font-extrabold text-slate-900 dark:text-slate-100">{upcomingEvents.length}</span>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+            <Calendar className="w-4 h-4" />
+          </div>
+        </button>
+
+        <button
           onClick={() => onNavigate('learning')}
-          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 flex items-center justify-between transition-all group text-left"
+          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-cyan-400 dark:hover:border-cyan-600 flex items-center justify-between transition-all group text-left shadow-2xs"
         >
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Learning Tracks</span>
@@ -179,7 +276,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
 
         <button
           onClick={() => onNavigate('habits')}
-          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 flex items-center justify-between transition-all group text-left"
+          className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-600 flex items-center justify-between transition-all group text-left shadow-2xs"
         >
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Habit Streaks</span>
@@ -191,15 +288,15 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
         </button>
 
         <button
-          onClick={() => onNavigate('reminders')}
-          className="col-span-2 sm:col-span-1 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 flex items-center justify-between transition-all group text-left"
+          onClick={() => onNavigate('messages')}
+          className="col-span-2 sm:col-span-1 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-600 flex items-center justify-between transition-all group text-left shadow-2xs"
         >
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Prompts</span>
-            <span className="text-lg font-extrabold text-slate-900 dark:text-slate-100">{reminders.length}</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Inbox Stream</span>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1 block">Live WhatsApp</span>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <AlarmClock className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+            <MessageSquare className="w-4 h-4" />
           </div>
         </button>
       </div>
@@ -248,55 +345,36 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                         className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all ${
                           task.status === 'COMPLETED'
                             ? 'bg-emerald-600 border-emerald-600 text-white'
-                            : 'border-slate-300 dark:border-slate-600 hover:border-emerald-600 text-transparent bg-white dark:bg-slate-800'
+                            : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500 bg-white dark:bg-slate-900'
                         }`}
+                        title="Toggle status"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5 fill-current" />
+                        {task.status === 'COMPLETED' && <Check className="w-3.5 h-3.5" />}
                       </button>
                       <div className="min-w-0">
-                        <p
-                          className={`text-xs font-semibold truncate ${
-                            task.status === 'COMPLETED' ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-200'
-                          }`}
-                        >
+                        <p className={`text-xs font-bold truncate ${task.status === 'COMPLETED' ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
                           {task.title}
                         </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {task.goal && <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">🎯 {task.goal.title}</span>}
-                          {task.dueDate && (
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              Due {new Date(task.dueDate).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
+                        {task.goal?.title && (
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium truncate block">
+                            🎯 {task.goal.title}
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex items-center space-x-2 shrink-0">
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
-                          task.priority === 'URGENT'
-                            ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
-                            : task.priority === 'HIGH'
-                            ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
-                            : 'bg-slate-200/70 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        {task.priority}
-                      </span>
+                      {task.dueDate && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                          {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
                       <button
                         onClick={() => onNavigate('tasks')}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-opacity"
                         title="Edit Task"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEntity('tasks', task.id, 'Task')}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-opacity"
-                        title="Delete Task"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -310,7 +388,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <GraduationCap className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
-                <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">Learning Tracks</h3>
+                <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">Learning Curriculum</h3>
               </div>
               <button
                 onClick={() => onNavigate('learning')}
@@ -336,7 +414,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {activeLearning.map((track: any) => {
                   const totalMods = track.modules?.length || 0;
-                  const completedMods = track.modules?.filter((m: any) => m.isCompleted)?.length || 0;
+                  const completedMods = track.modules?.filter((m: any) => m.status === 'COMPLETED')?.length || 0;
                   const pct = totalMods > 0 ? Math.round((completedMods / totalMods) * 100) : 0;
 
                   return (
@@ -347,7 +425,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 uppercase">
-                          {track.platform || 'Custom Track'}
+                          {track.type || 'COURSE'}
                         </span>
                         <span className="text-[11px] font-mono font-bold text-slate-600 dark:text-slate-300">{pct}%</span>
                       </div>
@@ -355,7 +433,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                         <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">{track.title}</h4>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
                           <BookOpen className="w-3 h-3 inline" />
-                          <span>{completedMods} of {totalMods} modules completed</span>
+                          <span>{completedMods} of {totalMods} modules</span>
                         </p>
                       </div>
                       <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -403,30 +481,16 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 uppercase">
                         {goal.status}
                       </span>
-                      <div className="flex items-center space-x-1">
-                        {goal.targetDate && (
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                            Due {new Date(goal.targetDate).toLocaleDateString()}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => onNavigate('goals')}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-opacity ml-1"
-                          title="Edit Goal"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEntity('goals', goal.id, 'Goal')}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-opacity"
-                          title="Delete Goal"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {goal.targetDate && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                          Due {new Date(goal.targetDate).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
                     <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">{goal.title}</h4>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">{goal.description}</p>
+                    {goal.description && (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">{goal.description}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -434,14 +498,14 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
           </div>
         </div>
 
-        {/* Right Column (5 spans): Habits, Reminders, Events & Notes */}
+        {/* Right Column (5 spans): Habit Streaks with Activity Heatmap, Upcoming Events, Reminders & Notes */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Habits & Streaks */}
+          {/* Habits & 14-Day Activity Heatmap Matrix */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Flame className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Habit Streaks</h3>
+                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Habits & Streaks</h3>
               </div>
               <button onClick={() => onNavigate('habits')} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
                 View Habits
@@ -460,43 +524,67 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                 </button>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {habits.map((habit: any) => {
-                  const todayLog = habit.logs?.find((l: any) => l.date === new Date().toISOString().split('T')[0]);
+                  const todayLog = habit.logs?.find((l: any) => l.date === todayKey);
                   const isCheckedToday = todayLog?.status === 'COMPLETED';
+                  const isAnimating = animatingHabitId === habit.id;
 
                   return (
-                    <div key={habit.id} className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">{habit.title}</p>
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold">🔥 {habit.streakCount} Day Streak</p>
-                      </div>
-                      <div className="flex items-center space-x-1.5">
+                    <div
+                      key={habit.id}
+                      className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-2.5 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{habit.title}</p>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold flex items-center space-x-1 mt-0.5">
+                            <span>🔥</span>
+                            <span>{habit.streakCount} Day Streak</span>
+                            {habit.bestStreak > habit.streakCount && (
+                              <span className="text-slate-400">(Best: {habit.bestStreak})</span>
+                            )}
+                          </p>
+                        </div>
+
                         <button
                           onClick={() => handleHabitCheckin(habit.id)}
-                          disabled={isCheckedToday}
-                          className={`px-3 py-1 text-[11px] rounded-lg font-semibold transition-all ${
+                          disabled={isCheckedToday || isAnimating}
+                          className={`px-3 py-1.5 text-xs rounded-lg font-bold transition-all cursor-pointer ${
                             isCheckedToday
-                              ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
-                              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
+                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 cursor-default'
+                              : isAnimating
+                              ? 'bg-amber-500 text-white scale-105'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
                           }`}
                         >
-                          {isCheckedToday ? 'Done ✓' : 'Check In'}
+                          {isCheckedToday ? 'Done ✓' : isAnimating ? 'Streak +1! 🔥' : 'Check In'}
                         </button>
-                        <button
-                          onClick={() => onNavigate('habits')}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-opacity"
-                          title="Edit Habit"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEntity('habits', habit.id, 'Habit')}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-opacity"
-                          title="Delete Habit"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      </div>
+
+                      {/* 14-Day Mini Activity Grid */}
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between">
+                        <span className="text-[9px] font-mono text-slate-400 uppercase">14-Day Activity</span>
+                        <div className="flex items-center space-x-1">
+                          {habitPastDays.map((dStr) => {
+                            const isDone = habit.logs?.some((l: any) => l.date === dStr && l.status === 'COMPLETED');
+                            const isTodayDot = dStr === todayKey;
+
+                            return (
+                              <span
+                                key={dStr}
+                                title={`${dStr}: ${isDone ? 'Completed' : 'Missed'}`}
+                                className={`w-2 h-2 rounded-xs transition-all ${
+                                  isDone
+                                    ? 'bg-emerald-500 dark:bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.4)]'
+                                    : isTodayDot
+                                    ? 'bg-slate-300 dark:bg-slate-600 ring-1 ring-amber-400'
+                                    : 'bg-slate-200 dark:bg-slate-700/60'
+                                }`}
+                              />
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   );
@@ -505,12 +593,81 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
             )}
           </div>
 
-          {/* Pending Prompts & Reminders */}
+          {/* Upcoming & Multi-Day Active Events */}
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Calendar className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Events & Schedule</h3>
+              </div>
+              <button onClick={() => onNavigate('events')} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
+                Timeline View
+              </button>
+            </div>
+
+            {upcomingEvents.length === 0 ? (
+              <div className="p-4 text-center bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 space-y-1.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400">No events scheduled on your calendar.</p>
+                <button
+                  onClick={() => onNavigate('events')}
+                  className="inline-flex items-center space-x-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Schedule event</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {upcomingEvents.map((event: any) => {
+                  const start = new Date(event.date).getTime();
+                  const end = event.endDate ? new Date(event.endDate).setHours(23, 59, 59, 999) : new Date(event.date).setHours(23, 59, 59, 999);
+                  const isOngoing = start <= todayEnd && end >= todayStart;
+
+                  return (
+                    <div
+                      key={event.id}
+                      className={`p-3 rounded-xl border flex items-center justify-between group transition-all ${
+                        isOngoing
+                          ? 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/80 ring-1 ring-emerald-500/20'
+                          : 'bg-slate-50/80 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center space-x-1.5">
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{event.title}</p>
+                          {isOngoing && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-500 text-white">
+                              Active Now
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                          📅 {new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          {event.endDate && ` – ${new Date(event.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+                          {event.startTime && ` • ${event.startTime}`}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => onNavigate('events')}
+                        className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+                        title="View Event Details"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Pending Reminders & Notes */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <AlarmClock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Timely Reminders</h3>
+                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Active Reminders</h3>
               </div>
               <button onClick={() => onNavigate('reminders')} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
                 View All
@@ -547,123 +704,9 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                         <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{reminder.title}</p>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center gap-1">
                           <Clock className="w-2.5 h-2.5 inline" />
-                          <span>{new Date(reminder.remindAt).toLocaleString()}</span>
+                          <span>{new Date(reminder.remindAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                         </p>
                       </div>
-                    </div>
-                    <button
-                      onClick={() => onNavigate('reminders')}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-opacity shrink-0"
-                    >
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Upcoming Events */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Calendar className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Upcoming Events</h3>
-              </div>
-              <button onClick={() => onNavigate('events')} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
-                View All
-              </button>
-            </div>
-
-            {upcomingEvents.length === 0 ? (
-              <div className="p-4 text-center bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 space-y-1.5">
-                <p className="text-xs text-slate-500 dark:text-slate-400">No events scheduled on your calendar.</p>
-                <button
-                  onClick={() => onNavigate('events')}
-                  className="inline-flex items-center space-x-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Schedule event</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {upcomingEvents.map((event: any) => (
-                  <div key={event.id} className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{event.title}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-1">
-                        📅 {new Date(event.date).toLocaleDateString()} {event.startTime && `• ${event.startTime}`}
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <button
-                        onClick={() => onNavigate('events')}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-opacity"
-                        title="Edit Event"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEntity('events', event.id, 'Event')}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-opacity"
-                        title="Delete Event"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Recent Quick Notes / Clipboard Captures */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <StickyNote className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Recent Captures</h3>
-              </div>
-              <button onClick={() => onNavigate('notes')} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
-                Scratchpad
-              </button>
-            </div>
-
-            {recentNotes.length === 0 ? (
-              <div className="p-4 text-center bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 space-y-1.5">
-                <p className="text-xs text-slate-500 dark:text-slate-400">Quick capture scratchpad is empty.</p>
-                <button
-                  onClick={() => onNavigate('notes')}
-                  className="inline-flex items-center space-x-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Jot down note</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {recentNotes.map((note: any) => (
-                  <div key={note.id} className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between group hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-                    <div className="space-y-1 min-w-0 pr-2">
-                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{note.title}</p>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">{note.content}</p>
-                    </div>
-                    <div className="flex items-center space-x-1 shrink-0">
-                      <button
-                        onClick={() => onNavigate('notes')}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-opacity"
-                        title="Edit Note"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEntity('notes', note.id, 'Note')}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-opacity"
-                        title="Delete Note"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -683,4 +726,3 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
     </div>
   );
 }
-

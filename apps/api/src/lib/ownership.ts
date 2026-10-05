@@ -36,6 +36,8 @@ export const getOwnedReminder = (id: string, userId: string) =>
   owned(userId, () => db.reminder.findUnique({ where: { id } }), (r: any) => r.userId);
 export const getOwnedNotification = (id: string, userId: string) =>
   owned(userId, () => db.notification.findUnique({ where: { id } }), (n: any) => n.userId);
+export const getOwnedMessage = (id: string, userId: string) =>
+  owned(userId, () => db.message.findUnique({ where: { id } }), (m: any) => m.userId);
 
 // ---- Indirectly owned models -----------------------------------------------
 

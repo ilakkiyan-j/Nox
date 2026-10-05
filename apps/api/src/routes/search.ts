@@ -22,7 +22,7 @@ router.get('/search', async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const text: TextFilter = { contains: query, mode: 'insensitive' };
 
-    const [goals, tasks, events, notes, learning] = await Promise.all([
+    const [goals, tasks, events, notes, learning, messages] = await Promise.all([
       db.goal.findMany({
         where: { userId, OR: [{ title: text }, { description: text }] },
         take: 4,
@@ -49,9 +49,14 @@ router.get('/search', async (req: Request, res: Response) => {
         take: 4,
         orderBy: { updatedAt: 'desc' },
       }),
+      db.message.findMany({
+        where: { userId, OR: [{ content: text }, { sender: text }] },
+        take: 4,
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
-    return apiResponse(res, { goals, tasks, events, notes, learning });
+    return apiResponse(res, { goals, tasks, events, notes, learning, messages });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Search failed';
     return apiError(res, message, 500);

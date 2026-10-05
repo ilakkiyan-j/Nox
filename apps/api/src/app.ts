@@ -21,6 +21,7 @@ import remindersRouter from './routes/reminders';
 import notificationsRouter from './routes/notifications';
 import timeRouter from './routes/time';
 import searchRouter from './routes/search';
+import messagesRouter from './routes/messages';
 import { councilPublicRouter, councilPrivateRouter } from './routes/council';
 
 export function createApp() {
@@ -118,6 +119,7 @@ export function createApp() {
   app.use('/api/v1', notesRouter);
   app.use('/api/v1', remindersRouter);
   app.use('/api/v1', notificationsRouter);
+  app.use('/api/v1', messagesRouter);
   app.use('/api/v1', timeRouter);
   app.use('/api/v1', searchRouter);
   app.use('/api/v1', councilPrivateRouter);

@@ -114,14 +114,23 @@ router.get('/time', async (req: Request, res: Response) => {
 
     for (const e of events) {
       const start = new Date(e.date).getTime();
+      const end = e.endDate ? new Date(e.endDate).getTime() : start;
+      const isOngoing = start <= now.getTime() && end >= todayStart.getTime();
+
+      let whenStr = new Date(e.date).toLocaleDateString();
+      if (e.endDate) {
+        whenStr = `${new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(e.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+      }
+
       push({
         type: 'EVENT',
         id: e.id,
         title: e.title,
         subtitle: e.goal?.title,
-        when: new Date(e.date).toLocaleDateString(),
+        when: whenStr,
         time: e.startTime || (e.endTime ? `ends ${e.endTime}` : undefined),
-        sortAt: start,
+        sortAt: isOngoing ? Math.max(start, now.getTime()) : start,
+        label: isOngoing ? 'Ongoing' : undefined,
       });
     }
 

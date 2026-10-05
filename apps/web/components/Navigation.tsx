@@ -18,6 +18,7 @@ import {
   Settings,
   MoreHorizontal,
   Sparkles,
+  MessageSquare,
 } from 'lucide-react';
 
 import Avatar from './Avatar';
@@ -31,6 +32,7 @@ export type NavTab =
   | 'events'
   | 'habits'
   | 'tasks'
+  | 'messages'
   | 'notes'
   | 'reminders'
   | 'time'
@@ -52,6 +54,7 @@ export const navItems: { id: NavTab; label: string; icon: any }[] = [
   { id: 'events', label: 'Events', icon: Calendar },
   { id: 'habits', label: 'Habits', icon: Flame },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+  { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'notes', label: 'Notes', icon: StickyNote },
   { id: 'reminders', label: 'Reminders', icon: AlarmClock },
   { id: 'notifications', label: 'Notifications', icon: Bell },

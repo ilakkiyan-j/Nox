@@ -7,6 +7,8 @@ const router = Router();
 router.get('/dashboard', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     const [tasks, upcomingEvents, activeGoals, activeLearning, habits, reminders, unreadNotifications, recentNotes] = await Promise.all([
       db.task.findMany({
@@ -16,9 +18,15 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         include: { goal: true, milestone: true },
       }),
       db.event.findMany({
-        where: { userId },
+        where: {
+          userId,
+          OR: [
+            { endDate: { gte: todayStart } },
+            { AND: [{ endDate: null }, { date: { gte: todayStart } }] },
+          ],
+        },
         orderBy: { date: 'asc' },
-        take: 3,
+        take: 4,
         include: { goal: true },
       }),
       db.goal.findMany({
