@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Shield, Plus, Key, Copy, Check, Trash2, RefreshCw, Users, Lock, LogOut, Sun, Moon, AlertCircle } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import NoxLogo from './NoxLogo';
 
 interface AdminDashboardViewProps {
   onSignOut: () => void;
@@ -113,9 +114,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
       {/* Header */}
       <header className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs transition-colors">
         <div className="flex items-center space-x-3.5 min-w-0">
-          <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-800/90 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
-            <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
-          </div>
+          <NoxLogo size="md" showText={false} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">NOX Admin Control Panel</h1>

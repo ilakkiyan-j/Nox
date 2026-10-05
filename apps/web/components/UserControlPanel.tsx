@@ -8,6 +8,7 @@ import {
 import { useTheme } from './ThemeContext';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import Avatar from './Avatar';
+import NoxLogo from './NoxLogo';
 
 interface UserControlPanelProps {
   isOpen: boolean;
@@ -191,9 +192,7 @@ export default function UserControlPanel({
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block" />
 
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800/90 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
-              <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
-            </div>
+            <NoxLogo size="sm" showText={false} />
             <div>
               <h1 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 leading-tight">User Control Center</h1>
               <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono uppercase tracking-wider font-semibold">NOX Personal OS · Command Hub</p>

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 import Avatar from './Avatar';
+import NoxLogo from './NoxLogo';
 
 export type NavTab =
   | 'dashboard'
@@ -79,17 +80,8 @@ export default function Navigation({ activeTab, setActiveTab, onOpenProfile, cur
       <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 p-4 justify-between shadow-sm transition-colors">
         <div className="space-y-6">
           {/* Logo Brand */}
-          <div
-            className="flex items-center space-x-3 px-3 py-2 cursor-pointer group"
-            onClick={() => setActiveTab('dashboard')}
-          >
-            <div className="w-11 h-11 rounded-xl bg-slate-950 border border-slate-800/90 flex items-center justify-center p-1.5 shadow-xs shrink-0 group-hover:scale-105 transition-transform">
-              <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <h1 className="font-display text-2xl font-extrabold tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono tracking-wide uppercase font-medium">Your Second Self</p>
-            </div>
+          <div className="px-1 py-1" onClick={() => setActiveTab('dashboard')}>
+            <NoxLogo size="md" showText />
           </div>
 
           {/* Navigation Links with Smooth Active Indicator */}

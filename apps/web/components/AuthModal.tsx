@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Layers, Mail, Lock, ArrowRight, X, Key, Eye, EyeOff } from 'lucide-react';
 import { API_BASE_URL, saveAuth } from '../lib/api';
 import DialogShell from './ui/Dialog';
+import NoxLogo from './NoxLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -54,11 +55,9 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         </button>
 
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800/90 flex items-center justify-center p-2 shadow-xs mx-auto">
-            <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
-          </div>
-          <h3 className="font-display font-bold text-2xl text-slate-900 dark:text-slate-100 tracking-wide">Sign In to NOX</h3>
+        <div className="text-center space-y-2 flex flex-col items-center">
+          <NoxLogo size="lg" showText={false} />
+          <h3 className="font-display font-bold text-2xl text-slate-900 dark:text-slate-100 tracking-wide mt-2">Sign In to NOX</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">Account credentials are provisioned by your Administrator.</p>
         </div>
 

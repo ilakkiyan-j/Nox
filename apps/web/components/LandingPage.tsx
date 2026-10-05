@@ -20,6 +20,7 @@ import {
   Moon,
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
+import NoxLogo from './NoxLogo';
 
 interface LandingPageProps {
   onEnterApp: () => void;
@@ -39,19 +40,11 @@ export default function LandingPage({ onEnterApp, onOpenLogin }: LandingPageProp
       {/* Top Header Bar */}
       <header className="sticky top-0 z-40 glass-panel bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-6 py-4 max-w-7xl mx-auto flex items-center justify-between shadow-xs transition-colors">
         <div className="flex items-center space-x-3 cursor-pointer" onClick={onEnterApp}>
-          <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-800/90 flex items-center justify-center p-1.5 shadow-xs shrink-0">
-            <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="font-display text-xl font-bold tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-300 flex items-center space-x-1.5 shadow-2xs">
-                <img src="/arixen.png" alt="Arixen" className="h-3.5 w-auto object-contain rounded-xs" />
-                <span>Arixen</span>
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono tracking-widest uppercase font-medium">Your Second Self</p>
-          </div>
+          <NoxLogo size="md" showText />
+          <span className="hidden sm:flex text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-300 items-center space-x-1.5 shadow-2xs">
+            <img src="/arixen.png" alt="Arixen" className="h-3.5 w-auto object-contain rounded-xs" />
+            <span>Arixen</span>
+          </span>
         </div>
 
         <div className="flex items-center space-x-3">

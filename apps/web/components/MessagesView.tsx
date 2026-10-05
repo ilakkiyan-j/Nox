@@ -22,6 +22,7 @@ import {
   X,
   Send,
   Zap,
+  Link2,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -47,8 +48,41 @@ interface MessagesViewProps {
   currentUser?: any;
 }
 
+// Utility: Safely decode URL-encoded strings (e.g. https%3A%2F%2F... -> https://...)
+function safeDecodeUri(text: string): string {
+  if (!text) return '';
+  try {
+    if (/%[0-9A-Fa-f]{2}/.test(text)) {
+      return decodeURIComponent(text);
+    }
+    return text;
+  } catch {
+    return text;
+  }
+}
+
+// Utility: Extract domain from URL
+function extractDomain(url: string): string {
+  try {
+    const raw = safeDecodeUri(url);
+    const parsed = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+    return parsed.hostname.replace(/^www\./, '');
+  } catch {
+    return 'Link';
+  }
+}
+
+// Utility: Extract all URLs from text
+function extractUrls(text: string): string[] {
+  const decoded = safeDecodeUri(text);
+  const regex = /(https?:\/\/[^\s]+)/g;
+  const matches = decoded.match(regex);
+  return matches ? Array.from(new Set(matches)) : [];
+}
+
 export default function MessagesView({ onNavigate, currentUser }: MessagesViewProps) {
   const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [allMessagesRaw, setAllMessagesRaw] = useState<MessageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'WHATSAPP' | 'TELEGRAM' | 'STARRED' | 'ARCHIVED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +125,13 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
       if (res.ok && data.success) {
         setMessages(data.data || []);
       }
+
+      // Fetch all for tab counts
+      const countRes = await fetchWithUser(`${API_BASE_URL}/api/v1/messages?isArchived=false`);
+      const countData = await countRes.json();
+      if (countRes.ok && countData.success) {
+        setAllMessagesRaw(countData.data || []);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -101,6 +142,16 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
   useEffect(() => {
     loadMessages();
   }, [activeFilter, searchQuery]);
+
+  const counts = useMemo(() => {
+    const raw = allMessagesRaw || [];
+    return {
+      ALL: raw.length,
+      WHATSAPP: raw.filter((m) => m.source.toUpperCase() === 'WHATSAPP').length,
+      TELEGRAM: raw.filter((m) => m.source.toUpperCase() === 'TELEGRAM').length,
+      STARRED: raw.filter((m) => m.isStarred).length,
+    };
+  }, [allMessagesRaw]);
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -183,6 +234,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
 
   const handleConvertToTask = async (msg: MessageItem) => {
     try {
+      const decodedContent = safeDecodeUri(msg.content);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/messages/${msg.id}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,28 +286,28 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
     switch (source.toUpperCase()) {
       case 'WHATSAPP':
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center space-x-1">
-            <span>💬</span>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 flex items-center space-x-1.5 shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span>WhatsApp</span>
           </span>
         );
       case 'TELEGRAM':
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 flex items-center space-x-1">
-            <span>✈️</span>
-            <span>Telegram</span>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/80 flex items-center space-x-1.5 shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+            <span>Telegram Bot</span>
           </span>
         );
       case 'SHORTCUT':
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center space-x-1">
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/80 flex items-center space-x-1.5 shadow-2xs">
             <span>⚡</span>
-            <span>iOS Shortcut</span>
+            <span>Phone Shortcut</span>
           </span>
         );
       default:
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center space-x-1.5">
             <span>📥</span>
             <span>{source}</span>
           </span>
@@ -273,30 +325,30 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
             <span>Messages & Share Ingest</span>
           </h2>
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-            Directly receive and organize forwarded messages, links, and text from WhatsApp, Telegram, or phone share shortcuts.
+            Directly receive and convert forwarded messages, articles, and job postings from Telegram, WhatsApp, or Shortcuts.
           </p>
         </div>
 
         <div className="flex items-center space-x-2.5">
           <button
-            onClick={() => setShowSetupModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center space-x-1.5 border border-slate-200 dark:border-slate-700 shadow-2xs transition-all cursor-pointer"
+            onClick={() => setShowDirectSend(!showDirectSend)}
+            className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 shadow-2xs transition-all cursor-pointer"
           >
-            <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>📱 Mobile Share Setup</span>
+            <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Quick Ingest</span>
           </button>
 
           <button
-            onClick={() => setShowDirectSend(!showDirectSend)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm shadow-emerald-500/20 transition-all cursor-pointer shrink-0"
+            onClick={() => setShowSetupModal(true)}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
           >
-            {showDirectSend ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            <span>{showDirectSend ? 'Close' : 'Quick Message'}</span>
+            <Smartphone className="w-4 h-4" />
+            <span>Setup Phone Shortcuts</span>
           </button>
         </div>
       </div>
 
-      {/* Manual Message Input Drawer */}
+      {/* Manual Quick Ingest Simulation Box */}
       {showDirectSend && (
         <form
           onSubmit={handleSendMessage}
@@ -319,7 +371,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
           <textarea
             value={manualText}
             onChange={(e) => setManualText(e.target.value)}
-            placeholder="Paste forwarded WhatsApp chat snippet, article link, or thoughts..."
+            placeholder="Paste forwarded WhatsApp chat snippet, article link, or job posting..."
             rows={3}
             className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
             required
@@ -370,50 +422,70 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700/60 overflow-x-auto">
+        <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl text-xs font-semibold border border-slate-200 dark:border-slate-700/60 overflow-x-auto">
           <button
             onClick={() => setActiveFilter('ALL')}
-            className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap cursor-pointer flex items-center space-x-1.5 ${
               activeFilter === 'ALL'
                 ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            All Stream
+            <span>All Stream</span>
+            {counts.ALL > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-mono">
+                {counts.ALL}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveFilter('WHATSAPP')}
-            className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap cursor-pointer flex items-center space-x-1.5 ${
               activeFilter === 'WHATSAPP'
                 ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            WhatsApp
+            <span>💬 WhatsApp</span>
+            {counts.WHATSAPP > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono">
+                {counts.WHATSAPP}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveFilter('TELEGRAM')}
-            className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap cursor-pointer flex items-center space-x-1.5 ${
               activeFilter === 'TELEGRAM'
                 ? 'bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            Telegram
+            <span>✈️ Telegram</span>
+            {counts.TELEGRAM > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-mono">
+                {counts.TELEGRAM}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveFilter('STARRED')}
-            className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap cursor-pointer flex items-center space-x-1.5 ${
               activeFilter === 'STARRED'
                 ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            Starred
+            <span>⭐ Starred</span>
+            {counts.STARRED > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-mono">
+                {counts.STARRED}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveFilter('ARCHIVED')}
-            className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
               activeFilter === 'ARCHIVED'
                 ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -427,174 +499,219 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search messages or senders..."
+            placeholder="Search messages, links, or senders..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full sm:w-64 pl-9 pr-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+            className="w-full sm:w-72 pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
           />
         </div>
       </div>
 
       {/* Messages Stream Grid */}
       {loading ? (
-        <div className="py-16 text-center text-slate-400 dark:text-slate-500 space-y-2">
-          <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-medium">Loading messages...</p>
+        <div className="py-20 text-center text-slate-400 dark:text-slate-500 space-y-3">
+          <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-medium">Assembling message stream...</p>
         </div>
       ) : messages.length === 0 ? (
-        <div className="p-10 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400">
-            <MessageSquare className="w-6 h-6" />
+        <div className="p-12 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400">
+            <MessageSquare className="w-7 h-7" />
           </div>
-          <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">
-            No Messages Found
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            {activeFilter === 'ARCHIVED'
-              ? 'No archived messages.'
-              : 'Share messages directly from WhatsApp or iOS/Android Shortcuts using your personal API endpoint.'}
-          </p>
+          <div className="space-y-1">
+            <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">
+              No Messages Found
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+              {activeFilter === 'ARCHIVED'
+                ? 'You do not have any archived messages.'
+                : 'Forward messages, job links, or notes directly to your Telegram bot or WhatsApp share shortcut.'}
+            </p>
+          </div>
           <div className="pt-2 flex justify-center space-x-3">
             <button
               onClick={() => setShowSetupModal(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm"
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-2 shadow-sm cursor-pointer"
             >
               <Smartphone className="w-4 h-4" />
-              <span>View Mobile Shortcut Guide</span>
+              <span>View Telegram & Shortcut Setup</span>
             </button>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border shadow-xs space-y-3.5 relative transition-all ${
-                msg.isStarred
-                  ? 'border-amber-300 dark:border-amber-700/80 ring-1 ring-amber-400/20'
-                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              {/* Card Header: Source, Sender, Timestamp, Actions */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-2">
-                  {getSourceBadge(msg.source)}
-                  {msg.sender && (
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[150px]">
-                      {msg.sender}
-                    </span>
-                  )}
-                </div>
+          {messages.map((msg) => {
+            const decodedContent = safeDecodeUri(msg.content);
+            const urls = extractUrls(msg.content);
+            const isPureUrl = urls.length === 1 && decodedContent.trim() === urls[0];
 
-                <div className="flex items-center space-x-1">
-                  <button
-                    onClick={() => handleToggleStar(msg.id, msg.isStarred)}
-                    className={`p-1.5 rounded-lg border text-xs transition-all ${
-                      msg.isStarred
-                        ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-500'
-                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-amber-500'
-                    }`}
-                    title={msg.isStarred ? 'Starred' : 'Star message'}
-                  >
-                    <Star className="w-3.5 h-3.5 fill-current" />
-                  </button>
+            return (
+              <div
+                key={msg.id}
+                className={`p-5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border shadow-xs space-y-4 relative transition-all flex flex-col justify-between ${
+                  msg.isStarred
+                    ? 'border-amber-300 dark:border-amber-600/80 ring-2 ring-amber-400/20'
+                    : 'border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md'
+                }`}
+              >
+                <div className="space-y-3.5">
+                  {/* Card Header: Source, Sender, Timestamp, Actions */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      {getSourceBadge(msg.source)}
+                      {msg.sender && (
+                        <div className="flex items-center space-x-1.5 min-w-0">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                            {msg.sender}
+                          </span>
+                        </div>
+                      )}
+                    </div>
 
-                  <button
-                    onClick={() => handleToggleArchive(msg.id, msg.isArchived)}
-                    className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs"
-                    title={msg.isArchived ? 'Unarchive' : 'Archive'}
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(msg.id)}
-                    className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs"
-                    title="Delete message"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Message Content Body */}
-              <p className="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
-                {msg.content}
-              </p>
-
-              {/* URL Attachment if present */}
-              {msg.url && (
-                <a
-                  href={msg.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1.5 font-medium truncate"
-                >
-                  <Globe className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{msg.url}</span>
-                  <ExternalLink className="w-3 h-3 shrink-0 ml-auto" />
-                </a>
-              )}
-
-              {/* Footer: Date & 1-Click Conversions */}
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {new Date(msg.createdAt).toLocaleString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-
-                <div className="flex items-center space-x-2">
-                  {msg.convertedType ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1">
-                      <Check className="w-3 h-3" />
-                      <span>Converted to {msg.convertedType}</span>
-                    </span>
-                  ) : (
-                    <>
+                    <div className="flex items-center space-x-1 shrink-0">
                       <button
-                        onClick={() => handleConvertToTask(msg)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold flex items-center space-x-1 cursor-pointer transition-all"
-                        title="Create an actionable task from this message"
+                        onClick={() => handleToggleStar(msg.id, msg.isStarred)}
+                        className={`p-1.5 rounded-lg border text-xs transition-all cursor-pointer ${
+                          msg.isStarred
+                            ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-500'
+                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-amber-500'
+                        }`}
+                        title={msg.isStarred ? 'Starred' : 'Star message'}
                       >
-                        <CheckSquare className="w-3 h-3" />
-                        <span>+ Task</span>
+                        <Star className={`w-3.5 h-3.5 ${msg.isStarred ? 'fill-current' : ''}`} />
                       </button>
 
                       <button
-                        onClick={() => handleConvertToNote(msg)}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold flex items-center space-x-1 cursor-pointer transition-all"
-                        title="Save as permanent note"
+                        onClick={() => handleToggleArchive(msg.id, msg.isArchived)}
+                        className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs cursor-pointer"
+                        title={msg.isArchived ? 'Unarchive' : 'Archive'}
                       >
-                        <StickyNote className="w-3 h-3" />
-                        <span>+ Note</span>
+                        <Archive className="w-3.5 h-3.5" />
                       </button>
-                    </>
+
+                      <button
+                        onClick={() => handleDelete(msg.id)}
+                        className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs cursor-pointer"
+                        title="Delete message"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Message Content Body */}
+                  {!isPureUrl && (
+                    <div className="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed space-y-1 font-normal select-text">
+                      {decodedContent}
+                    </div>
                   )}
+
+                  {/* Interactive Smart Link Cards if URLs are detected */}
+                  {urls.map((link, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 flex items-center justify-between gap-3 group transition-colors hover:border-indigo-400 dark:hover:border-indigo-600"
+                    >
+                      <div className="flex items-center space-x-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                          <Globe className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100 truncate">
+                            {extractDomain(link)}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
+                            {link}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <button
+                          onClick={() => handleCopy(link, `link-${msg.id}-${idx}`)}
+                          className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-xs cursor-pointer"
+                          title="Copy Link"
+                        >
+                          {copiedKey === `link-${msg.id}-${idx}` ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-xs flex items-center justify-center"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer: Timestamp & 1-Click Action Conversions */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 mt-2">
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {new Date(msg.createdAt).toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+
+                  <div className="flex items-center space-x-2">
+                    {msg.convertedType ? (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1.5">
+                        <Check className="w-3 h-3" />
+                        <span>Converted to {msg.convertedType}</span>
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleConvertToTask(msg)}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold flex items-center space-x-1.5 cursor-pointer transition-all shadow-2xs"
+                          title="Create an actionable task from this message"
+                        >
+                          <CheckSquare className="w-3.5 h-3.5" />
+                          <span>+ Task</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleConvertToNote(msg)}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold flex items-center space-x-1.5 cursor-pointer transition-all shadow-2xs"
+                          title="Save as permanent note"
+                        >
+                          <StickyNote className="w-3.5 h-3.5" />
+                          <span>+ Note</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* MOBILE SETUP MODAL HELPER */}
       {showSetupModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl space-y-6 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <div className="flex items-center space-x-2">
                   <Smartphone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                   <h3 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
-                    Phone "Share Sheet" Shortcut Setup
+                    Phone & Telegram Direct Ingest Setup
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Share text, links, or notes directly from WhatsApp, Telegram, or any mobile browser to NOX with 1 tap.
+                  Share text, links, job postings, or notes directly to NOX with 1 tap.
                 </p>
               </div>
               <button
@@ -606,7 +723,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
             </div>
 
             {/* Quick Credentials Info Box */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3 text-xs">
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3 text-xs">
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-slate-700 dark:text-slate-300">Your NOX Ingest API URL:</span>
@@ -618,7 +735,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
                     <span>{copiedKey === 'url' ? 'Copied!' : 'Copy URL'}</span>
                   </button>
                 </div>
-                <code className="block p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200 break-all">
+                <code className="block p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200 break-all">
                   {apiEndpointUrl}
                 </code>
               </div>
@@ -634,42 +751,31 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
                     <span>{copiedKey === 'auth' ? 'Copied!' : 'Copy Header'}</span>
                   </button>
                 </div>
-                <code className="block p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200 truncate">
-                  Bearer {token.slice(0, 20)}...
+                <code className="block p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200 truncate">
+                  Bearer {token.slice(0, 25)}...
                 </code>
               </div>
             </div>
 
             {/* Step-by-Step Instructions */}
             <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-                <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center space-x-2">
-                  <span>🍏 iPhone (Apple Shortcuts)</span>
+              <div className="p-4 rounded-2xl border border-sky-200 dark:border-sky-800/60 bg-sky-50/50 dark:bg-sky-950/20 space-y-2">
+                <h4 className="font-bold text-sm text-sky-900 dark:text-sky-200 flex items-center space-x-2">
+                  <span>✈️ Telegram Bot (Automatic & Realtime)</span>
                 </h4>
-                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 dark:text-slate-300 leading-relaxed">
-                  <li>Open the built-in <strong>Shortcuts</strong> app on your iPhone and tap <strong>+</strong>.</li>
-                  <li>Name it <strong>"Send to NOX"</strong> and check <strong>"Show in Share Sheet"</strong>.</li>
-                  <li>Add action: <strong>Get contents of URL</strong>:
-                    <ul className="list-disc list-inside pl-4 pt-1 space-y-0.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                      <li>URL: <code className="text-emerald-600 dark:text-emerald-400">{apiEndpointUrl}</code></li>
-                      <li>Method: <code>POST</code></li>
-                      <li>Header: <code>Authorization</code> = <code>Bearer YOUR_TOKEN</code></li>
-                      <li>Request Body: JSON <code>content</code> = <i>Shortcut Input</i>, <code>source</code> = <code>WHATSAPP</code></li>
-                    </ul>
-                  </li>
-                  <li>Add action: <strong>Show Notification</strong> ("Saved to NOX ✅").</li>
-                </ol>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Your Telegram Bot is active! Forward any job posting, link, or message in Telegram to your bot. It will be instantly ingested into NOX and reply with a confirmation.
+                </p>
               </div>
 
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
                 <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                   <span>🤖 Android (HTTP Shortcuts App)</span>
                 </h4>
                 <ol className="list-decimal list-inside space-y-1.5 text-slate-600 dark:text-slate-300 leading-relaxed">
-                  <li>Install free app <strong>HTTP Shortcuts</strong> from Google Play Store.</li>
-                  <li>Create a new shortcut named <strong>"Send to NOX"</strong>.</li>
-                  <li>Check <strong>"Show in Share Menu"</strong> in shortcut settings.</li>
-                  <li>Set Method to <code>POST</code>, URL to <code>{apiEndpointUrl}</code>, add Header <code>Authorization: Bearer &lt;token&gt;</code>, and Body to <code>&#123;"content": "&#123;text&#125;", "source": "WHATSAPP"&#125;</code>.</li>
+                  <li>In HTTP Shortcuts, set Method to <code>POST</code> and URL to <code>{apiEndpointUrl}</code>.</li>
+                  <li>In Request Headers, add <code>Authorization: Bearer &lt;token&gt;</code> and <code>Content-Type: application/json</code>.</li>
+                  <li>In Request Body, select <strong>Custom Text</strong>, content-type <code>application/json</code>, body <code>&#123;"content": "&#123;text&#125;", "source": "WHATSAPP"&#125;</code>.</li>
                 </ol>
               </div>
             </div>
@@ -677,7 +783,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setShowSetupModal(false)}
-                className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold cursor-pointer hover:opacity-90"
               >
                 Got It
               </button>

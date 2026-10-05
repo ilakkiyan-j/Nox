@@ -5,6 +5,7 @@ import { Search, Plus, Bell, Sun, Moon } from 'lucide-react';
 import NotificationsDropdown from './NotificationsDropdown';
 import { useTheme } from './ThemeContext';
 import Avatar from './Avatar';
+import NoxLogo from './NoxLogo';
 
 interface HeaderProps {
   activeTabTitle: string;
@@ -40,11 +41,8 @@ export default function Header({
       {/* Left: Brand Logo on Mobile & Tab Title */}
       <div className="flex items-center space-x-2.5 min-w-0">
         {/* Mobile Brand Logo */}
-        <div className="flex items-center space-x-2 md:hidden shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800/90 flex items-center justify-center p-1 shadow-2xs shrink-0">
-            <img src="/Nox_logo.png" alt="NOX Logo" className="w-full h-full object-contain" />
-          </div>
-          <h1 className="font-display font-bold text-lg tracking-wider text-slate-900 dark:text-slate-100">NOX</h1>
+        <div className="md:hidden shrink-0">
+          <NoxLogo size="sm" showText={false} />
         </div>
 
         <div className="h-4 w-px bg-slate-200 dark:border-slate-800 md:hidden shrink-0" />
