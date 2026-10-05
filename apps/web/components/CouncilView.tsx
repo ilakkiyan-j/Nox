@@ -29,6 +29,7 @@ import {
   PhoneCall,
   Mic,
 } from 'lucide-react';
+import { TelegramIcon } from './ui/BrandIcons';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
 import VoiceCallModal from './VoiceCallModal';
@@ -1859,8 +1860,8 @@ export default function CouncilView({
               {/* Telegram Bot Integration */}
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">✈️</span>
+                  <div className="flex items-center gap-2.5">
+                    <TelegramIcon className="w-5 h-5 text-sky-500 shrink-0" />
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Telegram Bot Integration</h4>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400">

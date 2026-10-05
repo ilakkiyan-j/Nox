@@ -25,8 +25,6 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       return res.status(200).json({ ok: true });
     }
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN || '8921805890:AAGX-kfGVB-_KBEGNAEKzJ2n1JVNCTj5UWo';
-
     // Determine target persona (defaults to sofi if direct chat or /sofi or voice note)
     let requestedPersona = (req.query.persona as string) || (req.query.bot as string) || '';
     if (!requestedPersona && (isVoice || text.startsWith('/sofi') || msg.chat?.type === 'private')) {
@@ -52,6 +50,24 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       return res.status(200).json({ ok: true });
     }
 
+    // Resolve bot token dynamically from Council backend
+    let botToken = process.env.TELEGRAM_BOT_TOKEN || '';
+    if (requestedPersona) {
+      try {
+        const botInfoRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/${encodeURIComponent(requestedPersona.toLowerCase())}`, {
+          headers: { 'X-User-Id': user.id },
+        });
+        if (botInfoRes.ok) {
+          const botJson = (await botInfoRes.json()) as any;
+          if (botJson?.data?.telegramBotToken) {
+            botToken = botJson.data.telegramBotToken;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch dynamic bot token for persona:', requestedPersona);
+      }
+    }
+
     // Extract sender name
     const senderName = msg.from
       ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'Telegram User'
@@ -66,8 +82,8 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
         if (fileId && botToken) {
           // Get file path from Telegram API
           const fileInfoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
-          const fileInfo = await fileInfoRes.json();
-          if (fileInfo.ok && fileInfo.result?.file_path) {
+          const fileInfo = (await fileInfoRes.json()) as any;
+          if (fileInfo?.ok && fileInfo.result?.file_path) {
             const telegramAudioUrl = `https://api.telegram.org/file/bot${botToken}/${fileInfo.result.file_path}`;
             console.log(`[Telegram Voice Ingest] Downloaded voice note from ${telegramAudioUrl}`);
             
@@ -99,17 +115,6 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           audioUrl = `${COUNCIL_API_URL}${audioUrl}`;
         }
 
-        // Save conversation message
-        await db.message.create({
-          data: {
-            userId: user.id,
-            content: `[Sofi Voice Call] User: ${transcribedText}\nSofi: ${replyText}`,
-            source: 'TELEGRAM',
-            sender: `Sofi (${senderName})`,
-            metadata: JSON.stringify({ update, persona: requestedPersona, audioUrl }),
-          },
-        });
-
         if (msg.chat?.id) {
           if (audioUrl && botToken) {
             // Send Voice Audio Note back to Telegram!
@@ -120,7 +125,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
                 body: JSON.stringify({
                   chat_id: msg.chat.id,
                   voice: audioUrl,
-                  caption: `💖 ${replyText}`,
+                  caption: replyText,
                 }),
               });
               return res.status(200).json({ ok: true });
@@ -132,7 +137,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           return res.status(200).json({
             method: 'sendMessage',
             chat_id: msg.chat.id,
-            text: `💖 ${replyText}`,
+            text: replyText,
           });
         }
       } catch (voiceErr) {
@@ -141,7 +146,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           return res.status(200).json({
             method: 'sendMessage',
             chat_id: msg.chat.id,
-            text: "💖 I received your voice note! My synthesizer is tuning up, message me again in a moment.",
+            text: "I received your voice note! My synthesizer is tuning up, message me again in a moment.",
           });
         }
       }
@@ -173,18 +178,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
         const replyText =
           councilData?.data?.reply ||
           councilData?.reply ||
-          `Hi ${user.name || 'there'}! I'm Sofi. I'm connected to your NOX OS. How can I help you today?`;
-
-        // Save conversation message
-        await db.message.create({
-          data: {
-            userId: user.id,
-            content: `[Sofi Chat] User: ${cleanPrompt}\nSofi: ${replyText}`,
-            source: 'TELEGRAM',
-            sender: `Sofi (${senderName})`,
-            metadata: JSON.stringify({ update, persona: requestedPersona }),
-          },
-        });
+          `Hi ${user.name || 'there'}! I'm connected to your NOX OS. How can I help you today?`;
 
         if (msg.chat?.id) {
           return res.status(200).json({
@@ -199,7 +193,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           return res.status(200).json({
             method: 'sendMessage',
             chat_id: msg.chat.id,
-            text: "💖 I'm waking up my Council brain. Please give me a moment and message me again!",
+            text: "I'm waking up my Council brain. Please give me a moment and message me again!",
           });
         }
       }

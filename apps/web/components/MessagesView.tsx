@@ -24,6 +24,7 @@ import {
   Zap,
   Link2,
 } from 'lucide-react';
+import { TelegramIcon, WhatsAppIcon, ShortcutsIcon, WebhookIcon } from './ui/BrandIcons';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 
@@ -287,28 +288,36 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
       case 'WHATSAPP':
         return (
           <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 flex items-center space-x-1.5 shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             <span>WhatsApp</span>
           </span>
         );
       case 'TELEGRAM':
         return (
           <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/80 flex items-center space-x-1.5 shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
-            <span>Telegram Bot</span>
+            <TelegramIcon className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+            <span>Telegram</span>
           </span>
         );
       case 'SHORTCUT':
+      case 'IOS_SHORTCUT':
         return (
           <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/80 flex items-center space-x-1.5 shadow-2xs">
-            <span>⚡</span>
+            <ShortcutsIcon className="w-3.5 h-3.5 text-purple-500 shrink-0" />
             <span>Phone Shortcut</span>
+          </span>
+        );
+      case 'WEBHOOK':
+        return (
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 flex items-center space-x-1.5 shadow-2xs">
+            <WebhookIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>Webhook Ingest</span>
           </span>
         );
       default:
         return (
           <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center space-x-1.5">
-            <span>📥</span>
+            <Share2 className="w-3 h-3 text-slate-400 shrink-0" />
             <span>{source}</span>
           </span>
         );
@@ -446,7 +455,8 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            <span>💬 WhatsApp</span>
+            <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <span>WhatsApp</span>
             {counts.WHATSAPP > 0 && (
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono">
                 {counts.WHATSAPP}
@@ -461,7 +471,8 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            <span>✈️ Telegram</span>
+            <TelegramIcon className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+            <span>Telegram</span>
             {counts.TELEGRAM > 0 && (
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-mono">
                 {counts.TELEGRAM}
@@ -476,7 +487,8 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            <span>⭐ Starred</span>
+            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+            <span>Starred</span>
             {counts.STARRED > 0 && (
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-mono">
                 {counts.STARRED}

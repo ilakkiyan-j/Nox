@@ -1,7 +1,25 @@
 'use client';
 
-import React, { useState } from 'react';
-import { StickyNote, Folder, Link as LinkIcon, Trash2, Edit2, ExternalLink, Plus, X, Save, Maximize2, Copy, Check, Eye } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  StickyNote,
+  Folder,
+  Link as LinkIcon,
+  Trash2,
+  Edit2,
+  ExternalLink,
+  Plus,
+  X,
+  Save,
+  Maximize2,
+  Copy,
+  Check,
+  Eye,
+  LayoutGrid,
+  List,
+  Search,
+  Clock,
+} from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
 import DialogShell from './ui/Dialog';
@@ -17,31 +35,65 @@ interface NotesViewProps {
 
 export default function NotesView({ notes, folders, onOpenQuickCapture, onRefresh }: NotesViewProps) {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchQuery, setSearchQuery] = useState('');
   const [editingNote, setEditingNote] = useState<any | null>(null);
   const [viewingNote, setViewingNote] = useState<any | null>(null);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [studioNote, setStudioNote] = useState<any | null>(null);
   const [copied, setCopied] = useState(false);
-
-  // Modal Dialog States
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
     onConfirm: () => void;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
   const [promptState, setPromptState] = useState<{
     isOpen: boolean;
     title: string;
-    placeholder?: string;
+    placeholder: string;
     initialValue?: string;
     onSubmit: (val: string) => void;
-  }>({ isOpen: false, title: '', onSubmit: () => {} });
+  }>({
+    isOpen: false,
+    title: '',
+    placeholder: '',
+    initialValue: '',
+    onSubmit: () => {},
+  });
 
-  const filteredNotes = selectedFolderId
-    ? notes.filter((n) => n.folderId === selectedFolderId)
-    : notes;
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMode = localStorage.getItem('nox_notes_view_mode');
+      if (savedMode === 'grid' || savedMode === 'list') {
+        setViewMode(savedMode);
+      }
+    }
+  }, []);
+
+  const handleToggleViewMode = (mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nox_notes_view_mode', mode);
+    }
+  };
+
+  const filteredNotes = notes
+    .filter((n) => (selectedFolderId ? n.folderId === selectedFolderId : true))
+    .filter((n) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        (n.title && n.title.toLowerCase().includes(q)) ||
+        (n.content && n.content.toLowerCase().includes(q)) ||
+        (n.url && n.url.toLowerCase().includes(q))
+      );
+    });
 
   const handleCopyContent = (text: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -354,90 +406,255 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
         </form>
       )}
 
-      {/* Notes Grid with Containment & Min-Width Safety */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0 max-w-full">
-        {filteredNotes.map((note) => {
-          const isLongContent = note.content && note.content.length > 120;
+      {/* Sub-toolbar: Search & View Mode Switcher */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search notes by title, content, or link..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 transition-colors"
+          />
+        </div>
 
-          return (
+        <div className="flex items-center space-x-2 shrink-0">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
+            <button
+              type="button"
+              onClick={() => handleToggleViewMode('grid')}
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleViewMode('list')}
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+              title="List View"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Empty State */}
+      {filteredNotes.length === 0 ? (
+        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+            <StickyNote className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">
+              {searchQuery ? 'No matching notes found' : 'No notes in this folder'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1">
+              {searchQuery ? 'Try clearing your search query.' : 'Capture a quick clipboard note or create a full note studio document.'}
+            </p>
+          </div>
+          <button
+            onClick={handleOpenNewNote}
+            className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 transition shadow-xs inline-flex items-center space-x-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create First Note</span>
+          </button>
+        </div>
+      ) : viewMode === 'list' ? (
+        /* List View Layout */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs divide-y divide-slate-100 dark:divide-slate-800/80">
+          <div className="grid grid-cols-12 gap-3 px-5 py-3 bg-slate-50/80 dark:bg-slate-800/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <div className="col-span-4">Title & Folder</div>
+            <div className="col-span-5">Content Preview</div>
+            <div className="col-span-2 hidden md:block">Updated</div>
+            <div className="col-span-3 md:col-span-1 text-right">Actions</div>
+          </div>
+
+          {filteredNotes.map((note) => (
             <div
               key={note.id}
               onClick={() => handleOpenEditStudio(note)}
-              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 flex flex-col justify-between hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all cursor-pointer group relative min-w-0 max-w-full overflow-hidden"
+              className="grid grid-cols-12 gap-3 px-5 py-3.5 items-center hover:bg-slate-50/90 dark:hover:bg-slate-800/60 transition-colors cursor-pointer group text-xs"
             >
-              <div className="space-y-2 min-w-0">
-                <div className="flex items-start justify-between gap-2 min-w-0">
-                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors break-words overflow-hidden">
+              {/* Title & Folder */}
+              <div className="col-span-4 min-w-0 pr-2">
+                <div className="flex items-center space-x-2">
+                  <StickyNote className="w-4 h-4 text-violet-500 shrink-0" />
+                  <span className="font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                     {note.title}
-                  </h4>
-                  <div className="flex items-center space-x-1 shrink-0">
-                    <button
-                      onClick={(e) => handleOpenEditStudio(note, e)}
-                      className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                      title="Open Note Studio"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={(e) => handleOpenEditStudio(note, e)}
-                      className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                      title="Edit Note"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteNote(note.id, e)}
-                      className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                      title="Delete Note"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  </span>
                 </div>
-
-                {note.content && (
-                  <div className="space-y-1.5 min-w-0">
-                    <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-4 leading-relaxed font-normal break-words overflow-hidden">
-                      {note.content}
-                    </p>
-                    {isLongContent && (
-                      <span className="inline-flex items-center space-x-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline">
-                        <span>Open Studio / View full note</span>
-                        <Maximize2 className="w-2.5 h-2.5" />
-                      </span>
-                    )}
-                  </div>
-                )}
+                <div className="flex items-center space-x-2 mt-1">
+                  {note.folder ? (
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-flex items-center space-x-1">
+                      <Folder className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                      <span className="truncate max-w-[100px]">{note.folder.name}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">Unsorted</span>
+                  )}
+                  {note.url && (
+                    <a
+                      href={note.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[10px] text-indigo-500 hover:underline inline-flex items-center space-x-0.5 truncate max-w-[120px]"
+                    >
+                      <LinkIcon className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">{note.url.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                    </a>
+                  )}
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] min-w-0 gap-2">
-                {note.folder ? (
-                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium flex items-center space-x-1 shrink-0 max-w-[60%] truncate">
-                    <Folder className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <span className="truncate">{note.folder.name}</span>
-                  </span>
-                ) : (
-                  <span className="text-slate-400 shrink-0">Unsorted</span>
-                )}
+              {/* Snippet */}
+              <div className="col-span-5 min-w-0 pr-2">
+                <p className="text-slate-600 dark:text-slate-400 truncate font-normal text-xs">
+                  {note.content || <span className="italic text-slate-400">Empty note</span>}
+                </p>
+              </div>
 
-                {note.url && (
-                  <a
-                    href={note.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium truncate max-w-[40%]"
-                  >
-                    <LinkIcon className="w-3 h-3 shrink-0" />
-                    <span className="truncate">URL</span>
-                    <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                  </a>
-                )}
+              {/* Updated Date */}
+              <div className="col-span-2 hidden md:flex items-center space-x-1 text-slate-400 text-[11px] font-mono">
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>
+                  {note.updatedAt
+                    ? new Date(note.updatedAt).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })
+                    : 'Recent'}
+                </span>
+              </div>
+
+              {/* Actions */}
+              <div className="col-span-3 md:col-span-1 flex items-center justify-end space-x-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => handleCopyContent(note.content || note.title, e)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  title="Copy content"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleOpenEditStudio(note, e)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  title="Open Note Studio"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteNote(note.id, e)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  title="Delete note"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      ) : (
+        /* Notes Grid with Containment & Min-Width Safety */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0 max-w-full">
+          {filteredNotes.map((note) => {
+            const isLongContent = note.content && note.content.length > 120;
+
+            return (
+              <div
+                key={note.id}
+                onClick={() => handleOpenEditStudio(note)}
+                className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 flex flex-col justify-between hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all cursor-pointer group relative min-w-0 max-w-full overflow-hidden"
+              >
+                <div className="space-y-2 min-w-0">
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <h4 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors break-words overflow-hidden">
+                      {note.title}
+                    </h4>
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <button
+                        onClick={(e) => handleOpenEditStudio(note, e)}
+                        className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Open Note Studio"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleOpenEditStudio(note, e)}
+                        className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Edit Note"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteNote(note.id, e)}
+                        className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Delete Note"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {note.content && (
+                    <div className="space-y-1.5 min-w-0">
+                      <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-4 leading-relaxed font-normal break-words overflow-hidden">
+                        {note.content}
+                      </p>
+                      {isLongContent && (
+                        <span className="inline-flex items-center space-x-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline">
+                          <span>Open Studio / View full note</span>
+                          <Maximize2 className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] min-w-0 gap-2">
+                  {note.folder ? (
+                    <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium flex items-center space-x-1 shrink-0 max-w-[60%] truncate">
+                      <Folder className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <span className="truncate">{note.folder.name}</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 shrink-0">Unsorted</span>
+                  )}
+
+                  {note.url && (
+                    <a
+                      href={note.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium truncate max-w-[40%]"
+                    >
+                      <LinkIcon className="w-3 h-3 shrink-0" />
+                      <span className="truncate">URL</span>
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Full Note Detail Modal */}
       <DialogShell
