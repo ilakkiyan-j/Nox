@@ -85,7 +85,7 @@ export default function Header({
           className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm shadow-indigo-500/20 transition-all"
         >
           <Plus className="w-4 h-4 shrink-0" />
-          <span>Capture</span>
+          <span>Quick Capture</span>
         </button>
 
         {/* Notifications Icon Button with Navbar Dropdown */}

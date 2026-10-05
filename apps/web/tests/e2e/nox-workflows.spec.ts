@@ -55,13 +55,22 @@ async function enterWorkstation(page: any) {
 
   // If already inside workstation
   const captureBtn = page.getByRole('button', { name: /Quick Capture/i });
-  const isInside = await captureBtn.isVisible({ timeout: 1500 }).catch(() => false);
-  if (isInside) return;
+  if (await captureBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    return;
+  }
 
   const signInBtn = page.getByRole('button', { name: 'Sign In', exact: true });
-  if (await signInBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+  const openWorkstationBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
+
+  if (await signInBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await signInBtn.click();
-    await page.locator('input[type="email"]').fill('user@nox.internal');
+  } else if (await openWorkstationBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await openWorkstationBtn.click();
+  }
+
+  const emailInput = page.locator('input[type="email"]');
+  if (await emailInput.isVisible({ timeout: 4000 }).catch(() => false)) {
+    await emailInput.fill('user@nox.internal');
     await page.locator('input[type="password"]').fill('user123password');
 
     const submitBtn = page.locator('form button[type="submit"]');
