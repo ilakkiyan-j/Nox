@@ -22,13 +22,17 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       return res.status(200).json({ ok: true });
     }
 
-    // Identify user: look for first active user or admin
+    // Identify user: prioritize real user account (e.g. non-internal email) or most recent active user
     let user = await db.user.findFirst({
-      where: { role: 'ADMIN' },
+      where: {
+        NOT: { email: { endsWith: '@nox.internal' } },
+      },
+      orderBy: { createdAt: 'desc' },
       select: { id: true },
     });
     if (!user) {
       user = await db.user.findFirst({
+        orderBy: { createdAt: 'desc' },
         select: { id: true },
       });
     }
