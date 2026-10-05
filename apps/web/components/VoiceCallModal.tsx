@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   PhoneOff, Mic, MicOff, Volume2, Sparkles, X, RotateCcw,
   Send, Bot as BotIcon, Activity, Check, AlertCircle, Headphones, PhoneCall, RefreshCw
@@ -42,17 +42,26 @@ export default function VoiceCallModal({
   const [currentTranscript, setCurrentTranscript] = useState('');
   const [conversationId, setConversationId] = useState<string>('');
   const [micError, setMicError] = useState<string | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
 
-  const recognitionRef = useRef<any>(null);
+  // Audio & Hardware Refs
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
-  const accumulatedSpeechRef = useRef<string>('');
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+
+  // VAD & Listening State Refs
   const isSpeakingRef = useRef<boolean>(false);
   const shouldListenRef = useRef<boolean>(false);
+  const isRecordingRef = useRef<boolean>(false);
+  const vadSilenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const vadSpeechDetectedRef = useRef<boolean>(false);
 
-  // Sync ref with state
   useEffect(() => {
     isSpeakingRef.current = isSpeaking;
   }, [isSpeaking]);
@@ -67,7 +76,7 @@ export default function VoiceCallModal({
     setCallDuration(0);
     setMicError(null);
     setCurrentTranscript('');
-    accumulatedSpeechRef.current = '';
+    setAudioLevel(0);
     const newConvId = `voice_call_${Date.now()}`;
     setConversationId(newConvId);
     setMessages([
@@ -93,7 +102,6 @@ export default function VoiceCallModal({
     if (!callConnected || !isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is currently typing in an input
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') {
         return;
       }
@@ -140,16 +148,243 @@ export default function VoiceCallModal({
       ) || voices.find((v) => v.lang.startsWith('en'));
       if (preferred) utterance.voice = preferred;
 
-      utterance.onend = () => {
-        onComplete?.();
-      };
-      utterance.onerror = () => {
-        onComplete?.();
-      };
+      utterance.onend = () => onComplete?.();
+      utterance.onerror = () => onComplete?.();
       window.speechSynthesis.speak(utterance);
     } else {
       onComplete?.();
     }
+  };
+
+  /**
+   * Initialize microphone stream, AudioContext, and AnalyserNode
+   */
+  const initMicrophoneStream = async (): Promise<boolean> => {
+    if (mediaStreamRef.current && mediaStreamRef.current.active) {
+      return true;
+    }
+
+    try {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setMicError('Microphone audio recording is not supported in this browser.');
+        return false;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      mediaStreamRef.current = stream;
+
+      // AudioContext + Analyser for visual waveforms and VAD
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const audioCtx = new AudioCtx();
+        audioContextRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 128;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+
+        startWaveformLoop(analyser);
+      }
+
+      setMicError(null);
+      return true;
+    } catch (err: any) {
+      console.warn('Microphone permission or hardware error:', err);
+      setMicError('Microphone permission blocked. Please allow microphone access to talk.');
+      return false;
+    }
+  };
+
+  /**
+   * Monitor live audio amplitude and drive Voice Activity Detection (VAD)
+   */
+  const startWaveformLoop = (analyser: AnalyserNode) => {
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const updateLoop = () => {
+      if (!mediaStreamRef.current || !mediaStreamRef.current.active) {
+        return;
+      }
+
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const avg = sum / dataArray.length;
+      setAudioLevel(avg);
+
+      // Open Mic VAD Logic: When user is not in push-to-talk and bot is not speaking
+      if (inputMode === 'open-mic' && shouldListenRef.current && !isSpeakingRef.current && !isThinking) {
+        const SPEECH_THRESHOLD = 18;
+
+        if (avg > SPEECH_THRESHOLD) {
+          // User is speaking
+          if (!isRecordingRef.current) {
+            startVadRecording();
+          }
+          vadSpeechDetectedRef.current = true;
+          if (vadSilenceTimerRef.current) {
+            clearTimeout(vadSilenceTimerRef.current);
+            vadSilenceTimerRef.current = null;
+          }
+        } else if (isRecordingRef.current && vadSpeechDetectedRef.current) {
+          // Silence detected while recording
+          if (!vadSilenceTimerRef.current) {
+            vadSilenceTimerRef.current = setTimeout(() => {
+              stopVadRecordingAndSend();
+            }, 1400); // 1.4s of silence finishes the turn
+          }
+        }
+      }
+
+      animFrameRef.current = requestAnimationFrame(updateLoop);
+    };
+
+    updateLoop();
+  };
+
+  const getSupportedMimeType = (): string => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+      'audio/mp4',
+    ];
+    for (const t of types) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) {
+        return t;
+      }
+    }
+    return 'audio/webm';
+  };
+
+  const startVadRecording = () => {
+    if (isRecordingRef.current || !mediaStreamRef.current) return;
+    try {
+      const mimeType = getSupportedMimeType();
+      const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType });
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
+      isRecordingRef.current = true;
+      setIsListening(true);
+      setCurrentTranscript('Listening to your voice...');
+    } catch (err) {
+      console.warn('Failed to start VAD recording:', err);
+    }
+  };
+
+  const stopVadRecordingAndSend = () => {
+    if (!isRecordingRef.current || !mediaRecorderRef.current) return;
+
+    if (vadSilenceTimerRef.current) {
+      clearTimeout(vadSilenceTimerRef.current);
+      vadSilenceTimerRef.current = null;
+    }
+
+    const recorder = mediaRecorderRef.current;
+    isRecordingRef.current = false;
+    vadSpeechDetectedRef.current = false;
+    setIsListening(false);
+    setCurrentTranscript('');
+
+    recorder.onstop = async () => {
+      const mimeType = recorder.mimeType || 'audio/webm';
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+      if (audioBlob.size > 2000) { // Only send if meaningful audio was captured
+        const base64 = await blobToBase64(audioBlob);
+        sendAudioTurn(base64, mimeType);
+      }
+      audioChunksRef.current = [];
+    };
+
+    try {
+      recorder.stop();
+    } catch (_) {}
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const res = reader.result as string;
+        const base64 = res.split(',')[1] || '';
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const startPushToTalk = async () => {
+    setIsHoldingToTalk(true);
+    setCurrentTranscript('Recording... Release to send');
+
+    const ok = await initMicrophoneStream();
+    if (!ok || !mediaStreamRef.current) return;
+
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        try { mediaRecorderRef.current.stop(); } catch (_) {}
+      }
+
+      const mimeType = getSupportedMimeType();
+      const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType });
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
+      isRecordingRef.current = true;
+    } catch (err) {
+      console.warn('Failed to start push-to-talk recording:', err);
+    }
+  };
+
+  const stopPushToTalk = () => {
+    setIsHoldingToTalk(false);
+    setCurrentTranscript('');
+
+    if (!mediaRecorderRef.current || !isRecordingRef.current) return;
+
+    const recorder = mediaRecorderRef.current;
+    isRecordingRef.current = false;
+
+    recorder.onstop = async () => {
+      const mimeType = recorder.mimeType || 'audio/webm';
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+      if (audioBlob.size > 1500) {
+        const base64 = await blobToBase64(audioBlob);
+        sendAudioTurn(base64, mimeType);
+      }
+      audioChunksRef.current = [];
+    };
+
+    try {
+      recorder.stop();
+    } catch (_) {}
   };
 
   const handleStartCall = async () => {
@@ -157,220 +392,74 @@ export default function VoiceCallModal({
     setMicError(null);
     shouldListenRef.current = true;
 
-    // 1. Unlock Audio context
-    try {
-      const audio = new Audio();
-      audioPlayerRef.current = audio;
-    } catch (_) {}
-
-    // 2. Start Call Timer
+    // 1. Start Call Timer
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCallDuration((prev) => prev + 1);
     }, 1000);
 
-    // 3. Request microphone & initialize speech recognition immediately
-    initSpeechRecognition();
+    // 2. Initialize microphone stream
+    await initMicrophoneStream();
 
-    // 4. Play greeting aloud concurrently (non-blocking)
+    // 3. Play greeting aloud concurrently
     playVoiceAudio(`Hey Ilakkiyan! I'm right here with you. Ready for our live session?`);
   };
 
   const handleEndCall = () => {
     shouldListenRef.current = false;
+    isRecordingRef.current = false;
+    vadSpeechDetectedRef.current = false;
+
     if (timerRef.current) clearInterval(timerRef.current);
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    if (vadSilenceTimerRef.current) clearTimeout(vadSilenceTimerRef.current);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
+
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
     }
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (_) {}
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try { mediaRecorderRef.current.stop(); } catch (_) {}
     }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      try { audioContextRef.current.close(); } catch (_) {}
+      audioContextRef.current = null;
+    }
+
     setIsSpeaking(false);
     isSpeakingRef.current = false;
     setIsListening(false);
     setIsThinking(false);
     setIsHoldingToTalk(false);
     setCurrentTranscript('');
-  };
-
-  const initSpeechRecognition = () => {
-    if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setMicError('Web Speech API is not supported in this browser. You can type spoken messages below.');
-      return;
-    }
-
-    try {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (_) {}
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setMicError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        let interim = '';
-        let finalized = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcriptPiece = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalized += transcriptPiece + ' ';
-          } else {
-            interim += transcriptPiece;
-          }
-        }
-
-        if (finalized) {
-          accumulatedSpeechRef.current = (accumulatedSpeechRef.current + ' ' + finalized).trim();
-        }
-
-        const fullDisplay = (accumulatedSpeechRef.current + ' ' + interim).trim();
-        setCurrentTranscript(fullDisplay);
-
-        // In Open Mic mode: set a silence timer to automatically send after 1.8 seconds of silence
-        if (inputMode === 'open-mic' && shouldListenRef.current && !isSpeakingRef.current) {
-          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
-          silenceTimeoutRef.current = setTimeout(() => {
-            const speechToSend = accumulatedSpeechRef.current.trim() || interim.trim();
-            if (speechToSend) {
-              accumulatedSpeechRef.current = '';
-              setCurrentTranscript('');
-              sendVoiceTurn(speechToSend);
-            }
-          }, 1800);
-        }
-      };
-
-      recognition.onerror = (err: any) => {
-        if (err?.error === 'not-allowed') {
-          setMicError('Microphone permission blocked. Please enable microphone permissions in your browser.');
-          setIsListening(false);
-          shouldListenRef.current = false;
-        } else if (err?.error === 'no-speech') {
-          // Normal timeout on quiet pauses
-        }
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-        // Auto-restart if we should still be listening and bot is not speaking
-        if (shouldListenRef.current && !isSpeakingRef.current && inputMode === 'open-mic') {
-          setTimeout(() => {
-            if (shouldListenRef.current && !isSpeakingRef.current) {
-              try {
-                recognition.start();
-              } catch (_) {}
-            }
-          }, 150);
-        }
-      };
-
-      recognitionRef.current = recognition;
-
-      if (shouldListenRef.current && !isSpeakingRef.current) {
-        try {
-          recognition.start();
-        } catch (_) {}
-      }
-    } catch (err) {
-      console.warn('Failed to init speech recognition:', err);
-    }
-  };
-
-  const startPushToTalk = () => {
-    setIsHoldingToTalk(true);
-    accumulatedSpeechRef.current = '';
-    setCurrentTranscript('');
-    shouldListenRef.current = true;
-
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
-
-    if (!recognitionRef.current) {
-      initSpeechRecognition();
-    } else {
-      try {
-        recognitionRef.current.start();
-      } catch (_) {}
-    }
-  };
-
-  const stopPushToTalk = () => {
-    setIsHoldingToTalk(false);
-    shouldListenRef.current = false;
-
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (_) {}
-    }
-
-    setTimeout(() => {
-      const speechToSend = accumulatedSpeechRef.current.trim() || currentTranscript.trim();
-      if (speechToSend) {
-        accumulatedSpeechRef.current = '';
-        setCurrentTranscript('');
-        sendVoiceTurn(speechToSend);
-      }
-    }, 250);
-  };
-
-  const toggleOpenMic = () => {
-    if (isListening || shouldListenRef.current) {
-      shouldListenRef.current = false;
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (_) {}
-      }
-      setIsListening(false);
-    } else {
-      shouldListenRef.current = true;
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (_) {
-          initSpeechRecognition();
-        }
-      } else {
-        initSpeechRecognition();
-      }
-    }
-  };
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    setAudioLevel(0);
   };
 
   const playVoiceAudio = async (text: string, directAudioUrl?: string) => {
     try {
       setIsSpeaking(true);
       isSpeakingRef.current = true;
-      
-      // Pause speech recognition while bot is speaking to avoid feedback loops
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (_) {}
+
+      // Pause recording while bot is speaking so bot doesn't transcribe its own voice
+      if (isRecordingRef.current && mediaRecorderRef.current) {
+        try { mediaRecorderRef.current.stop(); } catch (_) {}
+        isRecordingRef.current = false;
       }
 
       const onFinish = () => {
         setIsSpeaking(false);
         isSpeakingRef.current = false;
-        if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch (_) {}
-        }
       };
 
       let targetUrl = directAudioUrl;
@@ -411,20 +500,94 @@ export default function VoiceCallModal({
       console.error('TTS playback error:', err);
       setIsSpeaking(false);
       isSpeakingRef.current = false;
-      if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
-        try { recognitionRef.current.start(); } catch (_) {}
-      }
     }
   };
 
-  const sendVoiceTurn = async (userText: string) => {
+  const sendAudioTurn = async (audioBase64: string, mimeType: string) => {
+    if (!audioBase64) return;
+
+    setIsThinking(true);
+    setCurrentTranscript('Transcribing & reasoning...');
+
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/voice/call-turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          botId: botSlug,
+          persona: botSlug,
+          audioBase64,
+          mimeType,
+          conversationId,
+        }),
+      });
+
+      const data = await res.json();
+      setIsThinking(false);
+      setCurrentTranscript('');
+
+      if (data.success && data.data) {
+        if (data.data.conversationId) {
+          setConversationId(data.data.conversationId);
+        }
+
+        // 1. Add user message with actual transcript returned from Gemini
+        if (data.data.userMessage) {
+          const userMsg: CallMessage = {
+            id: `u_${Date.now()}`,
+            sender: 'user',
+            text: data.data.userMessage,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+          setMessages((prev) => [...prev, userMsg]);
+        }
+
+        // 2. Add assistant response
+        const botMsg: CallMessage = {
+          id: `b_${Date.now()}`,
+          sender: 'bot',
+          text: data.data.spokenText || data.data.replyText,
+          audioUrl: data.data.audioUrl,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, botMsg]);
+
+        // 3. Play spoken response aloud
+        if (data.data.audioUrl) {
+          playVoiceAudio(botMsg.text, data.data.audioUrl);
+        } else {
+          playVoiceAudio(botMsg.text);
+        }
+      } else {
+        const errorText = data?.error?.message || "I heard your audio, but let's try again in a moment.";
+        const botMsg: CallMessage = {
+          id: `b_${Date.now()}`,
+          sender: 'bot',
+          text: errorText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, botMsg]);
+        playVoiceAudio(errorText);
+      }
+    } catch (err: any) {
+      console.error('Voice call turn error:', err);
+      setIsThinking(false);
+      setCurrentTranscript('');
+      const fallbackText = "I'm having trouble with the voice channel right now. Please speak again in a moment.";
+      const botMsg: CallMessage = {
+        id: `b_${Date.now()}`,
+        sender: 'bot',
+        text: fallbackText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, botMsg]);
+      playVoiceAudio(fallbackText);
+    }
+  };
+
+  const sendTextTurn = async (userText: string) => {
     if (!userText.trim()) return;
 
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
-    accumulatedSpeechRef.current = '';
-    setCurrentTranscript('');
-
-    // Add user message
     const userMsg: CallMessage = {
       id: `u_${Date.now()}`,
       sender: 'user',
@@ -446,6 +609,7 @@ export default function VoiceCallModal({
           conversationId,
         }),
       });
+
       const data = await res.json();
       setIsThinking(false);
 
@@ -463,36 +627,36 @@ export default function VoiceCallModal({
         };
         setMessages((prev) => [...prev, botMsg]);
 
-        // Play audio directly with browser TTS fallback
         if (data.data.audioUrl) {
           playVoiceAudio(botMsg.text, data.data.audioUrl);
         } else {
           playVoiceAudio(botMsg.text);
         }
-      } else {
-        const errorText = data?.error?.message || "I couldn't complete that voice turn. Let's try again.";
-        const botMsg: CallMessage = {
-          id: `b_${Date.now()}`,
-          sender: 'bot',
-          text: errorText,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-        setMessages((prev) => [...prev, botMsg]);
-        playVoiceAudio(errorText);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Voice call turn error:', err);
       setIsThinking(false);
-      const fallbackText = "I'm having trouble connecting to the voice service right now. Please try again in a moment.";
-      const botMsg: CallMessage = {
-        id: `b_${Date.now()}`,
-        sender: 'bot',
-        text: fallbackText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, botMsg]);
-      playVoiceAudio(fallbackText);
     }
+  };
+
+  const toggleOpenMic = () => {
+    if (isListening || shouldListenRef.current) {
+      shouldListenRef.current = false;
+      setIsListening(false);
+      if (isRecordingRef.current && mediaRecorderRef.current) {
+        try { mediaRecorderRef.current.stop(); } catch (_) {}
+        isRecordingRef.current = false;
+      }
+    } else {
+      shouldListenRef.current = true;
+      initMicrophoneStream();
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   if (!isOpen) return null;
@@ -566,21 +730,24 @@ export default function VoiceCallModal({
             <div className="p-5 bg-gradient-to-b from-indigo-950/40 via-slate-900 to-slate-900 flex flex-col items-center justify-center border-b border-slate-800/80">
               <div className="flex items-center justify-center space-x-1.5 h-14">
                 {[...Array(20)].map((_, i) => {
-                  const active = isSpeaking || isListening || isHoldingToTalk;
+                  const active = isSpeaking || isHoldingToTalk || isListening;
+                  const liveWave = audioLevel > 5 ? (audioLevel / 100) * (Math.sin(i * 0.4 + Date.now() * 0.005) * 0.5 + 0.5) : 0.05;
                   const scale = active
-                    ? Math.sin(i * 0.35 + callDuration * 3) * 0.5 + 0.5
-                    : 0.15;
+                    ? isSpeaking
+                      ? Math.sin(i * 0.35 + callDuration * 3) * 0.5 + 0.5
+                      : Math.max(0.15, liveWave * 1.5)
+                    : 0.1;
                   return (
                     <div
                       key={i}
-                      className={`w-1.5 rounded-full transition-all duration-150 ${
+                      className={`w-1.5 rounded-full transition-all duration-100 ${
                         isSpeaking
                           ? 'bg-gradient-to-t from-indigo-500 to-violet-400'
                           : isHoldingToTalk || isListening
                           ? 'bg-gradient-to-t from-emerald-500 to-teal-400'
                           : 'bg-slate-700'
                       }`}
-                      style={{ height: `${Math.max(8, scale * 52)}px` }}
+                      style={{ height: `${Math.min(52, Math.max(6, scale * 52))}px` }}
                     />
                   );
                 })}
@@ -595,28 +762,28 @@ export default function VoiceCallModal({
                 ) : isHoldingToTalk ? (
                   <span className="text-emerald-400 flex items-center space-x-1.5 animate-pulse">
                     <Mic className="w-3.5 h-3.5" />
-                    <span>Listening... Release button or Spacebar to send</span>
+                    <span>Recording your voice... Release button or Spacebar to send</span>
                   </span>
                 ) : isListening ? (
                   <span className="text-emerald-400 flex items-center space-x-1.5">
                     <Mic className="w-3.5 h-3.5 animate-pulse" />
-                    <span>Open Mic Active — listening naturally...</span>
+                    <span>Open Mic Active — speak naturally...</span>
                   </span>
                 ) : isThinking ? (
                   <span className="text-amber-400 flex items-center space-x-1.5">
                     <Activity className="w-3.5 h-3.5 animate-spin" />
-                    <span>{botName} is responding...</span>
+                    <span>{botName} is processing your voice...</span>
                   </span>
                 ) : (
                   <span className="text-slate-400">
-                    {inputMode === 'push-to-talk' ? 'Hold button or Spacebar to speak' : 'Microphone paused — click mic to resume'}
+                    {inputMode === 'push-to-talk' ? 'Hold button or Spacebar to speak' : 'Microphone ready — speak anytime'}
                   </span>
                 )}
 
-                {/* Live Speech Recognition Transcript Preview */}
+                {/* Live Transcript / Status Preview */}
                 {currentTranscript && (
                   <div className="px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-sans font-medium animate-in fade-in">
-                    🗣️ &ldquo;{currentTranscript}&rdquo;
+                    🎙️ {currentTranscript}
                   </div>
                 )}
               </div>
@@ -670,7 +837,7 @@ export default function VoiceCallModal({
                     onClick={() => {
                       setInputMode('open-mic');
                       shouldListenRef.current = true;
-                      initSpeechRecognition();
+                      initMicrophoneStream();
                     }}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                       inputMode === 'open-mic'
@@ -685,9 +852,6 @@ export default function VoiceCallModal({
                     onClick={() => {
                       setInputMode('push-to-talk');
                       shouldListenRef.current = false;
-                      if (recognitionRef.current) {
-                        try { recognitionRef.current.stop(); } catch (_) {}
-                      }
                       setIsListening(false);
                     }}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
@@ -701,7 +865,7 @@ export default function VoiceCallModal({
                 </div>
 
                 <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
-                  {inputMode === 'push-to-talk' ? '💡 Tip: Hold Spacebar to speak' : '💡 Auto-sends on pause'}
+                  {inputMode === 'push-to-talk' ? '💡 Tip: Hold Spacebar or Button to speak' : '💡 Automatically sends when you stop talking'}
                 </span>
               </div>
 
@@ -709,7 +873,7 @@ export default function VoiceCallModal({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (textInput.trim()) sendVoiceTurn(textInput);
+                  if (textInput.trim()) sendTextTurn(textInput);
                 }}
                 className="flex items-center space-x-2"
               >
@@ -737,16 +901,16 @@ export default function VoiceCallModal({
                     type="button"
                     onClick={toggleOpenMic}
                     className={`px-6 py-3 rounded-2xl transition-all cursor-pointer shadow-lg flex items-center space-x-2 font-bold text-xs ${
-                      isListening
+                      shouldListenRef.current
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white scale-105 shadow-emerald-500/30'
                         : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                     }`}
-                    title={isListening ? "Listening... Click to pause" : "Click to resume listening"}
+                    title={shouldListenRef.current ? "Listening... Click to pause" : "Click to resume listening"}
                   >
-                    {isListening ? (
+                    {shouldListenRef.current ? (
                       <>
                         <Mic className="w-5 h-5 animate-pulse" />
-                        <span>Listening (Tap to Pause)</span>
+                        <span>Open Mic Active (Tap to Pause)</span>
                       </>
                     ) : (
                       <>
@@ -770,7 +934,7 @@ export default function VoiceCallModal({
                     }`}
                   >
                     <Mic className={`w-5 h-5 ${isHoldingToTalk ? 'animate-pulse' : ''}`} />
-                    <span>{isHoldingToTalk ? 'Listening... Release to Send' : 'Press & Hold to Talk (or Spacebar)'}</span>
+                    <span>{isHoldingToTalk ? 'Recording... Release to Send' : 'Press & Hold to Talk (or Spacebar)'}</span>
                   </button>
                 )}
 

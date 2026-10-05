@@ -77,7 +77,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
     if (isVoice && requestedPersona) {
       try {
         const fileId = msg.voice?.file_id || msg.audio?.file_id;
-        let transcribedText = 'Voice Message';
+        let audioBase64 = '';
 
         if (fileId && botToken) {
           // Get file path from Telegram API
@@ -85,10 +85,12 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           const fileInfo = (await fileInfoRes.json()) as any;
           if (fileInfo?.ok && fileInfo.result?.file_path) {
             const telegramAudioUrl = `https://api.telegram.org/file/bot${botToken}/${fileInfo.result.file_path}`;
-            console.log(`[Telegram Voice Ingest] Downloaded voice note from ${telegramAudioUrl}`);
-            
-            // Send to Council Voice Turn endpoint with simulated speech text or transcript
-            transcribedText = `[Voice Note from ${senderName}]`;
+            console.log(`[Telegram Voice Ingest] Downloading voice note from ${telegramAudioUrl}...`);
+            const audioFetch = await fetch(telegramAudioUrl);
+            if (audioFetch.ok) {
+              const audioArr = await audioFetch.arrayBuffer();
+              audioBase64 = Buffer.from(audioArr).toString('base64');
+            }
           }
         }
 
@@ -102,7 +104,9 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           body: JSON.stringify({
             persona: requestedPersona.toLowerCase(),
             botId: requestedPersona.toLowerCase(),
-            message: text || "Hey Sofi, I'm checking in with a voice message!",
+            message: text || undefined,
+            audioBase64: audioBase64 || undefined,
+            mimeType: 'audio/ogg',
             conversationId: `telegram_${msg.chat.id}`,
             userContext,
           }),
