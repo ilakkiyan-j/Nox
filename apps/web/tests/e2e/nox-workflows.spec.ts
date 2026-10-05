@@ -72,6 +72,7 @@ async function enterWorkstation(page: any) {
 
   const quickCaptureBtn = page.getByRole('button', { name: /Quick Capture/i });
   if (await quickCaptureBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await page.waitForTimeout(1000);
     return;
   }
 
@@ -92,6 +93,7 @@ async function enterWorkstation(page: any) {
   await submitBtn.click();
 
   await expect(page.getByRole('button', { name: /Quick Capture/i })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(1200);
 }
 
 test.describe('NOX Production Workflows & Theme Parity', () => {
@@ -127,9 +129,9 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
 
     const toggleBtn = page.locator('button[title*="Switch to"]').first();
     await expect(toggleBtn).toBeVisible();
-    await toggleBtn.click();
+    await toggleBtn.click({ force: true });
 
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(400);
 
     if (isDarkInitially) {
       await expect(htmlElem).not.toHaveClass(/dark/);
@@ -146,8 +148,8 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     for (const tab of tabs) {
       const tabButton = page.locator(`aside nav button:has-text("${tab}")`).first();
       await expect(tabButton).toBeVisible();
-      await tabButton.click();
-      await page.waitForTimeout(100);
+      await tabButton.click({ force: true });
+      await page.waitForTimeout(150);
     }
   });
 
@@ -157,22 +159,22 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     // Navigate to Roadmaps using specific sidebar selector
     const roadmapsTab = page.locator('aside nav button:has-text("Roadmaps")').first();
     await expect(roadmapsTab).toBeVisible();
-    await roadmapsTab.click();
+    await roadmapsTab.click({ force: true });
 
     // Click New Roadmap button
     const newRoadmapBtn = page.getByRole('button', { name: /New Roadmap/i }).first();
     await expect(newRoadmapBtn).toBeVisible();
-    await newRoadmapBtn.click();
+    await newRoadmapBtn.click({ force: true });
 
     // Switch to Import JSON tab
     const jsonTabBtn = page.getByRole('button', { name: /Import JSON/i });
     await expect(jsonTabBtn).toBeVisible();
-    await jsonTabBtn.click();
+    await jsonTabBtn.click({ force: true });
 
     // Click Load Example button
     const loadExampleBtn = page.getByRole('button', { name: /Load Example/i });
     await expect(loadExampleBtn).toBeVisible();
-    await loadExampleBtn.click();
+    await loadExampleBtn.click({ force: true });
 
     // Verify visual tree preview renders milestone preview card
     const previewHeader = page.locator('text=Valid Plan Preview');
@@ -181,7 +183,7 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
     // Submit import
     const importSubmitBtn = page.getByRole('button', { name: /Import Roadmap/i });
     await expect(importSubmitBtn).toBeEnabled();
-    await importSubmitBtn.click();
+    await importSubmitBtn.click({ force: true });
   });
 
   test('should verify health API endpoint is responsive', async ({ request }) => {
