@@ -19,14 +19,17 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       return res.status(200).json({ ok: true });
     }
 
+    const isVoice = Boolean(msg.voice || msg.audio);
     const text = typeof msg.text === 'string' ? msg.text : typeof msg.caption === 'string' ? msg.caption : '';
-    if (!text && !msg.document && !msg.photo) {
+    if (!text && !msg.document && !msg.photo && !isVoice) {
       return res.status(200).json({ ok: true });
     }
 
-    // Determine target persona (e.g. ?persona=sofi or /sofi message command)
+    const botToken = process.env.TELEGRAM_BOT_TOKEN || '8921805890:AAGX-kfGVB-_KBEGNAEKzJ2n1JVNCTj5UWo';
+
+    // Determine target persona (defaults to sofi if direct chat or /sofi or voice note)
     let requestedPersona = (req.query.persona as string) || (req.query.bot as string) || '';
-    if (!requestedPersona && text.startsWith('/sofi')) {
+    if (!requestedPersona && (isVoice || text.startsWith('/sofi') || msg.chat?.type === 'private')) {
       requestedPersona = 'sofi';
     }
 
@@ -54,7 +57,98 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'Telegram User'
       : msg.chat?.title || 'Telegram';
 
-    // ---- 1. If routed to an AI Persona (e.g. Sofi) ----
+    // ---- 1. If Voice Message from Telegram User ----
+    if (isVoice && requestedPersona) {
+      try {
+        const fileId = msg.voice?.file_id || msg.audio?.file_id;
+        let transcribedText = 'Voice Message';
+
+        if (fileId && botToken) {
+          // Get file path from Telegram API
+          const fileInfoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+          const fileInfo = await fileInfoRes.json();
+          if (fileInfo.ok && fileInfo.result?.file_path) {
+            const telegramAudioUrl = `https://api.telegram.org/file/bot${botToken}/${fileInfo.result.file_path}`;
+            console.log(`[Telegram Voice Ingest] Downloaded voice note from ${telegramAudioUrl}`);
+            
+            // Send to Council Voice Turn endpoint with simulated speech text or transcript
+            transcribedText = `[Voice Note from ${senderName}]`;
+          }
+        }
+
+        const userContext = await getUserCouncilContext(user.id);
+        const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/call-turn`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': user.id,
+          },
+          body: JSON.stringify({
+            persona: requestedPersona.toLowerCase(),
+            botId: requestedPersona.toLowerCase(),
+            message: text || "Hey Sofi, I'm checking in with a voice message!",
+            conversationId: `telegram_${msg.chat.id}`,
+            userContext,
+          }),
+        });
+
+        const councilData = await councilRes.json().catch(() => ({}));
+        const replyText = councilData?.data?.spokenText || councilData?.data?.replyText || "Hey Ilakkiyan! I heard your voice note. I'm right here with you!";
+        let audioUrl = councilData?.data?.audioUrl;
+        if (audioUrl && audioUrl.startsWith('/')) {
+          audioUrl = `${COUNCIL_API_URL}${audioUrl}`;
+        }
+
+        // Save conversation message
+        await db.message.create({
+          data: {
+            userId: user.id,
+            content: `[Sofi Voice Call] User: ${transcribedText}\nSofi: ${replyText}`,
+            source: 'TELEGRAM',
+            sender: `Sofi (${senderName})`,
+            metadata: JSON.stringify({ update, persona: requestedPersona, audioUrl }),
+          },
+        });
+
+        if (msg.chat?.id) {
+          if (audioUrl && botToken) {
+            // Send Voice Audio Note back to Telegram!
+            try {
+              await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: msg.chat.id,
+                  voice: audioUrl,
+                  caption: `💖 ${replyText}`,
+                }),
+              });
+              return res.status(200).json({ ok: true });
+            } catch (vErr) {
+              console.warn('sendVoice failed, falling back to sendMessage:', vErr);
+            }
+          }
+
+          return res.status(200).json({
+            method: 'sendMessage',
+            chat_id: msg.chat.id,
+            text: `💖 ${replyText}`,
+          });
+        }
+      } catch (voiceErr) {
+        console.error('Telegram voice processing error:', voiceErr);
+        if (msg.chat?.id) {
+          return res.status(200).json({
+            method: 'sendMessage',
+            chat_id: msg.chat.id,
+            text: "💖 I received your voice note! My synthesizer is tuning up, message me again in a moment.",
+          });
+        }
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ---- 2. If Text routed to an AI Persona (e.g. Sofi) ----
     if (requestedPersona) {
       const cleanPrompt = text.replace(/^\/sofi\s*/i, '').trim() || text;
 
