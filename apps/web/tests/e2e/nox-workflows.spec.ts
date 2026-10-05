@@ -3,7 +3,27 @@ import { test, expect } from '@playwright/test';
 async function enterWorkstation(page: any) {
   await page.route('**/api/v1/**', async (route: any) => {
     const url = route.request().url();
-    if (url.includes('/api/v1/auth/login') || url.includes('/api/v1/auth/me')) {
+    if (url.includes('/api/v1/auth/login')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            token: 'mock-e2e-valid-jwt-token',
+            user: {
+              id: 'e2e-user-id',
+              email: 'user@nox.internal',
+              name: 'Nox Architect',
+              role: 'USER',
+            },
+          },
+        }),
+      });
+      return;
+    }
+
+    if (url.includes('/api/v1/auth/me')) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -14,7 +34,6 @@ async function enterWorkstation(page: any) {
             email: 'user@nox.internal',
             name: 'Nox Architect',
             role: 'USER',
-            token: 'mock-e2e-valid-jwt-token',
           },
         }),
       });
