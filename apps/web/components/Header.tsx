@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Plus, Bell, Sun, Moon } from 'lucide-react';
+import { Search, Plus, Bell, Sun, Moon, Type } from 'lucide-react';
 import NotificationsDropdown from './NotificationsDropdown';
 import { useTheme } from './ThemeContext';
 import Avatar from './Avatar';
@@ -15,6 +15,7 @@ interface HeaderProps {
   onRefreshNotifications: () => void;
   onBackToLanding?: () => void;
   onOpenProfile?: () => void;
+  onOpenTypography?: () => void;
   currentUser?: any;
 }
 
@@ -26,15 +27,12 @@ export default function Header({
   onRefreshNotifications,
   onBackToLanding,
   onOpenProfile,
+  onOpenTypography,
   currentUser,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const unreadNotificationsCount = notifications.filter((n) => !n.isRead).length;
-
-  const initials = currentUser?.name
-    ? currentUser.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'NA';
 
   return (
     <header className="sticky top-0 z-20 glass-panel bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-3 py-2.5 md:px-8 flex items-center justify-between shadow-xs transition-colors">
@@ -53,11 +51,11 @@ export default function Header({
       </div>
 
       {/* Right: Action Triggers */}
-      <div className="flex items-center space-x-1.5 md:space-x-3 relative shrink-0">
+      <div className="flex items-center space-x-1.5 md:space-x-2.5 relative shrink-0">
         {/* Global Search Trigger */}
         <button
           onClick={onOpenSearch}
-          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs transition-all"
+          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs transition-all cursor-pointer"
         >
           <Search className="w-4 h-4 text-slate-400 shrink-0" />
           <span className="hidden sm:inline font-medium">Search NOX...</span>
@@ -66,10 +64,22 @@ export default function Header({
           </kbd>
         </button>
 
+        {/* Typography Studio & Visualizer Button */}
+        {onOpenTypography && (
+          <button
+            onClick={onOpenTypography}
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
+            title="Typography Studio & Visualizer"
+          >
+            <Type className="w-4 h-4 text-indigo-500 shrink-0" />
+            <span className="hidden md:inline">Fonts</span>
+          </button>
+        )}
+
         {/* Dynamic Light/Dark Theme Toggle Button */}
         <button
           onClick={toggleTheme}
-          className="p-1.5 sm:p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all"
+          className="p-1.5 sm:p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all cursor-pointer"
           title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
         >
           {theme === 'light' ? <Moon className="w-4 h-4 text-slate-700" /> : <Sun className="w-4 h-4 text-amber-400" />}
@@ -80,7 +90,7 @@ export default function Header({
           onClick={onOpenQuickCapture}
           title="Quick Capture"
           aria-label="Quick Capture"
-          className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm shadow-indigo-500/20 transition-all"
+          className="flex items-center space-x-1 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm shadow-indigo-500/20 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4 shrink-0" />
           <span>Quick Capture</span>
@@ -90,7 +100,7 @@ export default function Header({
         <div className="relative">
           <button
             onClick={() => setIsNotifOpen(!isNotifOpen)}
-            className="relative p-1.5 sm:p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all"
+            className="relative p-1.5 sm:p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all cursor-pointer"
             title="Notifications"
           >
             <Bell className="w-4 h-4" />
@@ -124,7 +134,7 @@ export default function Header({
         {onBackToLanding && (
           <button
             onClick={onBackToLanding}
-            className="hidden sm:inline-block px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs font-medium transition-all"
+            className="hidden sm:inline-block px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs font-medium transition-all cursor-pointer"
           >
             Sign Out
           </button>

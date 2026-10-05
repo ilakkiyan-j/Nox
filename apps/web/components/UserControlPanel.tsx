@@ -4,7 +4,7 @@ import {
   StickyNote, Calendar, Flame, GraduationCap, Bell, Download, Trash2,
   Edit3, Save, BarChart3, Clock, AlarmClock, Layers, ChevronRight,
   Database, Compass, Lock, Sparkles, ArrowLeft, Upload, Image as ImageIcon, Link as LinkIcon, RefreshCw,
-  Volume2, Mic, Play, Pause, Radio, Check, SlidersHorizontal
+  Volume2, Mic, Play, Pause, Radio, Check, SlidersHorizontal, Type
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -16,6 +16,7 @@ interface UserControlPanelProps {
   onClose: () => void;
   onSignOut: () => void;
   onOpenAdmin?: () => void;
+  onOpenTypography?: () => void;
   currentUser?: any;
   stats?: {
     goalsCount: number;
@@ -35,6 +36,7 @@ export default function UserControlPanel({
   onClose,
   onSignOut,
   onOpenAdmin,
+  onOpenTypography,
   currentUser,
   stats,
 }: UserControlPanelProps) {
@@ -666,6 +668,27 @@ export default function UserControlPanel({
                     {theme === 'light' ? '☀️ Light Mode Active' : '🌙 Dark Mode Active'}
                   </span>
                 </div>
+
+                {/* Typography Studio Preference */}
+                {onOpenTypography && (
+                  <div
+                    onClick={() => { onClose(); onOpenTypography(); }}
+                    className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-600 transition-all"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/60">
+                        <Type className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Typography Studio & Font Pairings</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Preview and customize executive font pairings across NOX.</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold px-4 py-2 rounded-xl bg-indigo-600 text-white shadow-xs flex items-center space-x-1">
+                      <span>EXPLORE FONTS →</span>
+                    </span>
+                  </div>
+                )}
 
                 {/* Vertical Time Flow */}
                 <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">

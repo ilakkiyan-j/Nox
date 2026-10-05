@@ -26,6 +26,7 @@ import TimeView from '../components/TimeView';
 import RemindersView from '../components/RemindersView';
 import CouncilView from '../components/CouncilView';
 import MessagesView from '../components/MessagesView';
+import TypographyVisualizerModal, { applyFontPreset, FontPresetKey } from '../components/TypographyVisualizerModal';
 import { API_BASE_URL, fetchWithUser, clearAuth, getToken, getStoredUser, setStoredUser } from '../lib/api';
 
 const API_BASE = `${API_BASE_URL}/api/v1`;
@@ -38,6 +39,7 @@ export default function Home() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isTypographyOpen, setIsTypographyOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -261,6 +263,10 @@ export default function Home() {
       };
       window.addEventListener('focus', handleFocus);
 
+      // Initialize Typography Preset
+      const savedPreset = (localStorage.getItem('nox_font_preset') as FontPresetKey) || 'executive';
+      applyFontPreset(savedPreset);
+
       const user = getStoredUser();
       const token = getToken();
       if (user && token) {
@@ -479,6 +485,7 @@ export default function Home() {
               activeTabTitle={activeTab}
               onOpenSearch={() => setIsSearchOpen(true)}
               onOpenQuickCapture={() => setIsQuickCaptureOpen(true)}
+              onOpenTypography={() => setIsTypographyOpen(true)}
               notifications={notifications}
               onRefreshNotifications={fetchNotifications}
               onBackToLanding={handleSignOut}
@@ -537,6 +544,7 @@ export default function Home() {
             onClose={() => setIsProfileOpen(false)}
             onSignOut={handleSignOut}
             onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenTypography={() => setIsTypographyOpen(true)}
             currentUser={currentUser}
             stats={{
               goalsCount: goals.length,
@@ -547,6 +555,11 @@ export default function Home() {
               remindersCount: reminders.length,
               learningCount: learning.length,
             }}
+          />
+
+          <TypographyVisualizerModal
+            isOpen={isTypographyOpen}
+            onClose={() => setIsTypographyOpen(false)}
           />
 
           <AdminPanelModal

@@ -3,6 +3,7 @@ import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
 import { getOwnedMessage } from '../lib/ownership';
 import { isSafeString, limitString, parseSafeUrl } from '../lib/validate';
+import { formatMarkdownForTelegram, sendTelegramFormattedReply } from '../lib/telegramFormat';
 
 export const messagesPublicRouter = Router();
 export const messagesPrivateRouter = Router();
@@ -10,7 +11,7 @@ const router = messagesPrivateRouter;
 
 import { COUNCIL_API_URL, getUserCouncilContext } from './council';
 
-// POST /api/v1/messages/telegram — Public Telegram Webhook Endpoint (Supports ?persona=sofi or custom bot)
+// POST /api/v1/messages/telegram — Public Telegram Webhook Endpoint (Supports forwarder mode, ?persona=sofi, or custom bots)
 messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Response) => {
   try {
     const update = req.body ?? {};
@@ -25,13 +26,21 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       return res.status(200).json({ ok: true });
     }
 
-    // Determine target persona (defaults to sofi if direct chat or /sofi or voice note)
+    // Determine Mode & Target Persona
+    const isForwarderMode =
+      req.query.mode === 'forwarder' ||
+      req.query.type === 'forwarder' ||
+      req.query.bot === 'forwarder' ||
+      req.query.persona === 'forwarder';
+
     let requestedPersona = (req.query.persona as string) || (req.query.bot as string) || '';
-    if (!requestedPersona && (isVoice || text.startsWith('/sofi') || msg.chat?.type === 'private')) {
+
+    // Only fallback to Sofi if NOT in forwarder mode AND explicit command / voice directed
+    if (!isForwarderMode && !requestedPersona && (text.startsWith('/sofi') || isVoice)) {
       requestedPersona = 'sofi';
     }
 
-    // Identify user: prioritize real user account (e.g. non-internal email) or most recent active user
+    // Identify user: prioritize real user account (non-internal email) or most recent active user
     let user = await db.user.findFirst({
       where: {
         NOT: { email: { endsWith: '@nox.internal' } },
@@ -52,9 +61,11 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
 
     // Resolve bot token dynamically from Council backend
     let botToken = process.env.TELEGRAM_BOT_TOKEN || '';
-    if (requestedPersona) {
+    const targetSlug = isForwarderMode ? 'forwarder' : requestedPersona;
+
+    if (targetSlug) {
       try {
-        const botInfoRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/${encodeURIComponent(requestedPersona.toLowerCase())}`, {
+        const botInfoRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/${encodeURIComponent(targetSlug.toLowerCase())}`, {
           headers: { 'X-User-Id': user.id },
         });
         if (botInfoRes.ok) {
@@ -64,7 +75,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           }
         }
       } catch (err) {
-        console.warn('Could not fetch dynamic bot token for persona:', requestedPersona);
+        console.warn('Could not fetch dynamic bot token for slug:', targetSlug);
       }
     }
 
@@ -73,14 +84,64 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'Telegram User'
       : msg.chat?.title || 'Telegram';
 
-    // ---- 1. If Voice Message from Telegram User ----
+    // =========================================================================
+    // CASE A: MESSAGE FORWARDER / SHARE INGEST MODE (Guaranteed No AI Hijack)
+    // =========================================================================
+    if (isForwarderMode || (!requestedPersona && !text.startsWith('/sofi'))) {
+      let validatedUrl: string | null = null;
+      if (text) {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const match = urlRegex.exec(String(text));
+        if (match) {
+          const urlCheck = parseSafeUrl(match[0]);
+          if (urlCheck.ok) {
+            validatedUrl = urlCheck.value ?? null;
+          }
+        }
+      }
+
+      const content = text || (msg.document ? `[Document: ${msg.document.file_name || 'file'}]` : '[Photo/Media]');
+
+      await db.message.create({
+        data: {
+          userId: user.id,
+          content: limitString(content.trim(), 10000),
+          source: 'TELEGRAM',
+          sender: limitString(senderName, 100),
+          url: validatedUrl,
+          metadata: JSON.stringify(update),
+        },
+      });
+
+      if (msg.chat?.id) {
+        if (botToken) {
+          await sendTelegramFormattedReply(
+            botToken,
+            msg.chat.id,
+            '✅ <b>Saved to NOX Inbox!</b>\n\nYour message, link, or media is safely indexed in your NOX workspace.'
+          );
+        } else {
+          return res.status(200).json({
+            method: 'sendMessage',
+            chat_id: msg.chat.id,
+            text: '✅ Saved to NOX Inbox!',
+            parse_mode: 'HTML',
+          });
+        }
+      }
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // =========================================================================
+    // CASE B: VOICE NOTE INTERACTION FOR AI PERSONA
+    // =========================================================================
     if (isVoice && requestedPersona) {
       try {
         const fileId = msg.voice?.file_id || msg.audio?.file_id;
         let audioBase64 = '';
 
         if (fileId && botToken) {
-          // Get file path from Telegram API
           const fileInfoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
           const fileInfo = (await fileInfoRes.json()) as any;
           if (fileInfo?.ok && fileInfo.result?.file_path) {
@@ -113,7 +174,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
         });
 
         const councilData = await councilRes.json().catch(() => ({}));
-        const replyText = councilData?.data?.spokenText || councilData?.data?.replyText || "Hey Ilakkiyan! I heard your voice note. I'm right here with you!";
+        const replyText = councilData?.data?.spokenText || councilData?.data?.replyText || "Hey! I heard your voice note. I'm right here with you!";
         let audioUrl = councilData?.data?.audioUrl;
         if (audioUrl && audioUrl.startsWith('/')) {
           audioUrl = `${COUNCIL_API_URL}${audioUrl}`;
@@ -121,7 +182,6 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
 
         if (msg.chat?.id) {
           if (audioUrl && botToken) {
-            // Send Voice Audio Note back to Telegram!
             try {
               await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, {
                 method: 'POST',
@@ -130,6 +190,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
                   chat_id: msg.chat.id,
                   voice: audioUrl,
                   caption: replyText,
+                  parse_mode: 'HTML',
                 }),
               });
               return res.status(200).json({ ok: true });
@@ -138,26 +199,41 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
             }
           }
 
-          return res.status(200).json({
-            method: 'sendMessage',
-            chat_id: msg.chat.id,
-            text: replyText,
-          });
+          if (botToken) {
+            await sendTelegramFormattedReply(botToken, msg.chat.id, replyText);
+          } else {
+            return res.status(200).json({
+              method: 'sendMessage',
+              chat_id: msg.chat.id,
+              text: formatMarkdownForTelegram(replyText),
+              parse_mode: 'HTML',
+            });
+          }
         }
       } catch (voiceErr) {
         console.error('Telegram voice processing error:', voiceErr);
         if (msg.chat?.id) {
-          return res.status(200).json({
-            method: 'sendMessage',
-            chat_id: msg.chat.id,
-            text: "I received your voice note! My synthesizer is tuning up, message me again in a moment.",
-          });
+          if (botToken) {
+            await sendTelegramFormattedReply(
+              botToken,
+              msg.chat.id,
+              "I received your voice note! My synthesizer is tuning up, message me again in a moment."
+            );
+          } else {
+            return res.status(200).json({
+              method: 'sendMessage',
+              chat_id: msg.chat.id,
+              text: "I received your voice note! My synthesizer is tuning up, message me again in a moment.",
+            });
+          }
         }
       }
       return res.status(200).json({ ok: true });
     }
 
-    // ---- 2. If Text routed to an AI Persona (e.g. Sofi) ----
+    // =========================================================================
+    // CASE C: TEXT CHAT FOR AI PERSONA (With Full Telegram HTML Markdown Formatting)
+    // =========================================================================
     if (requestedPersona) {
       const cleanPrompt = text.replace(/^\/sofi\s*/i, '').trim() || text;
 
@@ -185,57 +261,36 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           `Hi ${user.name || 'there'}! I'm connected to your NOX OS. How can I help you today?`;
 
         if (msg.chat?.id) {
-          return res.status(200).json({
-            method: 'sendMessage',
-            chat_id: msg.chat.id,
-            text: replyText,
-          });
+          if (botToken) {
+            await sendTelegramFormattedReply(botToken, msg.chat.id, replyText);
+          } else {
+            return res.status(200).json({
+              method: 'sendMessage',
+              chat_id: msg.chat.id,
+              text: formatMarkdownForTelegram(replyText),
+              parse_mode: 'HTML',
+            });
+          }
         }
       } catch (aiErr) {
         console.error('Council AI Error in Telegram Webhook:', aiErr);
         if (msg.chat?.id) {
-          return res.status(200).json({
-            method: 'sendMessage',
-            chat_id: msg.chat.id,
-            text: "I'm waking up my Council brain. Please give me a moment and message me again!",
-          });
+          if (botToken) {
+            await sendTelegramFormattedReply(
+              botToken,
+              msg.chat.id,
+              "I'm waking up my Council brain. Please give me a moment and message me again!"
+            );
+          } else {
+            return res.status(200).json({
+              method: 'sendMessage',
+              chat_id: msg.chat.id,
+              text: "I'm waking up my Council brain. Please give me a moment and message me again!",
+            });
+          }
         }
       }
       return res.status(200).json({ ok: true });
-    }
-
-    // ---- 2. Standard Message / Share Ingest Mode ----
-    let validatedUrl: string | null = null;
-    if (text) {
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
-      const match = urlRegex.exec(String(text));
-      if (match) {
-        const urlCheck = parseSafeUrl(match[0]);
-        if (urlCheck.ok) {
-          validatedUrl = urlCheck.value ?? null;
-        }
-      }
-    }
-
-    const content = text || (msg.document ? `[Document: ${msg.document.file_name || 'file'}]` : '[Photo/Media]');
-
-    await db.message.create({
-      data: {
-        userId: user.id,
-        content: limitString(content.trim(), 10000),
-        source: 'TELEGRAM',
-        sender: limitString(senderName, 100),
-        url: validatedUrl,
-        metadata: JSON.stringify(update),
-      },
-    });
-
-    if (msg.chat?.id) {
-      return res.status(200).json({
-        method: 'sendMessage',
-        chat_id: msg.chat.id,
-        text: '✅ Saved to NOX Messages!',
-      });
     }
 
     return res.status(200).json({ ok: true });
@@ -244,6 +299,173 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
     return res.status(200).json({ ok: true });
   }
 });
+
+// =========================================================================
+// FORWARDER BOT CONFIGURATION & WEBHOOK REGISTRATION ENDPOINTS
+// =========================================================================
+
+// POST /api/v1/messages/telegram/forwarder/connect — Test token, set webhook to mode=forwarder, save bot
+router.post('/messages/telegram/forwarder/connect', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { token } = req.body ?? {};
+
+    if (!token || typeof token !== 'string' || !token.includes(':')) {
+      return apiError(res, 'A valid Telegram Bot Token from @BotFather is required.', 400);
+    }
+
+    const cleanToken = token.trim();
+
+    // 1. Verify token with Telegram API
+    const getMeRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
+    const getMeData = (await getMeRes.json()) as any;
+
+    if (!getMeData || !getMeData.ok || !getMeData.result?.username) {
+      return apiError(
+        res,
+        `Invalid Telegram Bot Token: ${getMeData?.description || 'Unauthorized by Telegram.'}`,
+        400
+      );
+    }
+
+    const botUsername = getMeData.result.username;
+    const botFirstName = getMeData.result.first_name || 'NOX Forwarder';
+
+    // 2. Register Webhook pointing to ?mode=forwarder
+    const noxApiBase = process.env.NOX_PUBLIC_API_URL || 'https://nox-a1nr.onrender.com';
+    const webhookUrl = `${noxApiBase}/api/v1/messages/telegram?mode=forwarder`;
+
+    const setWebhookRes = await fetch(`https://api.telegram.org/bot${cleanToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webhookUrl,
+        allowed_updates: ['message', 'edited_message', 'channel_post'],
+        drop_pending_updates: false,
+      }),
+    });
+    const setWebhookData = (await setWebhookRes.json()) as any;
+
+    // 3. Persist Forwarder Bot to Council Bot Service / DB
+    try {
+      await fetch(`${COUNCIL_API_URL}/api/v1/bots`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId,
+        },
+        body: JSON.stringify({
+          name: 'Telegram Forwarder & Ingest',
+          slug: 'forwarder',
+          role: 'Share Ingest & Inbox Forwarder',
+          description: 'Dedicated bot for forwarding articles, links, and job postings into NOX Inbox',
+          avatar: '📥',
+          color: '#059669',
+          telegramBotToken: cleanToken,
+          telegramBotUsername: botUsername,
+          telegramWebhookUrl: webhookUrl,
+        }),
+      });
+    } catch (saveErr) {
+      console.warn('Could not persist forwarder bot to Council service:', saveErr);
+    }
+
+    return apiResponse(res, {
+      botUsername,
+      botFirstName,
+      webhookUrl,
+      telegramUrl: `https://t.me/${botUsername}`,
+      webhookStatus: setWebhookData.ok ? 'ACTIVE' : 'FAILED',
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to connect Telegram Forwarder bot';
+    return apiError(res, message, 500);
+  }
+});
+
+// GET /api/v1/messages/telegram/forwarder/status — Get active forwarder bot status
+router.get('/messages/telegram/forwarder/status', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    let botInfo: any = null;
+
+    try {
+      const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/forwarder`, {
+        headers: { 'X-User-Id': userId },
+      });
+      if (councilRes.ok) {
+        const json = (await councilRes.json()) as any;
+        if (json?.data) {
+          botInfo = json.data;
+        }
+      }
+    } catch (cErr) {
+      console.warn('Could not query Council for forwarder bot:', cErr);
+    }
+
+    return apiResponse(res, {
+      isConfigured: Boolean(botInfo?.telegramBotTokenMasked || botInfo?.telegramBotUsername),
+      botUsername: botInfo?.telegramBotUsername || null,
+      telegramBotTokenMasked: botInfo?.telegramBotTokenMasked || null,
+      webhookUrl: botInfo?.telegramWebhookUrl || null,
+      telegramUrl: botInfo?.telegramBotUsername ? `https://t.me/${botInfo.telegramBotUsername}` : null,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to get forwarder status';
+    return apiError(res, message, 500);
+  }
+});
+
+// POST /api/v1/messages/telegram/forwarder/disconnect — Disconnect forwarder webhook
+router.post('/messages/telegram/forwarder/disconnect', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    let botInfo: any = null;
+
+    try {
+      const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/forwarder`, {
+        headers: { 'X-User-Id': userId },
+      });
+      if (councilRes.ok) {
+        const json = (await councilRes.json()) as any;
+        botInfo = json?.data;
+      }
+    } catch (err) {
+      console.warn('Could not fetch bot to disconnect:', err);
+    }
+
+    if (botInfo?.id) {
+      // Remove webhook from Telegram if token available
+      try {
+        const rawRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${botInfo.id}`, {
+          headers: { 'X-User-Id': userId },
+        });
+        const rawJson = (await rawRes.json()) as any;
+        const fullToken = rawJson?.data?.telegramBotToken;
+        if (fullToken && !fullToken.includes('••••')) {
+          await fetch(`https://api.telegram.org/bot${fullToken}/deleteWebhook`);
+        }
+      } catch (tgErr) {
+        console.warn('Failed to delete Telegram webhook:', tgErr);
+      }
+
+      // Delete/clear bot config in Council
+      await fetch(`${COUNCIL_API_URL}/api/v1/bots/${botInfo.id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-Id': userId },
+      });
+    }
+
+    return apiResponse(res, { disconnected: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to disconnect forwarder bot';
+    return apiError(res, message, 500);
+  }
+});
+
+// =========================================================================
+// STANDARD MESSAGES INBOX API ROUTES
+// =========================================================================
 
 // GET /api/v1/messages — list messages
 router.get('/messages', async (req: Request, res: Response) => {
@@ -306,40 +528,28 @@ router.post('/messages', async (req: Request, res: Response) => {
       }
     }
 
-    // Auto extract URL if content is a URL or contains one and url field wasn't explicitly given
-    if (!validatedUrl) {
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
-      const match = urlRegex.exec(String(content));
-      if (match) {
-        const urlCheck = parseSafeUrl(match[0]);
-        if (urlCheck.ok) {
-          validatedUrl = urlCheck.value ?? null;
-        }
-      }
-    }
-
-    const validSource = typeof source === 'string' && source.trim() ? source.trim().toUpperCase() : 'WHATSAPP';
-    const validSender = typeof sender === 'string' && sender.trim() ? limitString(sender.trim(), 100) : 'WhatsApp Share';
+    const safeSource = isSafeString(source) ? String(source).toUpperCase() : 'WHATSAPP';
+    const safeSender = isSafeString(sender) ? String(sender) : 'Direct Share';
 
     const message = await db.message.create({
       data: {
         userId,
         content: limitString(String(content).trim(), 10000),
-        source: validSource,
-        sender: validSender,
+        source: safeSource,
+        sender: limitString(safeSender, 100),
         url: validatedUrl,
-        metadata: typeof metadata === 'object' && metadata !== null ? JSON.stringify(metadata) : typeof metadata === 'string' ? metadata : '{}',
+        metadata: typeof metadata === 'object' && metadata !== null ? JSON.stringify(metadata) : '{}',
       },
     });
 
     return apiResponse(res, message, 201);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to create message';
+    const message = err instanceof Error ? err.message : 'Failed to save message';
     return apiError(res, message, 500);
   }
 });
 
-// POST /api/v1/messages/:id/convert — 1-Click convert message to Task or Note
+// POST /api/v1/messages/:id/convert — convert message into actionable Task or Note
 router.post('/messages/:id/convert', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -350,7 +560,6 @@ router.post('/messages/:id/convert', async (req: Request, res: Response) => {
     const type = typeof targetType === 'string' ? targetType.toUpperCase() : 'TASK';
 
     if (type === 'TASK') {
-      // First line or up to 80 chars as task title
       const derivedTitle = isSafeString(title)
         ? limitString(String(title).trim(), 200)
         : limitString(target.content.split('\n')[0].replace(/^[•\-\*]\s*/, '').trim(), 150) || 'Task from WhatsApp';
