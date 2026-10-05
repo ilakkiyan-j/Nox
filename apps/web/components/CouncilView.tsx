@@ -28,6 +28,14 @@ import {
   Minimize2,
   PhoneCall,
   Mic,
+  Upload,
+  ArrowUp,
+  ArrowDown,
+  Globe,
+  Database,
+  Terminal,
+  Layers,
+  Sparkle,
 } from 'lucide-react';
 import { TelegramIcon } from './ui/BrandIcons';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -86,6 +94,20 @@ export interface MemoryProfile {
   facts: UserFact[];
 }
 
+export interface FallbackItem {
+  provider: 'gemini' | 'groq' | 'openai' | 'ollama' | string;
+  model?: string;
+  enabled: boolean;
+}
+
+export interface BotPermissions {
+  canAccessNox: boolean;
+  canSearchWeb: boolean;
+  canAuditCode: boolean;
+  canAdaptPersona: boolean;
+  canAccessMemory: boolean;
+}
+
 export interface BotItem {
   id: string;
   name: string;
@@ -95,6 +117,13 @@ export interface BotItem {
   description?: string;
   isDefault?: boolean;
   status?: string;
+  persona?: {
+    traits?: {
+      permissions?: Partial<BotPermissions>;
+      [key: string]: any;
+    };
+  };
+  permissions?: Partial<BotPermissions>;
   instruction?: {
     systemPrompt?: string;
     contextGuidelines?: string;
@@ -104,6 +133,8 @@ export interface BotItem {
     provider?: string;
     model?: string;
     temperature?: number;
+    customEndpoint?: string;
+    fallbackPipeline?: FallbackItem[];
     credential?: {
       id?: string;
       label?: string;
@@ -164,6 +195,58 @@ const DEFAULT_PERSONAS: Record<string, { name: string; role: string; avatar: str
 
 const SUGGESTED_EMOJIS = ['💖', '🧭', '🔥', '🤖', '🧠', '⚡', '🚀', '🛡️', '🦉', '🎨', '🧪', '💼'];
 
+const DEFAULT_FALLBACK_PIPELINE: FallbackItem[] = [
+  { provider: 'gemini', model: 'gemini-2.5-flash', enabled: true },
+  { provider: 'groq', model: 'llama-3.3-70b-versatile', enabled: true },
+  { provider: 'openai', model: 'gpt-4o-mini', enabled: false },
+  { provider: 'ollama', model: 'llama3.2', enabled: false },
+];
+
+const DEFAULT_PERMISSIONS_BY_BOT: Record<string, BotPermissions> = {
+  sofi: {
+    canAccessNox: true,
+    canSearchWeb: true,
+    canAuditCode: false,
+    canAdaptPersona: true,
+    canAccessMemory: true,
+  },
+  riven: {
+    canAccessNox: false,
+    canSearchWeb: true,
+    canAuditCode: true,
+    canAdaptPersona: true,
+    canAccessMemory: true,
+  },
+  lucifer: {
+    canAccessNox: false,
+    canSearchWeb: true,
+    canAuditCode: true,
+    canAdaptPersona: true,
+    canAccessMemory: true,
+  },
+};
+
+export function BotAvatarDisplay({ avatar, name, className = "w-8 h-8 rounded-xl" }: { avatar?: string; name?: string; className?: string }) {
+  const isImageUrl = avatar && (avatar.startsWith('http://') || avatar.startsWith('https://') || avatar.startsWith('data:image'));
+  if (isImageUrl) {
+    return (
+      <img
+        src={avatar}
+        alt={name || 'Avatar'}
+        className={`${className} object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-xs`}
+        onError={(e) => {
+          (e.target as HTMLElement).style.display = 'none';
+        }}
+      />
+    );
+  }
+  return (
+    <span className={`inline-flex items-center justify-center select-none ${className} shrink-0`}>
+      {avatar || '🤖'}
+    </span>
+  );
+}
+
 const DEBATE_SUGGESTIONS = [
   'Should I migrate my local storage to SQLite or stay with file JSON?',
   'Can I realistically launch my v1 feature set by this weekend?',
@@ -209,6 +292,19 @@ export default function CouncilView({
   const [telegramConnectSuccess, setTelegramConnectSuccess] = useState<string | null>(null);
   const [telegramConnectError, setTelegramConnectError] = useState<string | null>(null);
   const [savingBot, setSavingBot] = useState(false);
+
+  // Fallback Pipeline & Granular Permissions State
+  const [fallbackPipeline, setFallbackPipeline] = useState<FallbackItem[]>(DEFAULT_FALLBACK_PIPELINE);
+  const [editorPermissions, setEditorPermissions] = useState<BotPermissions>({
+    canAccessNox: true,
+    canSearchWeb: true,
+    canAuditCode: true,
+    canAdaptPersona: true,
+    canAccessMemory: true,
+  });
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Chat & Sessions
   const [sessionId, setSessionId] = useState<string>('');
@@ -697,6 +793,109 @@ export default function CouncilView({
     }
   };
 
+  // Fallback Pipeline Management Helpers
+  const moveFallback = (index: number, direction: 'up' | 'down') => {
+    setFallbackPipeline((prev) => {
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[targetIndex];
+      copy[targetIndex] = temp;
+      return copy;
+    });
+  };
+
+  const toggleFallback = (index: number) => {
+    setFallbackPipeline((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], enabled: !copy[index].enabled };
+      return copy;
+    });
+  };
+
+  const updateFallbackModel = (index: number, model: string) => {
+    setFallbackPipeline((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], model };
+      return copy;
+    });
+  };
+
+  // Avatar Image Compression & Cloudinary Upload
+  const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    setAvatarUploadError(null);
+
+    try {
+      // 1. Read file as Image object for canvas compression
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = (event) => resolve(event.target?.result as string);
+        reader.onerror = (err) => reject(err);
+      });
+      reader.readAsDataURL(file);
+      const dataUrl = await base64Promise;
+
+      // 2. Compress via Canvas to max 256x256 WebP
+      const compressedDataUrl = await new Promise<string>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 256;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/webp', 0.85));
+          } else {
+            resolve(dataUrl);
+          }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+
+      // 3. Upload to Cloudinary CDN via API
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/auth/avatar/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: compressedDataUrl }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.url) {
+        setEditorAvatar(json.data.url);
+      } else {
+        // If cloud upload fails or endpoint missing, fallback directly to local compressed data url
+        setEditorAvatar(compressedDataUrl);
+      }
+    } catch (err: any) {
+      console.warn('Avatar upload failed, falling back:', err);
+      setAvatarUploadError(err.message || 'Image upload failed. You can paste an image URL or emoji.');
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   // Open modal for Creating a new bot
   const handleOpenCreateBot = () => {
     setEditingBotId(null);
@@ -712,6 +911,15 @@ export default function CouncilView({
     setEditorTelegramUsername('');
     setTelegramConnectSuccess(null);
     setTelegramConnectError(null);
+    setAvatarUploadError(null);
+    setFallbackPipeline(DEFAULT_FALLBACK_PIPELINE);
+    setEditorPermissions({
+      canAccessNox: true,
+      canSearchWeb: true,
+      canAuditCode: true,
+      canAdaptPersona: true,
+      canAccessMemory: true,
+    });
     setShowEditorModal(true);
   };
 
@@ -730,6 +938,53 @@ export default function CouncilView({
     setEditorTelegramUsername(bot.telegramBotUsername || '');
     setTelegramConnectSuccess(null);
     setTelegramConnectError(null);
+    setAvatarUploadError(null);
+
+    // Load or initialize Fallback Pipeline
+    let parsedPipeline: FallbackItem[] | null = null;
+    if (bot.modelConfig?.customEndpoint) {
+      try {
+        const parsed = JSON.parse(bot.modelConfig.customEndpoint);
+        if (Array.isArray(parsed?.fallbackPipeline)) {
+          parsedPipeline = parsed.fallbackPipeline;
+        }
+      } catch {}
+    }
+    if (!parsedPipeline && Array.isArray(bot.modelConfig?.fallbackPipeline)) {
+      parsedPipeline = bot.modelConfig.fallbackPipeline;
+    }
+
+    if (parsedPipeline && parsedPipeline.length > 0) {
+      setFallbackPipeline(parsedPipeline);
+    } else {
+      const primaryProv = bot.modelConfig?.provider || 'gemini';
+      const primaryModel = bot.modelConfig?.model || (primaryProv === 'gemini' ? 'gemini-2.5-flash' : 'llama-3.3-70b-versatile');
+      const defaultList: FallbackItem[] = [
+        { provider: primaryProv, model: primaryModel, enabled: true },
+        ...DEFAULT_FALLBACK_PIPELINE.filter((p) => p.provider !== primaryProv),
+      ];
+      setFallbackPipeline(defaultList);
+    }
+
+    // Load or initialize Permissions
+    const existingPerms =
+      bot.persona?.traits?.permissions ||
+      bot.permissions ||
+      DEFAULT_PERMISSIONS_BY_BOT[bot.id || ''] || {
+        canAccessNox: true,
+        canSearchWeb: true,
+        canAuditCode: true,
+        canAdaptPersona: true,
+        canAccessMemory: true,
+      };
+    setEditorPermissions({
+      canAccessNox: existingPerms.canAccessNox !== false,
+      canSearchWeb: existingPerms.canSearchWeb !== false,
+      canAuditCode: existingPerms.canAuditCode === true || bot.id === 'lucifer' || bot.id === 'riven',
+      canAdaptPersona: existingPerms.canAdaptPersona !== false,
+      canAccessMemory: existingPerms.canAccessMemory !== false,
+    });
+
     setShowEditorModal(true);
 
     // Fetch full bot details if instruction wasn't loaded
@@ -746,6 +1001,20 @@ export default function CouncilView({
         }
         if (detailed?.telegramBotUsername) {
           setEditorTelegramUsername(detailed.telegramBotUsername);
+        }
+        if (detailed?.persona?.traits?.permissions) {
+          setEditorPermissions((prev) => ({
+            ...prev,
+            ...detailed.persona.traits.permissions,
+          }));
+        }
+        if (detailed?.modelConfig?.customEndpoint) {
+          try {
+            const parsed = JSON.parse(detailed.modelConfig.customEndpoint);
+            if (Array.isArray(parsed?.fallbackPipeline)) {
+              setFallbackPipeline(parsed.fallbackPipeline);
+            }
+          } catch {}
         }
       }
     } catch (err) {
@@ -797,6 +1066,9 @@ export default function CouncilView({
 
     setSavingBot(true);
     try {
+      // Primary provider is the top-most enabled item in fallbackPipeline, or editorProvider
+      const primaryCandidate = fallbackPipeline.find((p) => p.enabled) || fallbackPipeline[0] || { provider: editorProvider, model: editorModel };
+
       const payload: any = {
         name: editorName.trim(),
         role: editorRole.trim() || 'AI Assistant',
@@ -805,10 +1077,17 @@ export default function CouncilView({
         instruction: {
           systemPrompt: editorPrompt.trim(),
         },
+        persona: {
+          traits: {
+            permissions: editorPermissions,
+          },
+        },
+        permissions: editorPermissions,
         modelConfig: {
-          provider: editorProvider,
-          model: editorModel.trim() || undefined,
+          provider: primaryCandidate.provider || editorProvider,
+          model: primaryCandidate.model || editorModel.trim() || undefined,
           temperature: editorTemperature,
+          customEndpoint: JSON.stringify({ fallbackPipeline }),
         },
         telegramBotToken: editorTelegramToken.trim() || null,
         telegramBotUsername: editorTelegramUsername.trim() || null,
@@ -1159,7 +1438,7 @@ export default function CouncilView({
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800'
                     }`}
                   >
-                    <span>{b.avatar || '🤖'}</span>
+                    <BotAvatarDisplay avatar={b.avatar} name={b.name} className="w-4 h-4 rounded-md text-xs" />
                     <span>{b.name}</span>
                   </button>
                 );
@@ -1217,7 +1496,7 @@ export default function CouncilView({
                 <div className="flex items-center space-x-1.5 mb-1 px-1 text-[11px] text-slate-400">
                   {m.sender === 'assistant' ? (
                     <>
-                      <span>{currentBotAvatar}</span>
+                      <BotAvatarDisplay avatar={currentBotAvatar} name={currentBotName} className="w-4 h-4 rounded-md text-xs" />
                       <span className="font-semibold text-slate-700 dark:text-slate-300">{currentBotName}</span>
                     </>
                   ) : (
@@ -1466,8 +1745,8 @@ export default function CouncilView({
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-2xl shadow-xs">
-                        {b.avatar || '🤖'}
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-2xl shadow-xs overflow-hidden">
+                        <BotAvatarDisplay avatar={b.avatar} name={b.name} className="w-full h-full text-2xl flex items-center justify-center" />
                       </div>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                         {b.status || 'ACTIVE'}
@@ -1727,35 +2006,82 @@ export default function CouncilView({
               </button>
             </div>
 
-            <form onSubmit={handleSaveBot} className="space-y-3.5 text-xs">
-              {/* Avatar Selector */}
-              <div>
-                <label className="font-semibold block mb-1">Avatar Emoji</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={editorAvatar}
-                    onChange={(e) => setEditorAvatar(e.target.value)}
-                    className="w-12 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-center text-xl outline-none font-bold"
-                  />
-                  <div className="flex flex-wrap gap-1 flex-1">
-                    {SUGGESTED_EMOJIS.map((em) => (
+            <form onSubmit={handleSaveBot} className="space-y-4 text-xs">
+              {/* Avatar Selector & Cloud Image Upload */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
+                <label className="font-semibold block text-slate-800 dark:text-slate-200">
+                  Bot Avatar (Image Upload or Emoji)
+                </label>
+                <div className="flex items-center gap-3">
+                  {/* Avatar Preview */}
+                  <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-3xl shadow-xs overflow-hidden shrink-0">
+                    <BotAvatarDisplay avatar={editorAvatar} name={editorName} className="w-full h-full text-2xl flex items-center justify-center" />
+                  </div>
+
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={editorAvatar}
+                        onChange={(e) => setEditorAvatar(e.target.value)}
+                        placeholder="Emoji or Image URL (https://...)"
+                        className="flex-1 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none text-xs"
+                      />
+
+                      {/* Hidden File Input for Cloud Upload */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleAvatarFileUpload}
+                        accept="image/*"
+                        className="hidden"
+                      />
+
                       <button
                         type="button"
-                        key={em}
-                        onClick={() => setEditorAvatar(em)}
-                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-base transition"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingAvatar}
+                        className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold flex items-center gap-1.5 transition text-xs shrink-0 disabled:opacity-50"
+                        title="Upload custom image from your device to Cloudinary CDN"
                       >
-                        {em}
+                        {uploadingAvatar ? (
+                          <>
+                            <RefreshCw size={12} className="animate-spin" />
+                            <span>Uploading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={12} />
+                            <span>Upload Image</span>
+                          </>
+                        )}
                       </button>
-                    ))}
+                    </div>
+
+                    {/* Suggested Emoji Chips */}
+                    <div className="flex flex-wrap gap-1 items-center">
+                      <span className="text-[10px] text-slate-400 font-medium mr-1">Suggested:</span>
+                      {SUGGESTED_EMOJIS.map((em) => (
+                        <button
+                          type="button"
+                          key={em}
+                          onClick={() => setEditorAvatar(em)}
+                          className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition flex items-center justify-center"
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+                {avatarUploadError && (
+                  <p className="text-[11px] text-rose-500">{avatarUploadError}</p>
+                )}
               </div>
 
               {/* Name & Role */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold block mb-1">Bot Name *</label>
+                  <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">Bot Name *</label>
                   <input
                     value={editorName}
                     onChange={(e) => setEditorName(e.target.value)}
@@ -1765,7 +2091,7 @@ export default function CouncilView({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold block mb-1">Role / Persona Title *</label>
+                  <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">Role / Persona Title *</label>
                   <input
                     value={editorRole}
                     onChange={(e) => setEditorRole(e.target.value)}
@@ -1778,7 +2104,7 @@ export default function CouncilView({
 
               {/* Description */}
               <div>
-                <label className="font-semibold block mb-1">Description</label>
+                <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">Description</label>
                 <input
                   value={editorDesc}
                   onChange={(e) => setEditorDesc(e.target.value)}
@@ -1787,45 +2113,102 @@ export default function CouncilView({
                 />
               </div>
 
-              {/* Model Provider & Configuration */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="font-semibold block mb-1">AI Provider</label>
-                    <select
-                      value={editorProvider}
-                      onChange={(e) => setEditorProvider(e.target.value)}
-                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                    >
-                      <option value="gemini">Google Gemini</option>
-                      <option value="groq">Groq Cloud</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="ollama">Ollama (Local)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-semibold block mb-1">Model Name (Optional)</label>
-                    <input
-                      value={editorModel}
-                      onChange={(e) => setEditorModel(e.target.value)}
-                      placeholder="default (e.g. gemini-2.5-flash)"
-                      className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                    />
+              {/* MULTI-API FALLBACK REORDER PIPELINE */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers size={15} className="text-blue-500" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Multi-API Fallback Routing Pipeline
+                      </h4>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Ordered execution chain. If the primary API encounters rate limits or errors, it transparently fails over down the list.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Key Status Helper */}
-                <div className="text-[11px] flex items-center gap-1 text-slate-500">
-                  {credentials.some((c) => c.provider === editorProvider && c.status === 'ACTIVE') ? (
-                    <span className="text-emerald-500 font-medium">✓ Uses your active {editorProvider.toUpperCase()} BYOK key</span>
-                  ) : (
-                    <span className="text-amber-500">⚠️ No key configured for {editorProvider}. You can connect one in BYOK Vault.</span>
-                  )}
+                <div className="space-y-1.5">
+                  {fallbackPipeline.map((item, idx) => {
+                    const hasKey = credentials.some((c) => c.provider === item.provider && c.status === 'ACTIVE');
+                    return (
+                      <div
+                        key={item.provider}
+                        className={`flex items-center justify-between p-2 rounded-xl border text-xs transition ${
+                          item.enabled
+                            ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 shadow-xs'
+                            : 'bg-slate-100/60 dark:bg-slate-800/40 border-slate-200/50 dark:border-slate-800 opacity-60'
+                        }`}
+                      >
+                        {/* Order & Provider Label */}
+                        <div className="flex items-center gap-2">
+                          {/* Reorder Buttons */}
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => moveFallback(idx, 'up')}
+                              disabled={idx === 0}
+                              className="p-0.5 rounded text-slate-400 hover:text-blue-500 disabled:opacity-20 transition"
+                              title="Move up priority"
+                            >
+                              <ArrowUp size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveFallback(idx, 'down')}
+                              disabled={idx === fallbackPipeline.length - 1}
+                              className="p-0.5 rounded text-slate-400 hover:text-blue-500 disabled:opacity-20 transition"
+                              title="Move down priority"
+                            >
+                              <ArrowDown size={11} />
+                            </button>
+                          </div>
+
+                          {/* Priority Badge */}
+                          <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 flex items-center justify-center">
+                            #{idx + 1}
+                          </span>
+
+                          <div>
+                            <span className="font-bold uppercase text-slate-900 dark:text-slate-100 mr-1.5 text-[11px]">
+                              {item.provider}
+                            </span>
+                            <span className={`text-[10px] font-medium ${hasKey ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {hasKey ? '✓ Active Key' : '⚠️ No BYOK Key'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Model Name & Enable Toggle */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={item.model || ''}
+                            onChange={(e) => updateFallbackModel(idx, e.target.value)}
+                            placeholder="model name"
+                            className="w-36 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono outline-none"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => toggleFallback(idx)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${
+                              item.enabled
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            {item.enabled ? 'Enabled' : 'Disabled'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {/* Temperature Slider */}
-                <div>
-                  <div className="flex justify-between font-semibold mb-1">
+                {/* Creativity / Temperature Slider */}
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <div className="flex justify-between font-semibold mb-1 text-[11px] text-slate-700 dark:text-slate-300">
                     <span>Creativity (Temperature)</span>
                     <span>{editorTemperature.toFixed(2)}</span>
                   </div>
@@ -1839,19 +2222,136 @@ export default function CouncilView({
                     className="w-full accent-blue-600"
                   />
                   <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>0.0 (Precise & Deterministic)</span>
-                    <span>1.0 (Creative & Exploratory)</span>
+                    <span>0.0 (Deterministic)</span>
+                    <span>1.0 (Creative)</span>
                   </div>
+                </div>
+              </div>
+
+              {/* GRANULAR CAPABILITIES & PERMISSIONS MATRIX */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={15} className="text-emerald-500" />
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Granular Tool & Capability Permissions Matrix
+                    </h4>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Selectively assign or restrict tools, system control, and memory access for this bot.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {/* NOX OS Access */}
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
+                    <input
+                      type="checkbox"
+                      checked={editorPermissions.canAccessNox}
+                      onChange={(e) =>
+                        setEditorPermissions((prev) => ({ ...prev, canAccessNox: e.target.checked }))
+                      }
+                      className="mt-0.5 accent-blue-600 rounded"
+                    />
+                    <div>
+                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                        <Database size={12} className="text-indigo-500" /> NOX OS Workspace
+                      </span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Read & modify Tasks, Goals, Events, Notes, and Habits.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Live Web Search */}
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
+                    <input
+                      type="checkbox"
+                      checked={editorPermissions.canSearchWeb}
+                      onChange={(e) =>
+                        setEditorPermissions((prev) => ({ ...prev, canSearchWeb: e.target.checked }))
+                      }
+                      className="mt-0.5 accent-blue-600 rounded"
+                    />
+                    <div>
+                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                        <Globe size={12} className="text-cyan-500" /> Live Web Search
+                      </span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Query web search engines for up-to-date real-world facts.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Codebase Audit & Architecture */}
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
+                    <input
+                      type="checkbox"
+                      checked={editorPermissions.canAuditCode}
+                      onChange={(e) =>
+                        setEditorPermissions((prev) => ({ ...prev, canAuditCode: e.target.checked }))
+                      }
+                      className="mt-0.5 accent-blue-600 rounded"
+                    />
+                    <div>
+                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                        <Terminal size={12} className="text-amber-500" /> Codebase Audit & Stress-Testing
+                      </span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Run technical audits, architectural reviews, and system tests.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Persona Dynamic Adaptation */}
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
+                    <input
+                      type="checkbox"
+                      checked={editorPermissions.canAdaptPersona}
+                      onChange={(e) =>
+                        setEditorPermissions((prev) => ({ ...prev, canAdaptPersona: e.target.checked }))
+                      }
+                      className="mt-0.5 accent-blue-600 rounded"
+                    />
+                    <div>
+                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                        <Sparkles size={12} className="text-purple-500" /> Persona Dynamic Adaptation
+                      </span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Allow the bot to evolve instructions & tone based on user chats.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Long-Term Memory Access */}
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={editorPermissions.canAccessMemory}
+                      onChange={(e) =>
+                        setEditorPermissions((prev) => ({ ...prev, canAccessMemory: e.target.checked }))
+                      }
+                      className="mt-0.5 accent-blue-600 rounded"
+                    />
+                    <div>
+                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                        <Brain size={12} className="text-pink-500" /> Long-Term Memory Vault
+                      </span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                        Store and recall user preferences, tech stack, and goals across chat sessions.
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 
               {/* System Instructions / Prompt */}
               <div>
-                <label className="font-semibold block mb-1">System Instructions / Prompt</label>
+                <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">System Instructions / Prompt</label>
                 <textarea
                   value={editorPrompt}
                   onChange={(e) => setEditorPrompt(e.target.value)}
-                  rows={5}
+                  rows={4}
                   placeholder="Define this bot's personality, decision-making style, and behavior rules..."
                   className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none resize-none font-mono text-[11px] leading-relaxed"
                 />
