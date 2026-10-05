@@ -818,6 +818,119 @@ privateRouter.post('/council/debate', async (req: Request, res: Response) => {
 });
 
 /**
+ * -----------------------------------------------------------------------------
+ * Voice & Speech Synthesizer Endpoints
+ * -----------------------------------------------------------------------------
+ */
+
+// GET /api/v1/voice/preferences
+privateRouter.get('/voice/preferences', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const authHeader = req.headers.authorization || '';
+    const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/preferences`, {
+      headers: { Authorization: authHeader, 'X-User-Id': userId },
+    });
+    const data = await upstreamRes.json().catch(() => ({}));
+    if (!upstreamRes.ok) {
+      return apiError(res, data?.error?.message || 'Failed to fetch voice preferences', mapCouncilStatus(upstreamRes.status));
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    return apiError(res, err instanceof Error ? err.message : 'Voice proxy error', 502);
+  }
+});
+
+// PATCH /api/v1/voice/preferences
+privateRouter.patch('/voice/preferences', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const authHeader = req.headers.authorization || '';
+    const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/preferences`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader, 'X-User-Id': userId },
+      body: JSON.stringify(req.body),
+    });
+    const data = await upstreamRes.json().catch(() => ({}));
+    if (!upstreamRes.ok) {
+      return apiError(res, data?.error?.message || 'Failed to update voice preferences', mapCouncilStatus(upstreamRes.status));
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    return apiError(res, err instanceof Error ? err.message : 'Voice proxy error', 502);
+  }
+});
+
+// GET /api/v1/voice/catalog
+privateRouter.get('/voice/catalog', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const authHeader = req.headers.authorization || '';
+    const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/catalog`, {
+      headers: { Authorization: authHeader, 'X-User-Id': userId },
+    });
+    const data = await upstreamRes.json().catch(() => ({}));
+    if (!upstreamRes.ok) {
+      return apiError(res, data?.error?.message || 'Failed to fetch voice catalog', mapCouncilStatus(upstreamRes.status));
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    return apiError(res, err instanceof Error ? err.message : 'Voice proxy error', 502);
+  }
+});
+
+// POST /api/v1/voice/test
+privateRouter.post('/voice/test', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const authHeader = req.headers.authorization || '';
+    const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader, 'X-User-Id': userId },
+      body: JSON.stringify(req.body),
+    });
+    const data = await upstreamRes.json().catch(() => ({}));
+    if (!upstreamRes.ok) {
+      return apiError(res, data?.error?.message || 'Failed to synthesize voice test', mapCouncilStatus(upstreamRes.status));
+    }
+    // If audioUrl is relative, ensure it can be routed through upstream
+    if (data.data?.audioUrl && data.data.audioUrl.startsWith('/')) {
+      data.data.audioUrl = `${COUNCIL_API_URL}${data.data.audioUrl}`;
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    return apiError(res, err instanceof Error ? err.message : 'Voice proxy error', 502);
+  }
+});
+
+// POST /api/v1/voice/call-turn
+privateRouter.post('/voice/call-turn', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const authHeader = req.headers.authorization || '';
+    const userContext = await getUserCouncilContext(userId);
+    const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/call-turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader, 'X-User-Id': userId },
+      body: JSON.stringify({
+        ...req.body,
+        userContext,
+      }),
+    });
+    const data = await upstreamRes.json().catch(() => ({}));
+    if (!upstreamRes.ok) {
+      return apiError(res, data?.error?.message || 'Voice call turn failed', mapCouncilStatus(upstreamRes.status));
+    }
+    if (data.data?.audioUrl && data.data.audioUrl.startsWith('/')) {
+      data.data.audioUrl = `${COUNCIL_API_URL}${data.data.audioUrl}`;
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    return apiError(res, err instanceof Error ? err.message : 'Voice call turn error', 502);
+  }
+});
+
+/**
  * Starts an automated 10-minute background keep-alive heartbeat
  * to prevent Render free-tier containers from idling into sleep mode.
  */

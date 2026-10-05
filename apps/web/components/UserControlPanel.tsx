@@ -3,7 +3,8 @@ import {
   X, User, Sun, Moon, Shield, Zap, LogOut, Settings, Target, CheckSquare,
   StickyNote, Calendar, Flame, GraduationCap, Bell, Download, Trash2,
   Edit3, Save, BarChart3, Clock, AlarmClock, Layers, ChevronRight,
-  Database, Compass, Lock, Sparkles, ArrowLeft, Upload, Image as ImageIcon, Link as LinkIcon, RefreshCw
+  Database, Compass, Lock, Sparkles, ArrowLeft, Upload, Image as ImageIcon, Link as LinkIcon, RefreshCw,
+  Volume2, Mic, Play, Pause, Radio, Check, SlidersHorizontal
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
@@ -27,7 +28,7 @@ interface UserControlPanelProps {
   };
 }
 
-type PanelSection = 'overview' | 'profile' | 'preferences' | 'analytics' | 'data';
+type PanelSection = 'overview' | 'profile' | 'preferences' | 'voice' | 'analytics' | 'data';
 
 export default function UserControlPanel({
   isOpen,
@@ -46,10 +47,117 @@ export default function UserControlPanel({
   const [uploadingCloud, setUploadingCloud] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Voice Settings State
+  const [voiceModel, setVoiceModel] = useState('en-US-AvaMultilingualNeural');
+  const [pitchHz, setPitchHz] = useState<number>(0);
+  const [ratePct, setRatePct] = useState<number>(0);
+  const [isCloneEnabled, setIsCloneEnabled] = useState(true);
+  const [voiceCatalog, setVoiceCatalog] = useState<any[]>([]);
+  const [testText, setTestText] = useState("Hi Ilakkiyan! Tomorrow is Snowflake prep day. We are going to go hard and crush it together.");
+  const [isPlayingTest, setIsPlayingTest] = useState(false);
+  const [testingVoice, setTestingVoice] = useState(false);
+  const [savingVoice, setSavingVoice] = useState(false);
+  const [voiceSaveSuccess, setVoiceSaveSuccess] = useState(false);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     if (currentUser?.name) setDisplayName(currentUser.name);
     if (currentUser?.avatarUrl !== undefined) setAvatarUrl(currentUser.avatarUrl || '');
+    loadVoiceSettings();
   }, [currentUser]);
+
+  const loadVoiceSettings = async () => {
+    try {
+      const [prefRes, catalogRes] = await Promise.all([
+        fetchWithUser(`${API_BASE_URL}/api/v1/voice/preferences`),
+        fetchWithUser(`${API_BASE_URL}/api/v1/voice/catalog`),
+      ]);
+      const prefData = await prefRes.json();
+      const catalogData = await catalogRes.json();
+
+      if (prefData.success && prefData.data) {
+        setVoiceModel(prefData.data.voiceModel || 'en-US-AvaMultilingualNeural');
+        const pMatch = (prefData.data.pitch || '+0Hz').match(/([+-]?\d+)/);
+        if (pMatch) setPitchHz(parseInt(pMatch[1], 10));
+        const rMatch = (prefData.data.rate || '+0%').match(/([+-]?\d+)/);
+        if (rMatch) setRatePct(parseInt(rMatch[1], 10));
+        setIsCloneEnabled(prefData.data.isCloneEnabled ?? true);
+      }
+
+      if (catalogData.success && catalogData.data) {
+        setVoiceCatalog(catalogData.data);
+      }
+    } catch (err) {
+      console.warn('Could not load voice preferences:', err);
+    }
+  };
+
+  const handleSaveVoice = async () => {
+    setSavingVoice(true);
+    try {
+      const pitchStr = `${pitchHz >= 0 ? '+' : ''}${pitchHz}Hz`;
+      const rateStr = `${ratePct >= 0 ? '+' : ''}${ratePct}%`;
+
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/voice/preferences`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          voiceModel,
+          pitch: pitchStr,
+          rate: rateStr,
+          isCloneEnabled,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVoiceSaveSuccess(true);
+        setTimeout(() => setVoiceSaveSuccess(false), 2500);
+      }
+    } catch (err) {
+      console.error('Failed to save voice preference:', err);
+    } finally {
+      setSavingVoice(false);
+    }
+  };
+
+  const handleTestVoice = async () => {
+    if (isPlayingTest && audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      setIsPlayingTest(false);
+      return;
+    }
+
+    setTestingVoice(true);
+    try {
+      const pitchStr = `${pitchHz >= 0 ? '+' : ''}${pitchHz}Hz`;
+      const rateStr = `${ratePct >= 0 ? '+' : ''}${ratePct}%`;
+
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/voice/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: testText,
+          voiceModel,
+          pitch: pitchStr,
+          rate: rateStr,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.data?.audioUrl) {
+        const audio = new Audio(data.data.audioUrl);
+        audioPlayerRef.current = audio;
+        setIsPlayingTest(true);
+        audio.onended = () => setIsPlayingTest(false);
+        audio.onerror = () => setIsPlayingTest(false);
+        await audio.play();
+      }
+    } catch (err) {
+      console.error('Voice test synthesis failed:', err);
+    } finally {
+      setTestingVoice(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -152,6 +260,7 @@ export default function UserControlPanel({
     { id: 'overview', label: 'Overview', description: 'Identity summary & workspace snapshot', icon: User },
     { id: 'profile', label: 'Profile & Identity', description: 'Personal details & display settings', icon: Edit3 },
     { id: 'preferences', label: 'Preferences', description: 'Theme, time flow & environment rules', icon: Settings },
+    { id: 'voice', label: 'Voice & Speech', description: 'Locked Sofi voice synthesizer, pitch & rate', icon: Volume2 },
     { id: 'analytics', label: 'Analytics & Impact', description: 'Metrics & workspace activity breakdown', icon: BarChart3 },
     { id: 'data', label: 'Data & Security', description: 'Exports, session status & danger zone', icon: Database },
   ];
@@ -610,6 +719,231 @@ export default function UserControlPanel({
                     </span>
                   </button>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── VOICE & SPEECH SYNTHESIZER SECTION ── */}
+          {activeSection === 'voice' && (
+            <div className="space-y-6 animate-in fade-in duration-150 max-w-3xl">
+              <div>
+                <h2 className="font-display text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                  <Volume2 className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                  <span>Voice & Speech Synthesizer</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Configure high-fidelity neural voices, speech rate, pitch tuning, and exclusive clone voice settings.
+                </p>
+              </div>
+
+              {/* Exclusive Sofi Cloned Voice Banner */}
+              <div className="p-6 rounded-3xl bg-gradient-to-r from-indigo-900/40 via-violet-900/40 to-slate-900/40 border border-indigo-500/30 shadow-lg space-y-4 relative overflow-hidden">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md">
+                      <Mic className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          🔒 EXCLUSIVE OWNER VOICE PACK
+                        </span>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          CLEAN CLONE ACTIVE
+                        </span>
+                      </div>
+                      <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 mt-1">
+                        Sofi Locked Neural Voice
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Clean reference profile (<code className="text-indigo-400 font-mono text-[11px]">sofi_clean_reference.wav</code>) locked to your account with zero noise.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                  <span className="font-mono text-[11px]">🛡️ Multi-Tenancy Isolation Status:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-xs">Isolated to Ilakkiyan's Account Only</span>
+                </div>
+              </div>
+
+              {/* Voice Model Selection */}
+              <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                    <Radio className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    <span>Neural Voice Model</span>
+                  </h3>
+                  <span className="text-xs text-slate-400 font-mono">edge-tts neural engine</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {voiceCatalog.length > 0 ? (
+                    voiceCatalog.map((voice) => {
+                      const isSelected = voiceModel === voice.voiceModel;
+                      return (
+                        <div
+                          key={voice.id}
+                          onClick={() => {
+                            if (voice.available !== false) {
+                              setVoiceModel(voice.voiceModel);
+                            }
+                          }}
+                          className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                            voice.available === false
+                              ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
+                              : isSelected
+                              ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border-indigo-500 shadow-xs ring-1 ring-indigo-500'
+                              : 'bg-white dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-1.5">
+                                <span>{voice.name}</span>
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                                {voice.description}
+                              </p>
+                            </div>
+                            {isSelected && (
+                              <span className="p-1 rounded-full bg-indigo-600 text-white shrink-0 ml-2">
+                                <Check className="w-3 h-3" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2 mt-3">
+                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                              {voice.locale}
+                            </span>
+                            <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                              {voice.gender}
+                            </span>
+                            {voice.isExclusive && (
+                              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300">
+                                🔒 Locked Profile
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/60">
+                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Ava Multilingual Neural (Locked Sofi Voice)</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">en-US-AvaMultilingualNeural</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Pitch & Rate Sliders */}
+              <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
+                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                  <SlidersHorizontal className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Acoustic Pitch & Speech Velocity Tuning</span>
+                </h3>
+
+                <div className="space-y-5">
+                  {/* Pitch Tuning */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Voice Pitch Offset
+                      </label>
+                      <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900">
+                        {pitchHz >= 0 ? `+${pitchHz}Hz` : `${pitchHz}Hz`}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-20"
+                      max="20"
+                      step="1"
+                      value={pitchHz}
+                      onChange={(e) => setPitchHz(parseInt(e.target.value, 10))}
+                      className="w-full accent-indigo-600 cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-1">
+                      <span>-20Hz (Deeper)</span>
+                      <span>+0Hz (Natural)</span>
+                      <span>+20Hz (Higher)</span>
+                    </div>
+                  </div>
+
+                  {/* Speech Rate */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Speech Rate / Cadence
+                      </label>
+                      <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900">
+                        {ratePct >= 0 ? `+${ratePct}%` : `${ratePct}%`}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-30"
+                      max="30"
+                      step="5"
+                      value={ratePct}
+                      onChange={(e) => setRatePct(parseInt(e.target.value, 10))}
+                      className="w-full accent-indigo-600 cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-1">
+                      <span>-30% (Slower)</span>
+                      <span>+0% (Natural)</span>
+                      <span>+30% (Brisk)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Live Voice Sample Tester */}
+              <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                  <Volume2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Real-Time Voice Test Preview</span>
+                </h3>
+
+                <div>
+                  <textarea
+                    rows={2}
+                    value={testText}
+                    onChange={(e) => setTestText(e.target.value)}
+                    placeholder="Type a sample sentence to synthesize..."
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 transition-colors resize-none"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTestVoice}
+                    disabled={testingVoice}
+                    className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    {testingVoice ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : isPlayingTest ? (
+                      <Pause className="w-4 h-4" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
+                    <span>{testingVoice ? 'Synthesizing...' : isPlayingTest ? 'Stop Audio' : 'Play Live Voice Sample'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveVoice}
+                    disabled={savingVoice}
+                    className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{savingVoice ? 'Saving...' : voiceSaveSuccess ? '✓ Voice Preferences Saved' : 'Save Voice Settings'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

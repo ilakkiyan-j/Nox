@@ -26,9 +26,12 @@ import {
   ExternalLink,
   Maximize2,
   Minimize2,
+  PhoneCall,
+  Mic,
 } from 'lucide-react';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
+import VoiceCallModal from './VoiceCallModal';
 
 export type StudioView = 'chat' | 'bots' | 'byok' | 'deliberate';
 
@@ -222,6 +225,7 @@ export default function CouncilView({
   const [newFactCategory, setNewFactCategory] = useState<UserFact['category']>('general');
   const [isAddingFact, setIsAddingFact] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
+  const [isVoiceCallOpen, setIsVoiceCallOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1122,6 +1126,16 @@ export default function CouncilView({
               </button>
 
               <button
+                type="button"
+                onClick={() => setIsVoiceCallOpen(true)}
+                className="px-3 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                title={`Start Live Real-Time Voice Call with ${currentBotName}`}
+              >
+                <PhoneCall size={13} />
+                <span>Call {currentBotName}</span>
+              </button>
+
+              <button
                 onClick={() => createNewSession(activeBotId, true)}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 title="New Chat Session"
@@ -1919,6 +1933,16 @@ export default function CouncilView({
           </div>
         </div>
       )}
+
+      {/* Live Voice Call Modal */}
+      <VoiceCallModal
+        isOpen={isVoiceCallOpen}
+        onClose={() => setIsVoiceCallOpen(false)}
+        botName={currentBotName}
+        botRole={currentBotRole}
+        botAvatar={currentBotAvatar}
+        botSlug={activeBotId}
+      />
     </div>
   );
 }
