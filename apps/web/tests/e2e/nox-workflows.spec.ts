@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 async function enterWorkstation(page: any) {
   await page.route('**/api/v1/**', async (route: any) => {
     const url = route.request().url();
-    if (url.includes('/api/v1/auth/login')) {
+    if (url.includes('/api/v1/auth/login') || url.includes('/api/v1/auth/me')) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -17,19 +17,6 @@ async function enterWorkstation(page: any) {
               name: 'Nox Architect',
               role: 'USER',
             },
-          },
-        }),
-      });
-      return;
-    }
-
-    if (url.includes('/api/v1/auth/me')) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          data: {
             id: 'e2e-user-id',
             email: 'user@nox.internal',
             name: 'Nox Architect',
@@ -69,35 +56,29 @@ async function enterWorkstation(page: any) {
   });
 
   await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem('nox_token', 'mock-e2e-valid-jwt-token');
+    localStorage.setItem(
+      'nox_user',
+      JSON.stringify({
+        id: 'e2e-user-id',
+        email: 'user@nox.internal',
+        name: 'Nox Architect',
+        role: 'USER',
+      })
+    );
+  });
+  await page.goto('/');
 
   const quickCaptureBtn = page.getByRole('button', { name: /Quick Capture/i });
-  if (await quickCaptureBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await page.waitForTimeout(1000);
-    return;
-  }
-
-  const signInBtn = page.getByRole('button', { name: 'Sign In', exact: true });
-  if (await signInBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await signInBtn.click();
-  } else {
-    const openWorkstationBtn = page.getByRole('button', { name: /Open Workstation/i }).first();
-    await openWorkstationBtn.click();
-  }
-
-  const emailInput = page.locator('input[type="email"]');
-  await expect(emailInput).toBeVisible({ timeout: 5000 });
-  await emailInput.fill('user@nox.internal');
-  await page.locator('input[type="password"]').fill('user123password');
-
-  const submitBtn = page.locator('form button[type="submit"]');
-  await submitBtn.click();
-
-  await expect(page.getByRole('button', { name: /Quick Capture/i })).toBeVisible({ timeout: 15000 });
-  await page.waitForTimeout(1200);
+  await expect(quickCaptureBtn).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(600);
 }
 
 test.describe('NOX Production Workflows & Theme Parity', () => {
   test('should prompt for sign in modal when clicking Open Workstation without session', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
     await page.goto('/');
     await expect(page).toHaveTitle(/NOX/);
 
@@ -112,10 +93,63 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
   });
 
   test('should load landing page and enter workstation via authentication', async ({ page }) => {
-    await enterWorkstation(page);
+    await page.route('**/api/v1/**', async (route: any) => {
+      const url = route.request().url();
+      if (url.includes('/api/v1/auth/login') || url.includes('/api/v1/auth/me')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            data: {
+              token: 'mock-e2e-valid-jwt-token',
+              user: {
+                id: 'e2e-user-id',
+                email: 'user@nox.internal',
+                name: 'Nox Architect',
+                role: 'USER',
+              },
+              id: 'e2e-user-id',
+              email: 'user@nox.internal',
+              name: 'Nox Architect',
+              role: 'USER',
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: [],
+        }),
+      });
+    });
+
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+    await page.goto('/');
+
+    const heroHeading = page.locator('text=An External Representation');
+    await expect(heroHeading).toBeVisible();
+
+    const signInBtn = page.getByRole('button', { name: 'Sign In', exact: true });
+    await expect(signInBtn).toBeVisible();
+    await signInBtn.click();
+
+    const emailInput = page.locator('input[type="email"]');
+    await expect(emailInput).toBeVisible({ timeout: 5000 });
+    await emailInput.fill('user@nox.internal');
+    await page.locator('input[type="password"]').fill('user123password');
+
+    const submitBtn = page.locator('form button[type="submit"]');
+    await submitBtn.click();
 
     const brand = page.locator('h1:has-text("NOX")');
-    await expect(brand.first()).toBeVisible();
+    await expect(brand.first()).toBeVisible({ timeout: 15000 });
 
     const quickCaptureBtn = page.getByRole('button', { name: /Quick Capture/i });
     await expect(quickCaptureBtn).toBeVisible();
