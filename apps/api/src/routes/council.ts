@@ -350,6 +350,35 @@ privateRouter.patch('/council/bots/:id', async (req: Request, res: Response) => 
 });
 
 /**
+ * POST /api/v1/council/bots/:id/telegram/connect
+ * Connect Telegram Bot Token via Council and auto-register webhook
+ */
+privateRouter.post('/council/bots/:id/telegram/connect', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}/telegram/connect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: req.headers.authorization || '',
+        'X-User-Id': userId,
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    const data = await councilResponse.json().catch(() => ({}));
+    if (!councilResponse.ok) {
+      return apiError(res, data?.error?.message || 'Failed to connect Telegram Bot', mapCouncilStatus(councilResponse.status));
+    }
+    return apiResponse(res, data.data || data);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to connect Telegram Bot';
+    return apiError(res, msg, 502);
+  }
+});
+
+/**
  * POST /api/v1/council/bots/:id/duplicate
  * Duplicate an existing Bot to experiment with prompts or roles
  */
