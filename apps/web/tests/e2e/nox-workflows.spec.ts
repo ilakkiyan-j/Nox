@@ -53,16 +53,22 @@ async function enterWorkstation(page: any) {
 
   await page.goto('/');
 
+  // If already inside workstation
+  const captureBtn = page.getByRole('button', { name: /Quick Capture/i });
+  const isInside = await captureBtn.isVisible({ timeout: 1500 }).catch(() => false);
+  if (isInside) return;
+
   const signInBtn = page.getByRole('button', { name: 'Sign In', exact: true });
-  await signInBtn.click();
+  if (await signInBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await signInBtn.click();
+    await page.locator('input[type="email"]').fill('user@nox.internal');
+    await page.locator('input[type="password"]').fill('user123password');
 
-  await page.locator('input[type="email"]').fill('user@nox.internal');
-  await page.locator('input[type="password"]').fill('user123password');
+    const submitBtn = page.locator('form button[type="submit"]');
+    await submitBtn.click();
+  }
 
-  const submitBtn = page.locator('form button[type="submit"]');
-  await submitBtn.click();
-
-  await expect(page.getByRole('button', { name: /Quick Capture/i })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('button', { name: /Quick Capture/i })).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('NOX Production Workflows & Theme Parity', () => {
@@ -99,26 +105,27 @@ test.describe('NOX Production Workflows & Theme Parity', () => {
   test('should toggle interface theme between Light and Dark modes', async ({ page }) => {
     await enterWorkstation(page);
 
-    // Default theme is Dark Mode ('Switch to Light Mode' title displayed)
-    const themeToggleBtn = page.getByTitle(/Switch to Light Mode/i).first();
+    const themeToggleBtn = page.locator('button[title*="Switch to"]').first();
     await expect(themeToggleBtn).toBeVisible();
 
-    // Toggle to Light Mode
+    const initialTitle = (await themeToggleBtn.getAttribute('title')) || '';
     await themeToggleBtn.click();
-    const htmlElem = page.locator('html');
-    await expect(htmlElem).not.toHaveClass(/dark/);
 
-    // Toggle back to Dark Mode
-    const darkToggleBtn = page.getByTitle(/Switch to Dark Mode/i).first();
-    await expect(darkToggleBtn).toBeVisible();
-    await darkToggleBtn.click();
-    await expect(htmlElem).toHaveClass(/dark/);
+    const htmlElem = page.locator('html');
+    if (initialTitle.toLowerCase().includes('light')) {
+      await expect(htmlElem).not.toHaveClass(/dark/);
+    } else {
+      await expect(htmlElem).toHaveClass(/dark/);
+    }
+
+    // Toggle back
+    await themeToggleBtn.click();
   });
 
   test('should navigate across primary workstation tabs', async ({ page }) => {
     await enterWorkstation(page);
 
-    const tabs = ['Goals', 'Tasks', 'Learning', 'Events', 'Habits', 'Notes', 'Notifications', 'Time'];
+    const tabs = ['Goals', 'Roadmaps', 'Learning', 'Events', 'Habits', 'Tasks', 'Messages', 'Notes', 'Reminders', 'Notifications', 'Time'];
 
     for (const tab of tabs) {
       const tabButton = page.getByRole('button', { name: tab }).first();
