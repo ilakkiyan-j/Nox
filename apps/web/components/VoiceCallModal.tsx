@@ -31,20 +31,31 @@ export default function VoiceCallModal({
   botSlug = 'sofi',
 }: VoiceCallModalProps) {
   const [callConnected, setCallConnected] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [inputMode, setInputMode] = useState<'open-mic' | 'push-to-talk'>('open-mic');
   const [isListening, setIsListening] = useState(false);
+  const [isHoldingToTalk, setIsHoldingToTalk] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [messages, setMessages] = useState<CallMessage[]>([]);
   const [textInput, setTextInput] = useState('');
+  const [currentTranscript, setCurrentTranscript] = useState('');
   const [conversationId, setConversationId] = useState<string>('');
   const [micError, setMicError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const accumulatedSpeechRef = useRef<string>('');
+  const isSpeakingRef = useRef<boolean>(false);
+  const shouldListenRef = useRef<boolean>(false);
+
+  // Sync ref with state
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -55,6 +66,8 @@ export default function VoiceCallModal({
     setCallConnected(false);
     setCallDuration(0);
     setMicError(null);
+    setCurrentTranscript('');
+    accumulatedSpeechRef.current = '';
     const newConvId = `voice_call_${Date.now()}`;
     setConversationId(newConvId);
     setMessages([
@@ -73,11 +86,45 @@ export default function VoiceCallModal({
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isThinking, isSpeaking]);
+  }, [messages, isThinking, isSpeaking, currentTranscript]);
+
+  // Spacebar Push-To-Talk Listener
+  useEffect(() => {
+    if (!callConnected || !isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is currently typing in an input
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') {
+        return;
+      }
+      if (e.code === 'Space' && !e.repeat && !isHoldingToTalk) {
+        e.preventDefault();
+        startPushToTalk();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') {
+        return;
+      }
+      if (e.code === 'Space' && isHoldingToTalk) {
+        e.preventDefault();
+        stopPushToTalk();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [callConnected, isOpen, isHoldingToTalk, inputMode]);
 
   const handleStartCall = async () => {
     setCallConnected(true);
     setMicError(null);
+    shouldListenRef.current = true;
 
     // 1. Unlock Audio context
     try {
@@ -99,7 +146,9 @@ export default function VoiceCallModal({
   };
 
   const handleEndCall = () => {
+    shouldListenRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
+    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
@@ -110,50 +159,152 @@ export default function VoiceCallModal({
     setIsSpeaking(false);
     setIsListening(false);
     setIsThinking(false);
+    setIsHoldingToTalk(false);
+    setCurrentTranscript('');
   };
 
   const initSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
+    if (!SpeechRecognition) {
+      setMicError('Web Speech API is not supported in this browser. You can type spoken messages below.');
+      return;
+    }
 
-        recognition.onstart = () => {
-          setIsListening(true);
-          setMicError(null);
-        };
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+      }
 
-        recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          if (transcript.trim()) {
-            sendVoiceTurn(transcript.trim());
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setMicError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let interim = '';
+        let finalized = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcriptPiece = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalized += transcriptPiece + ' ';
+          } else {
+            interim += transcriptPiece;
           }
-        };
+        }
 
-        recognition.onerror = (err: any) => {
-          console.warn('Speech recognition warning:', err?.error);
+        if (finalized) {
+          accumulatedSpeechRef.current = (accumulatedSpeechRef.current + ' ' + finalized).trim();
+        }
+
+        const fullDisplay = (accumulatedSpeechRef.current + ' ' + interim).trim();
+        setCurrentTranscript(fullDisplay);
+
+        // In Open Mic mode: set a silence timer to automatically send after 1.8 seconds of silence
+        if (inputMode === 'open-mic' && shouldListenRef.current && !isSpeakingRef.current) {
+          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+          silenceTimeoutRef.current = setTimeout(() => {
+            const speechToSend = accumulatedSpeechRef.current.trim() || interim.trim();
+            if (speechToSend) {
+              accumulatedSpeechRef.current = '';
+              setCurrentTranscript('');
+              sendVoiceTurn(speechToSend);
+            }
+          }, 1800);
+        }
+      };
+
+      recognition.onerror = (err: any) => {
+        console.warn('Speech recognition event:', err?.error);
+        if (err?.error === 'not-allowed') {
+          setMicError('Microphone permission blocked. Please enable microphone permissions.');
           setIsListening(false);
-          if (err?.error === 'not-allowed') {
-            setMicError('Microphone permission blocked. Please allow mic in browser or use text below.');
-          }
-        };
+          shouldListenRef.current = false;
+        } else if (err?.error === 'no-speech') {
+          // Normal timeout on quiet - will auto-restart if shouldListen is true
+        }
+      };
 
-        recognition.onend = () => {
-          setIsListening(false);
-        };
+      recognition.onend = () => {
+        setIsListening(false);
+        // Auto-restart if we should still be listening and bot is not speaking
+        if (shouldListenRef.current && !isSpeakingRef.current && inputMode === 'open-mic') {
+          try {
+            recognition.start();
+          } catch (_) {}
+        }
+      };
 
-        recognitionRef.current = recognition;
+      recognitionRef.current = recognition;
+
+      if (shouldListenRef.current && !isSpeakingRef.current) {
         try {
           recognition.start();
         } catch (_) {}
-      } catch (err) {
-        console.warn('Failed to init speech recognition:', err);
       }
+    } catch (err) {
+      console.warn('Failed to init speech recognition:', err);
+    }
+  };
+
+  const startPushToTalk = () => {
+    setIsHoldingToTalk(true);
+    accumulatedSpeechRef.current = '';
+    setCurrentTranscript('');
+    shouldListenRef.current = true;
+
+    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+
+    if (!recognitionRef.current) {
+      initSpeechRecognition();
     } else {
-      setMicError('Web speech API not supported in this browser. You can type messages to talk.');
+      try {
+        recognitionRef.current.start();
+      } catch (_) {}
+    }
+  };
+
+  const stopPushToTalk = () => {
+    setIsHoldingToTalk(false);
+    shouldListenRef.current = false;
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (_) {}
+    }
+
+    setTimeout(() => {
+      const speechToSend = accumulatedSpeechRef.current.trim() || currentTranscript.trim();
+      if (speechToSend) {
+        accumulatedSpeechRef.current = '';
+        setCurrentTranscript('');
+        sendVoiceTurn(speechToSend);
+      }
+    }, 250);
+  };
+
+  const toggleOpenMic = () => {
+    if (isListening || shouldListenRef.current) {
+      shouldListenRef.current = false;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+      }
+      setIsListening(false);
+    } else {
+      shouldListenRef.current = true;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (_) {
+          initSpeechRecognition();
+        }
+      } else {
+        initSpeechRecognition();
+      }
     }
   };
 
@@ -166,6 +317,13 @@ export default function VoiceCallModal({
   const playVoiceAudio = async (text: string, directAudioUrl?: string) => {
     try {
       setIsSpeaking(true);
+      isSpeakingRef.current = true;
+      
+      // Pause speech recognition while bot is speaking to avoid hearing itself
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+      }
+
       let targetUrl = directAudioUrl;
 
       if (!targetUrl) {
@@ -185,33 +343,47 @@ export default function VoiceCallModal({
 
         audio.onended = () => {
           setIsSpeaking(false);
-          // Automatically re-listen if call active and not muted
-          if (!isMuted && recognitionRef.current) {
+          isSpeakingRef.current = false;
+          // Automatically re-listen in Open Mic mode
+          if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
             try {
               recognitionRef.current.start();
             } catch (_) {}
           }
         };
 
-        audio.onerror = () => setIsSpeaking(false);
+        audio.onerror = () => {
+          setIsSpeaking(false);
+          isSpeakingRef.current = false;
+          if (shouldListenRef.current && inputMode === 'open-mic' && recognitionRef.current) {
+            try { recognitionRef.current.start(); } catch (_) {}
+          }
+        };
+
         await audio.play();
       } else {
         setIsSpeaking(false);
+        isSpeakingRef.current = false;
       }
     } catch (err) {
       console.error('TTS playback error:', err);
       setIsSpeaking(false);
+      isSpeakingRef.current = false;
     }
   };
 
   const sendVoiceTurn = async (userText: string) => {
     if (!userText.trim()) return;
 
+    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    accumulatedSpeechRef.current = '';
+    setCurrentTranscript('');
+
     // Add user message
     const userMsg: CallMessage = {
       id: `u_${Date.now()}`,
       sender: 'user',
-      text: userText,
+      text: userText.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -224,7 +396,7 @@ export default function VoiceCallModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           botId: botSlug,
-          message: userText,
+          message: userText.trim(),
           conversationId,
         }),
       });
@@ -251,23 +423,6 @@ export default function VoiceCallModal({
     } catch (err) {
       console.error('Voice call turn error:', err);
       setIsThinking(false);
-    }
-  };
-
-  const toggleMic = () => {
-    if (isListening) {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (_) {}
-      }
-      setIsListening(false);
-    } else {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (_) {}
-      } else {
-        initSpeechRecognition();
-      }
     }
   };
 
@@ -339,10 +494,10 @@ export default function VoiceCallModal({
         ) : (
           <>
             {/* Audio Waveform Visualization Center */}
-            <div className="p-6 bg-gradient-to-b from-indigo-950/40 via-slate-900 to-slate-900 flex flex-col items-center justify-center border-b border-slate-800/80">
-              <div className="flex items-center justify-center space-x-1.5 h-16">
-                {[...Array(18)].map((_, i) => {
-                  const active = isSpeaking || isListening;
+            <div className="p-5 bg-gradient-to-b from-indigo-950/40 via-slate-900 to-slate-900 flex flex-col items-center justify-center border-b border-slate-800/80">
+              <div className="flex items-center justify-center space-x-1.5 h-14">
+                {[...Array(20)].map((_, i) => {
+                  const active = isSpeaking || isListening || isHoldingToTalk;
                   const scale = active
                     ? Math.sin(i * 0.35 + callDuration * 3) * 0.5 + 0.5
                     : 0.15;
@@ -352,36 +507,50 @@ export default function VoiceCallModal({
                       className={`w-1.5 rounded-full transition-all duration-150 ${
                         isSpeaking
                           ? 'bg-gradient-to-t from-indigo-500 to-violet-400'
-                          : isListening
+                          : isHoldingToTalk || isListening
                           ? 'bg-gradient-to-t from-emerald-500 to-teal-400'
                           : 'bg-slate-700'
                       }`}
-                      style={{ height: `${Math.max(8, scale * 56)}px` }}
+                      style={{ height: `${Math.max(8, scale * 52)}px` }}
                     />
                   );
                 })}
               </div>
 
-              <p className="text-xs font-mono font-semibold mt-3 text-slate-400 flex items-center space-x-2">
+              <div className="text-xs font-mono font-semibold mt-2.5 text-slate-400 flex flex-col items-center space-y-1">
                 {isSpeaking ? (
                   <span className="text-indigo-400 flex items-center space-x-1.5">
                     <Volume2 className="w-3.5 h-3.5 animate-bounce" />
                     <span>{botName} is speaking aloud...</span>
                   </span>
+                ) : isHoldingToTalk ? (
+                  <span className="text-emerald-400 flex items-center space-x-1.5 animate-pulse">
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>Listening... Release button or Spacebar to send</span>
+                  </span>
                 ) : isListening ? (
                   <span className="text-emerald-400 flex items-center space-x-1.5">
                     <Mic className="w-3.5 h-3.5 animate-pulse" />
-                    <span>Listening to your speech...</span>
+                    <span>Open Mic Active — listening naturally...</span>
                   </span>
                 ) : isThinking ? (
                   <span className="text-amber-400 flex items-center space-x-1.5">
                     <Activity className="w-3.5 h-3.5 animate-spin" />
-                    <span>Formulating spoken turn...</span>
+                    <span>{botName} is responding...</span>
                   </span>
                 ) : (
-                  <span>Tap microphone or speak naturally</span>
+                  <span className="text-slate-400">
+                    {inputMode === 'push-to-talk' ? 'Hold button or Spacebar to speak' : 'Microphone paused — click mic to resume'}
+                  </span>
                 )}
-              </p>
+
+                {/* Live Speech Recognition Transcript Preview */}
+                {currentTranscript && (
+                  <div className="px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-sans font-medium animate-in fade-in">
+                    🗣️ &ldquo;{currentTranscript}&rdquo;
+                  </div>
+                )}
+              </div>
 
               {micError && (
                 <p className="text-[11px] text-amber-400 font-mono mt-2 bg-amber-950/40 px-3 py-1 rounded-lg border border-amber-800/50">
@@ -422,8 +591,52 @@ export default function VoiceCallModal({
               <div ref={transcriptEndRef} />
             </div>
 
-            {/* Bottom Call Controls */}
-            <div className="p-4 sm:p-6 border-t border-slate-800 bg-slate-900/95 space-y-3">
+            {/* Bottom Call Controls & Mode Switcher */}
+            <div className="p-4 sm:p-5 border-t border-slate-800 bg-slate-900/95 space-y-3">
+              {/* Input Mode Selector Bar */}
+              <div className="flex items-center justify-between">
+                <div className="flex bg-slate-800/90 p-1 rounded-xl border border-slate-700/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputMode('open-mic');
+                      shouldListenRef.current = true;
+                      initSpeechRecognition();
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      inputMode === 'open-mic'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🎙️ Open Mic (Hands-Free)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputMode('push-to-talk');
+                      shouldListenRef.current = false;
+                      if (recognitionRef.current) {
+                        try { recognitionRef.current.stop(); } catch (_) {}
+                      }
+                      setIsListening(false);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      inputMode === 'push-to-talk'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🔘 Hold to Talk
+                  </button>
+                </div>
+
+                <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                  {inputMode === 'push-to-talk' ? '💡 Tip: Hold Spacebar to speak' : '💡 Auto-sends on pause'}
+                </span>
+              </div>
+
+              {/* Text fallback input */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -435,42 +648,72 @@ export default function VoiceCallModal({
                   type="text"
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
-                  placeholder="Type a spoken response or tap mic below..."
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                  placeholder="Type a spoken response or use voice controls below..."
+                  className="flex-1 px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
                 />
                 <button
                   type="submit"
                   disabled={!textInput.trim() || isThinking}
-                  className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
                 >
                   <Send className="w-4 h-4" />
                 </button>
               </form>
 
-              {/* Interactive Call Buttons */}
-              <div className="flex items-center justify-center space-x-6 pt-1">
-                {/* Mic Toggle */}
-                <button
-                  type="button"
-                  onClick={toggleMic}
-                  className={`p-4 rounded-full transition-all cursor-pointer shadow-lg ${
-                    isListening
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white scale-110 shadow-emerald-500/30'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                  }`}
-                  title={isListening ? "Listening... Click to pause" : "Click to speak"}
-                >
-                  {isListening ? <Mic className="w-6 h-6 animate-pulse" /> : <MicOff className="w-6 h-6" />}
-                </button>
+              {/* Interactive Call Action Buttons */}
+              <div className="flex items-center justify-center space-x-4 pt-1">
+                {inputMode === 'open-mic' ? (
+                  /* Open Mic Toggle Button */
+                  <button
+                    type="button"
+                    onClick={toggleOpenMic}
+                    className={`px-6 py-3 rounded-2xl transition-all cursor-pointer shadow-lg flex items-center space-x-2 font-bold text-xs ${
+                      isListening
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white scale-105 shadow-emerald-500/30'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
+                    title={isListening ? "Listening... Click to pause" : "Click to resume listening"}
+                  >
+                    {isListening ? (
+                      <>
+                        <Mic className="w-5 h-5 animate-pulse" />
+                        <span>Listening (Tap to Pause)</span>
+                      </>
+                    ) : (
+                      <>
+                        <MicOff className="w-5 h-5" />
+                        <span>Mic Paused (Tap to Speak)</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  /* Hold to Talk (Push to Talk) Button */
+                  <button
+                    type="button"
+                    onMouseDown={startPushToTalk}
+                    onMouseUp={stopPushToTalk}
+                    onTouchStart={startPushToTalk}
+                    onTouchEnd={stopPushToTalk}
+                    className={`px-8 py-3.5 rounded-2xl transition-all select-none cursor-pointer shadow-xl flex items-center space-x-2 font-bold text-xs ${
+                      isHoldingToTalk
+                        ? 'bg-emerald-600 text-white scale-105 shadow-emerald-500/40 ring-4 ring-emerald-500/30'
+                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
+                    }`}
+                  >
+                    <Mic className={`w-5 h-5 ${isHoldingToTalk ? 'animate-pulse' : ''}`} />
+                    <span>{isHoldingToTalk ? 'Listening... Release to Send' : 'Press & Hold to Talk (or Spacebar)'}</span>
+                  </button>
+                )}
 
                 {/* End Call Button */}
                 <button
                   type="button"
                   onClick={() => { handleEndCall(); onClose(); }}
-                  className="p-4 rounded-full bg-rose-600 hover:bg-rose-700 text-white transition-all cursor-pointer shadow-lg shadow-rose-600/30"
+                  className="p-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white transition-all cursor-pointer shadow-lg shadow-rose-600/30 flex items-center space-x-1.5 text-xs font-bold"
                   title="End Voice Call"
                 >
-                  <PhoneOff className="w-6 h-6" />
+                  <PhoneOff className="w-5 h-5" />
+                  <span className="hidden sm:inline">End Call</span>
                 </button>
               </div>
             </div>
