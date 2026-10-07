@@ -25,25 +25,18 @@ import {
   AlertCircle,
   AlertTriangle,
   ExternalLink,
-  Maximize2,
-  Minimize2,
-  Upload,
-  ArrowUp,
-  ArrowDown,
-  Globe,
-  Database,
-  Terminal,
-  Layers,
-  Sparkle,
-  Share2,
-  ArrowRight,
+  ChevronDown,
+  Check,
+  Settings,
+  SlidersHorizontal,
+  Zap,
 } from 'lucide-react';
 import { TelegramIcon } from './ui/BrandIcons';
 import DialogShell from './ui/Dialog';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
 
-export type StudioView = 'chat' | 'bots' | 'byok' | 'deliberate';
+export type StudioView = 'chat' | 'deliberate';
 
 export interface ExecutedAction {
   toolName: string;
@@ -163,9 +156,10 @@ export interface CouncilViewProps {
   habits?: any[];
   onNavigate?: (tab: string) => void;
   onRefresh?: () => void;
+  onOpenSettings?: (section?: 'council' | 'profile' | 'preferences' | 'voice' | 'analytics' | 'data') => void;
 }
 
-const DEFAULT_PERSONAS: Record<string, { name: string; role: string; avatar: string; greeting: string; prompt: string }> = {
+export const DEFAULT_PERSONAS: Record<string, { name: string; role: string; avatar: string; greeting: string; prompt: string }> = {
   sofi: {
     name: 'Sofi',
     role: 'Executive PA & Girlfriend',
@@ -195,16 +189,16 @@ const DEFAULT_PERSONAS: Record<string, { name: string; role: string; avatar: str
   },
 };
 
-const SUGGESTED_EMOJIS = ['💖', '🧭', '🔥', '🤖', '🧠', '⚡', '🚀', '🛡️', '🦉', '🎨', '🧪', '💼'];
+export const SUGGESTED_EMOJIS = ['💖', '🧭', '🔥', '🤖', '🧠', '⚡', '🚀', '🛡️', '🦉', '🎨', '🧪', '💼'];
 
-const DEFAULT_FALLBACK_PIPELINE: FallbackItem[] = [
+export const DEFAULT_FALLBACK_PIPELINE: FallbackItem[] = [
   { provider: 'gemini', model: 'gemini-2.5-flash', enabled: true },
   { provider: 'groq', model: 'llama-3.3-70b-versatile', enabled: true },
   { provider: 'openai', model: 'gpt-4o-mini', enabled: false },
   { provider: 'ollama', model: 'llama3.2', enabled: false },
 ];
 
-const DEFAULT_PERMISSIONS_BY_BOT: Record<string, BotPermissions> = {
+export const DEFAULT_PERMISSIONS_BY_BOT: Record<string, BotPermissions> = {
   sofi: {
     canAccessNox: true,
     canSearchWeb: true,
@@ -283,1011 +277,447 @@ export default function CouncilView({
   habits = [],
   onNavigate,
   onRefresh,
+  onOpenSettings,
 }: CouncilViewProps) {
-  // Navigation View Mode
-  const [studioView, setStudioView] = useState<StudioView>('chat');
+  // Mode: 1-on-1 Chat vs Deliberation
+  const [isDeliberation, setIsDeliberation] = useState(false);
 
   // Bots & Active Selection
   const [bots, setBots] = useState<BotItem[]>([]);
   const [activeBotId, setActiveBotId] = useState<string>('sofi');
+  const [isBotDropdownOpen, setIsBotDropdownOpen] = useState(false);
+  const botDropdownRef = useRef<HTMLDivElement>(null);
 
-  // BYOK Credentials
-  const [credentials, setCredentials] = useState<ProviderCredential[]>([]);
-  const [credProvider, setCredProvider] = useState('gemini');
-  const [credLabel, setCredLabel] = useState('');
-  const [credKey, setCredKey] = useState('');
-  const [savingCred, setSavingCred] = useState(false);
-  const [actionNotice, setActionNotice] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
-
-  // Bot Workshop Modal (Create & Edit)
-  const [showEditorModal, setShowEditorModal] = useState(false);
-  const [editingBotId, setEditingBotId] = useState<string | null>(null);
-  const [editorName, setEditorName] = useState('');
-  const [editorRole, setEditorRole] = useState('');
-  const [editorAvatar, setEditorAvatar] = useState('🤖');
-  const [editorDesc, setEditorDesc] = useState('');
-  const [editorPrompt, setEditorPrompt] = useState('');
-  const [editorProvider, setEditorProvider] = useState('gemini');
-  const [editorModel, setEditorModel] = useState('');
-  const [editorTemperature, setEditorTemperature] = useState(0.7);
-  const [editorTelegramToken, setEditorTelegramToken] = useState('');
-  const [editorTelegramUsername, setEditorTelegramUsername] = useState('');
-  const [isConnectingTelegram, setIsConnectingTelegram] = useState(false);
-  const [telegramConnectSuccess, setTelegramConnectSuccess] = useState<string | null>(null);
-  const [telegramConnectError, setTelegramConnectError] = useState<string | null>(null);
-  const [savingBot, setSavingBot] = useState(false);
-
-  // Fallback Pipeline & Granular Permissions State
-  const [fallbackPipeline, setFallbackPipeline] = useState<FallbackItem[]>(DEFAULT_FALLBACK_PIPELINE);
-  const [editorPermissions, setEditorPermissions] = useState<BotPermissions>({
-    canAccessNox: true,
-    canSearchWeb: true,
-    canAuditCode: true,
-    canAdaptPersona: true,
-    canAccessMemory: true,
-  });
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Chat & Sessions
+  // Chat State
   const [sessionId, setSessionId] = useState<string>('');
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [isInputExpanded, setIsInputExpanded] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
+  const [deliberationProgress, setDeliberationProgress] = useState<string | null>(null);
+
+  // Deliberation Mode Input State
+  const [deliberationTopic, setDeliberationTopic] = useState('');
+  const [deliberationMessages, setDeliberationMessages] = useState<Message[]>([]);
+
+  // Health / Server Ping State
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
   const [pingLatency, setPingLatency] = useState<number | null>(null);
   const [isPinging, setIsPinging] = useState(false);
-  const [wakeSecondsElapsed, setWakeSecondsElapsed] = useState(0);
+  const [wakeSecondsElapsed, setWakeSecondsElapsed] = useState<number>(0);
   const [wakeError, setWakeError] = useState<string | null>(null);
   const [dismissStandbyBanner, setDismissStandbyBanner] = useState(false);
 
-  // Drawers & Deliberation
+  // Sessions & Memory Drawers
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [showSessionsDrawer, setShowSessionsDrawer] = useState(false);
-  const [showMemoryDrawer, setShowMemoryDrawer] = useState(false);
-  const [debateTopic, setDebateTopic] = useState('');
-  const [debateLoading, setDebateLoading] = useState(false);
   const [memoryProfile, setMemoryProfile] = useState<MemoryProfile | null>(null);
+  const [showMemoryDrawer, setShowMemoryDrawer] = useState(false);
+  const [newFact, setNewFact] = useState('');
+  const [newFactCategory, setNewFactCategory] = useState<UserFact['category']>('preference');
+  const [isAddingFact, setIsAddingFact] = useState(false);
+
+  // Error & Confirmation
+  const [actionNotice, setActionNotice] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
   const [integrationError, setIntegrationError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     title: string;
     message: string;
-    confirmLabel: string;
-    onConfirm: () => Promise<void>;
+    confirmLabel?: string;
+    onConfirm: () => void;
   } | null>(null);
-  const [newFact, setNewFact] = useState('');
-  const [newFactCategory, setNewFactCategory] = useState<UserFact['category']>('general');
-  const [isAddingFact, setIsAddingFact] = useState(false);
-  const [sessionSearch, setSessionSearch] = useState('');
-
-  const reportIntegrationError = (error: unknown, fallbackMessage: string) => {
-    const message = error instanceof Error ? error.message : fallbackMessage;
-    setIntegrationError((current) => {
-      const existingMessages = current?.split(' • ') ?? [];
-      return existingMessages.includes(message)
-        ? current
-        : [...existingMessages, message].filter(Boolean).join(' • ');
-    });
-  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const sessionStorageKey = currentUser?.id
-    ? `nox_council_active_session_${encodeURIComponent(currentUser.id)}`
-    : null;
-  const pendingTasksCount = tasks.filter((t: any) => t.status !== 'COMPLETED').length;
 
-  // Auto-resize textarea on input / paste
+  // Close bot dropdown when clicking outside
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      const scrollHeight = textareaRef.current.scrollHeight;
-      const maxHeight = isInputExpanded ? 380 : 200;
-      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 48), maxHeight)}px`;
-    }
-  }, [inputMessage, isInputExpanded]);
-
-  // Active bot resolver
-  const activeBot = bots.find((b) => b.id === activeBotId || b.slug === activeBotId);
-  const currentBotName = activeBot?.name || DEFAULT_PERSONAS[activeBotId]?.name || 'Council Bot';
-  const currentBotRole = activeBot?.role || DEFAULT_PERSONAS[activeBotId]?.role || 'AI Assistant';
-  const currentBotAvatar = activeBot?.avatar || DEFAULT_PERSONAS[activeBotId]?.avatar || '🤖';
-  const currentBotProvider = activeBot?.modelConfig?.provider || 'gemini';
-  const currentBotModel = activeBot?.modelConfig?.model || 'gemini-2.5-flash';
-
-  // Check if provider has connected BYOK key OR any active workspace key (e.g. Gemini)
-  const hasExactKey = credentials.some((c) => c.provider === currentBotProvider && c.status === 'ACTIVE');
-  const hasActiveKey = credentials.some((c) => c.status === 'ACTIVE');
-  const hasKeyForActiveBot = hasExactKey || hasActiveKey;
-
-  useEffect(() => {
-    setBots([]);
-    setCredentials([]);
-    setSessions([]);
-    setMemoryProfile(null);
-    setIntegrationError(null);
-    checkCouncilStatus();
-    fetchBots();
-    fetchCredentials();
-    fetchSessions();
-    fetchMemory();
-
-    const storedSid = typeof window !== 'undefined' && sessionStorageKey
-      ? localStorage.getItem(sessionStorageKey)
-      : null;
-    if (storedSid) {
-      setSessionId(storedSid);
-      loadSessionHistory(storedSid);
-    } else {
-      createNewSession('sofi', false);
-    }
-
-    const interval = setInterval(checkCouncilStatus, 25000);
-    return () => clearInterval(interval);
-  }, [currentUser?.id]);
-
-  // Active in-session keep-alive heartbeat: runs every 3 minutes while Nox is open
-  // This guarantees Council will NEVER sleep during an active work session
-  useEffect(() => {
-    const keepAlive = () => {
-      fetch('https://council-cy4r.onrender.com/health', {
-        mode: 'cors',
-        signal: AbortSignal.timeout(10000),
-      }).catch(() => {});
-
-      fetchWithUser(`${API_BASE_URL}/api/v1/council/ping`).catch(() => {});
+    const handleClickOutside = (event: MouseEvent) => {
+      if (botDropdownRef.current && !botDropdownRef.current.contains(event.target as Node)) {
+        setIsBotDropdownOpen(false);
+      }
     };
-
-    const keepAliveInterval = setInterval(keepAlive, 3 * 60 * 1000);
-    return () => clearInterval(keepAliveInterval);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (studioView === 'chat') {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, loading, debateLoading, studioView]);
-
-  const checkCouncilStatus = async () => {
+  // Fetch Bots
+  const fetchBots = async (): Promise<boolean> => {
     try {
-      const startTime = Date.now();
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/status`);
-      const latency = Date.now() - startTime;
-      const json = await res.json();
-      const online = Boolean(json?.data?.online);
-      setIsOnline(online);
-      if (online) {
-        setPingLatency(json?.data?.latencyMs || latency);
-        // Automatically sync credentials if none loaded yet
-        fetchCredentials();
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`);
+      const data = await readCouncilData(res, 'bots');
+      if (Array.isArray(data)) {
+        setBots(data);
+        return true;
       }
-    } catch {
-      setIsOnline(false);
+      return false;
+    } catch (err) {
+      console.warn('Could not load bots from Council API, using fallback defaults:', err);
+      return false;
     }
   };
 
-  const handleWakeOrPingCouncil = async (isManualWake: boolean = false) => {
+  // Fetch Sessions
+  const fetchSessions = async (): Promise<boolean> => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions`);
+      const data = await readCouncilData(res, 'sessions');
+      if (Array.isArray(data)) {
+        setSessions(data);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('Could not load sessions:', err);
+      return false;
+    }
+  };
+
+  // Fetch Memory
+  const fetchMemory = async (): Promise<boolean> => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/memory`);
+      const data = await readCouncilData(res, 'memory');
+      if (data && typeof data === 'object') {
+        setMemoryProfile(data as MemoryProfile);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('Could not load memory profile:', err);
+      return false;
+    }
+  };
+
+  // Check Council Server Status / Ping
+  const handleWakeOrPingCouncil = async (wake = false) => {
     setIsPinging(true);
     setWakeError(null);
     setWakeSecondsElapsed(0);
 
-    const timer = setInterval(() => {
-      setWakeSecondsElapsed((prev) => prev + 1);
-    }, 1000);
-
-    const startTime = Date.now();
-    const maxWaitMs = 50000;
-    let isFinished = false;
-
-    // Helper to finish waking and re-sync state immediately
-    const onWakeSuccess = async (latencyMs?: number) => {
-      if (isFinished) return;
-      isFinished = true;
-      clearInterval(timer);
-      setIsOnline(true);
-      if (latencyMs) setPingLatency(Math.min(latencyMs, 250));
-      setIsPinging(false);
-
-      // Re-sync all state from Council immediately
-      await Promise.allSettled([
-        fetchBots(),
-        fetchCredentials(),
-        fetchSessions(),
-        fetchMemory(),
-      ]);
-    };
-
-    // 1. Kick off backend wake request with open connection
-    if (isManualWake) {
-      fetchWithUser(`${API_BASE_URL}/api/v1/council/status?wake=true`, {
-        signal: AbortSignal.timeout(52000),
-      })
-        .then(async (res) => {
-          if (res.ok) {
-            const json = await res.json().catch(() => ({}));
-            if (json?.data?.online) {
-              onWakeSuccess(json?.data?.latencyMs || Date.now() - startTime);
-            }
-          }
-        })
-        .catch(() => {});
+    let wakeTimer: NodeJS.Timeout | null = null;
+    if (wake) {
+      wakeTimer = setInterval(() => {
+        setWakeSecondsElapsed((prev) => prev + 1);
+      }, 1000);
     }
 
-    // 2. Direct gentle browser ping to Render (CORS enabled)
-    fetch('https://council-cy4r.onrender.com/health', {
-      mode: 'cors',
-      signal: AbortSignal.timeout(50000),
-    })
-      .then((res) => {
-        if (res.ok) {
-          onWakeSuccess(Date.now() - startTime);
-        }
-      })
-      .catch(() => {});
-
-    // 3. Fast recurring probe loop (checks every 2s with 8s probe timeout)
-    while (Date.now() - startTime < maxWaitMs && !isFinished) {
-      try {
-        const directRes = await fetch('https://council-cy4r.onrender.com/health', {
-          mode: 'cors',
-          signal: AbortSignal.timeout(8000),
-        }).catch(() => null);
-
-        if (directRes && directRes.ok) {
-          await onWakeSuccess(Date.now() - startTime);
-          break;
-        }
-
-        const pingRes = await fetchWithUser(`${API_BASE_URL}/api/v1/council/ping`, {
-          signal: AbortSignal.timeout(8000),
-        }).catch(() => null);
-
-        if (pingRes && pingRes.ok) {
-          const json = await pingRes.json().catch(() => ({}));
-          if (json?.data?.online || json?.online) {
-            await onWakeSuccess(Date.now() - startTime);
-            break;
-          }
-        }
-      } catch {}
-
-      if (isFinished) break;
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-
-    if (!isFinished) {
-      clearInterval(timer);
-      setIsPinging(false);
-      // Final sanity sync check before declaring failure
-      try {
-        const finalCheck = await fetch('https://council-cy4r.onrender.com/health', { mode: 'cors' });
-        if (finalCheck.ok) {
-          onWakeSuccess(Date.now() - startTime);
-          return;
-        }
-      } catch {}
-      setIsOnline(false);
-      setWakeError('Council container cold start timed out. Click to retry.');
-    }
-  };
-
-  const fetchBots = async () => {
     try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`);
-      const loadedBots = await readCouncilData(res, 'bots');
-      if (!Array.isArray(loadedBots)) throw new Error('Council returned invalid bots');
-      setBots(loadedBots);
-      return true;
-    } catch (err) {
-      console.warn('Failed to fetch bots:', err);
-      reportIntegrationError(err, 'Failed to load Council bots');
-      return false;
-    }
-  };
+      const res = await fetch(`${API_BASE_URL}/api/v1/council/status${wake ? '?wake=true' : ''}`);
+      const data = await res.json().catch(() => ({}));
+      const payload = data.data || data;
 
-  const fetchCredentials = async () => {
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials`);
-      const loadedCredentials = await readCouncilData(res, 'provider credentials');
-      if (!Array.isArray(loadedCredentials)) throw new Error('Council returned invalid provider credentials');
-      setCredentials(loadedCredentials);
-      return true;
-    } catch (err) {
-      console.warn('Failed to load provider credentials:', err);
-      reportIntegrationError(err, 'Failed to load provider credentials');
-      return false;
-    }
-  };
-
-  const fetchSessions = async () => {
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions`);
-      const loadedSessions = await readCouncilData(res, 'sessions');
-      if (!Array.isArray(loadedSessions)) throw new Error('Council returned invalid sessions');
-      setSessions(loadedSessions);
-      return true;
-    } catch (err) {
-      console.warn('Failed to load sessions:', err);
-      reportIntegrationError(err, 'Failed to load Council sessions');
-      return false;
-    }
-  };
-
-  const fetchMemory = async () => {
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/memory`);
-      const profile = await readCouncilData(res, 'memory');
-      if (
-        !profile ||
-        typeof profile !== 'object' ||
-        !('userId' in profile) ||
-        !('facts' in profile) ||
-        !Array.isArray(profile.facts)
-      ) {
-        throw new Error('Council returned an invalid memory profile');
+      if (res.ok && payload.online) {
+        setIsOnline(true);
+        setPingLatency(payload.latencyMs || null);
+        setActionNotice({
+          type: 'success',
+          message: wake
+            ? `Council container ready! (${payload.latencyMs ? `${Math.round(payload.latencyMs / 1000)}s` : 'online'})`
+            : `Council ping: ${payload.latencyMs || 0}ms`,
+        });
+        setIntegrationError(null);
+      } else {
+        setIsOnline(false);
+        setPingLatency(null);
+        if (wake) {
+          setWakeError(payload.message || 'Container waking timed out.');
+        }
       }
-      setMemoryProfile(profile as MemoryProfile);
-      return true;
     } catch (err) {
-      console.warn('Failed to load memory:', err);
-      reportIntegrationError(err, 'Failed to load Council memory');
-      return false;
+      setIsOnline(false);
+      setPingLatency(null);
+      if (wake) {
+        setWakeError(err instanceof Error ? err.message : 'Wake network error');
+      }
+    } finally {
+      if (wakeTimer) clearInterval(wakeTimer);
+      setIsPinging(false);
     }
   };
 
-  const createNewSession = (botId: string = activeBotId, saveToStorage: boolean = true) => {
-    const newSid = `session_${Date.now()}`;
-    setSessionId(newSid);
-    if (saveToStorage && typeof window !== 'undefined' && sessionStorageKey) {
-      localStorage.setItem(sessionStorageKey, newSid);
+  // Initial Load
+  useEffect(() => {
+    handleWakeOrPingCouncil(false);
+    Promise.all([fetchBots(), fetchSessions(), fetchMemory()]);
+  }, []);
+
+  // Compute displayed bots list (defaults + custom bots)
+  const displayedBots: BotItem[] = (() => {
+    const customList = [...bots];
+    const coreKeys = ['sofi', 'riven', 'lucifer'];
+    const merged: BotItem[] = [];
+
+    for (const key of coreKeys) {
+      const foundInDb = customList.find(b => b.slug === key || b.id === key);
+      if (foundInDb) {
+        merged.push(foundInDb);
+      } else {
+        const def = DEFAULT_PERSONAS[key];
+        merged.push({
+          id: key,
+          slug: key,
+          name: def.name,
+          role: def.role,
+          avatar: def.avatar,
+          isDefault: true,
+          status: 'ACTIVE',
+          permissions: DEFAULT_PERMISSIONS_BY_BOT[key],
+          instruction: { systemPrompt: def.prompt },
+        });
+      }
     }
+
+    for (const b of customList) {
+      if (!coreKeys.includes(b.slug || b.id)) {
+        merged.push(b);
+      }
+    }
+
+    return merged;
+  })();
+
+  const activeBot = displayedBots.find(b => b.id === activeBotId || b.slug === activeBotId) || displayedBots[0] || {
+    id: 'sofi',
+    name: 'Sofi',
+    role: 'Executive PA & Girlfriend',
+    avatar: '💖',
+  };
+
+  // Initialize new session for a bot
+  const createNewSession = (botId: string, announceGreeting = true) => {
+    const newId = `session_${Date.now()}`;
+    setSessionId(newId);
     setActiveBotId(botId);
 
-    const greeting =
-      DEFAULT_PERSONAS[botId]?.greeting ||
-      `Hello! I'm ${currentBotName}, your ${currentBotRole}. How can I assist you with your Nox workspace today?`;
+    const botObj = displayedBots.find(b => b.id === botId || b.slug === botId);
+    const greetingText =
+      DEFAULT_PERSONAS[botObj?.slug || botId]?.greeting ||
+      `Hello! I am ${botObj?.name || 'your AI assistant'}. How can we make progress on your goals today?`;
 
-    setMessages([
-      {
-        id: `init-${botId}-${Date.now()}`,
-        sender: 'assistant',
-        persona: botId,
-        content: greeting,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-  };
-
-  const loadSessionHistory = async (sid: string) => {
-    try {
-      setLoading(true);
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions/${encodeURIComponent(sid)}`);
-      if (res.status === 404) {
-        createNewSession(activeBotId, true);
-        return;
-      }
-      const sessionData = await readCouncilData(res, 'session history') as {
-        messages?: unknown;
-        personaId?: string;
-      } | null;
-      if (!sessionData || !Array.isArray(sessionData.messages)) {
-        throw new Error('Council returned invalid session history');
-      }
-      const loadedMsgs: Message[] = sessionData.messages.map((m: any, idx: number) => ({
-        id: `hist-${idx}-${Date.now()}`,
-        sender: m.role === 'assistant' ? 'assistant' : 'user',
-        persona: sessionData.personaId || activeBotId,
-        content: m.content || '',
-        executedActions: Array.isArray(m.toolCalls)
-          ? m.toolCalls
-              .filter((tc: any) => tc && (tc.toolName || tc.name))
-              .map((tc: any) => ({
-                toolName: tc.toolName || tc.name || 'action',
-                params: tc.params || {},
-                result: tc.result || {},
-              }))
-          : [],
-        timestamp: m.timestamp || new Date().toISOString(),
-      }));
-      setMessages(loadedMsgs);
-      if (sessionData.personaId) {
-        setActiveBotId(sessionData.personaId);
-      }
-    } catch (err) {
-      console.warn('Failed to load session:', err);
-      reportIntegrationError(err, 'Failed to load Council session history');
-    } finally {
-      setLoading(false);
+    if (announceGreeting) {
+      setMessages([
+        {
+          id: `greet_${Date.now()}`,
+          sender: 'assistant',
+          persona: botId,
+          content: greetingText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    } else {
+      setMessages([]);
     }
   };
 
+  // Switch Active Bot
+  const handleSelectBot = (botId: string) => {
+    setActiveBotId(botId);
+    setIsBotDropdownOpen(false);
+    createNewSession(botId, true);
+  };
+
+  // Initial Session setup
+  useEffect(() => {
+    if (!sessionId) {
+      createNewSession('sofi', true);
+    }
+  }, []);
+
+  // Auto-scroll messages to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, deliberationMessages, isThinking]);
+
+  // Send 1-on-1 Chat Message
   const handleSendMessage = async (textToSend?: string) => {
-    const text = textToSend || inputMessage;
-    if (!text.trim() || loading) return;
+    const rawText = textToSend || inputMessage;
+    if (!rawText.trim() || isThinking) return;
 
     const userMsg: Message = {
-      id: `usr-${Date.now()}`,
+      id: `usr_${Date.now()}`,
       sender: 'user',
-      content: text.trim(),
-      timestamp: new Date().toISOString(),
+      content: rawText.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInputMessage('');
-    setLoading(true);
+    setMessages(prev => [...prev, userMsg]);
+    if (!textToSend) setInputMessage('');
+    setIsThinking(true);
+    setActionNotice(null);
 
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          persona: activeBotId,
-          botId: activeBot?.id || activeBotId,
-          message: text.trim(),
-          sessionId,
+          persona: activeBot.slug || activeBot.id,
+          botId: activeBot.id,
+          message: userMsg.content,
+          sessionId: sessionId || undefined,
         }),
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json?.error?.message || 'Failed to communicate with Council');
-      }
-
-      const data = json?.data;
-      if (data?.sessionId && data.sessionId !== sessionId) {
-        setSessionId(data.sessionId);
-        if (typeof window !== 'undefined' && sessionStorageKey) {
-          localStorage.setItem(sessionStorageKey, data.sessionId);
-        }
-      }
-
-      const botMsg: Message = {
-        id: `ast-${Date.now()}`,
-        sender: 'assistant',
-        persona: activeBotId,
-        content: data?.reply || "I'm with you, partner.",
-        executedActions: data?.executedActions || [],
-        timestamp: new Date().toISOString(),
+      const data = (await readCouncilData(res, 'chat response')) as {
+        sessionId?: string;
+        reply?: string;
+        executedActions?: ExecutedAction[];
       };
 
-      setMessages((prev) => [...prev, botMsg]);
-
-      if (data?.executedActions && data.executedActions.length > 0) {
-        if (onRefresh) onRefresh();
-        if (data.executedActions.some((act: any) => act.toolName === 'adapt_persona')) {
-          fetchBots();
-        }
+      if (data.sessionId && data.sessionId !== sessionId) {
+        setSessionId(data.sessionId);
       }
 
+      const botReply: Message = {
+        id: `ast_${Date.now()}`,
+        sender: 'assistant',
+        persona: activeBot.slug || activeBot.id,
+        content: data.reply || 'Task processed.',
+        executedActions: data.executedActions || [],
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setMessages(prev => [...prev, botReply]);
+
+      // If any actions modified workspace data, trigger dashboard refresh
+      if (data.executedActions && data.executedActions.length > 0) {
+        onRefresh?.();
+      }
+
+      // Re-fetch sessions & memory in background
       fetchSessions();
       fetchMemory();
-    } catch (err: any) {
-      const errText = err.message || '';
-      const content = `**Connection Notice**: Couldn't reach Council server: ${
-        errText || 'Check if Council is running on port 4100'
-      }.`;
-
-      const errMsg: Message = {
-        id: `err-${Date.now()}`,
+    } catch (err) {
+      console.error('Chat error:', err);
+      const errorMsg: Message = {
+        id: `err_${Date.now()}`,
         sender: 'assistant',
-        persona: activeBotId,
-        content,
+        persona: activeBot.slug || activeBot.id,
+        content: `Error: ${err instanceof Error ? err.message : 'Could not reach Council assistant.'}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isError: true,
-        failedPrompt: text.trim(),
-        timestamp: new Date().toISOString(),
+        failedPrompt: userMsg.content,
       };
-      setMessages((prev) => [...prev, errMsg]);
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
-      setLoading(false);
+      setIsThinking(false);
       setTimeout(() => textareaRef.current?.focus(), 50);
     }
   };
 
-  const handleTriggerDebate = async (topicToDebate?: string) => {
-    const topic = topicToDebate || debateTopic;
-    if (!topic.trim()) return;
+  // Run Multi-Bot Council Deliberation
+  const handleRunDeliberation = async (topicToDebate?: string) => {
+    const rawTopic = topicToDebate || deliberationTopic;
+    if (!rawTopic.trim() || isThinking) return;
 
-    setDebateTopic('');
-    setDebateLoading(true);
-    setStudioView('chat');
-
-    const callMsg: Message = {
-      id: `debate-summon-${Date.now()}`,
+    const userDelibMsg: Message = {
+      id: `delib_usr_${Date.now()}`,
       sender: 'user',
-      content: `🏛️ **[Summoned Council]**: Multi-Agent Deliberation on:\n> "${topic.trim()}"`,
-      timestamp: new Date().toISOString(),
+      content: rawTopic.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
-    setMessages((prev) => [...prev, callMsg]);
+
+    setDeliberationMessages(prev => [...prev, userDelibMsg]);
+    if (!topicToDebate) setDeliberationTopic('');
+    setIsThinking(true);
+    setDeliberationProgress('Convening Council (Sofi, Riven, Lucifer)...');
 
     try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/debate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.trim() }),
-      });
-
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json?.error?.message || 'Debate execution failed');
-      }
-
-      const data = json?.data;
-      const deliberationList: DeliberationItem[] = data?.deliberations || [];
-
-      const resultMsg: Message = {
-        id: `debate-res-${Date.now()}`,
-        sender: 'assistant',
-        content: `### 🏛️ Council Deliberation Complete\n\nThe Council has reviewed your topic with live context across your tasks, roadmaps, and commitments.`,
-        deliberation: deliberationList,
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, resultMsg]);
-      fetchSessions();
-      fetchMemory();
-    } catch (err: any) {
-      const errRes: Message = {
-        id: `debate-err-${Date.now()}`,
-        sender: 'assistant',
-        content: `**Debate Interrupted**: ${err.message || 'Failed to convene Council.'}`,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errRes]);
-    } finally {
-      setDebateLoading(false);
-    }
-  };
-
-  // Fallback Pipeline Management Helpers
-  const moveFallback = (index: number, direction: 'up' | 'down') => {
-    setFallbackPipeline((prev) => {
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const copy = [...prev];
-      const temp = copy[index];
-      copy[index] = copy[targetIndex];
-      copy[targetIndex] = temp;
-      return copy;
-    });
-  };
-
-  const toggleFallback = (index: number) => {
-    setFallbackPipeline((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], enabled: !copy[index].enabled };
-      return copy;
-    });
-  };
-
-  const updateFallbackModel = (index: number, model: string) => {
-    setFallbackPipeline((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], model };
-      return copy;
-    });
-  };
-
-  // Avatar Image Compression & Cloudinary Upload
-  const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingAvatar(true);
-    setAvatarUploadError(null);
-
-    try {
-      // 1. Read file as Image object for canvas compression
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onload = (event) => resolve(event.target?.result as string);
-        reader.onerror = (err) => reject(err);
-      });
-      reader.readAsDataURL(file);
-      const dataUrl = await base64Promise;
-
-      // 2. Compress via Canvas to max 256x256 WebP
-      const compressedDataUrl = await new Promise<string>((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 256;
-          let width = img.width;
-          let height = img.height;
-          if (width > height) {
-            if (width > maxDim) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            }
-          } else {
-            if (height > maxDim) {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/webp', 0.85));
-          } else {
-            resolve(dataUrl);
-          }
-        };
-        img.onerror = () => resolve(dataUrl);
-        img.src = dataUrl;
-      });
-
-      // 3. Upload to Cloud CDN via generic image upload API (does not mutate user profile)
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/upload/image`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: compressedDataUrl }),
-      });
-
-      const json = await res.json();
-      if (res.ok && json.success && json.data?.url) {
-        setEditorAvatar(json.data.url);
-      } else {
-        // If cloud upload fails or endpoint missing, fallback directly to local compressed data url
-        setEditorAvatar(compressedDataUrl);
-      }
-    } catch (err: any) {
-      console.warn('Avatar upload failed, falling back:', err);
-      setAvatarUploadError(err.message || 'Image upload failed. You can paste an image URL or emoji.');
-    } finally {
-      setUploadingAvatar(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  // Open modal for Creating a new bot
-  const handleOpenCreateBot = () => {
-    setEditingBotId(null);
-    setEditorName('');
-    setEditorRole('');
-    setEditorAvatar('🤖');
-    setEditorDesc('');
-    setEditorPrompt('');
-    setEditorProvider('gemini');
-    setEditorModel('gemini-2.5-flash');
-    setEditorTemperature(0.7);
-    setEditorTelegramToken('');
-    setEditorTelegramUsername('');
-    setTelegramConnectSuccess(null);
-    setTelegramConnectError(null);
-    setAvatarUploadError(null);
-    setFallbackPipeline(DEFAULT_FALLBACK_PIPELINE);
-    setEditorPermissions({
-      canAccessNox: true,
-      canSearchWeb: true,
-      canAuditCode: true,
-      canAdaptPersona: true,
-      canAccessMemory: true,
-    });
-    setShowEditorModal(true);
-  };
-
-  // Open modal for Editing an existing bot (Sofi, Riven, Lucifer, or custom)
-  const handleOpenEditBot = async (bot: BotItem) => {
-    setEditingBotId(bot.id);
-    setEditorName(bot.name || '');
-    setEditorRole(bot.role || '');
-    setEditorAvatar(bot.avatar || '🤖');
-    setEditorDesc(bot.description || '');
-    setEditorPrompt(bot.instruction?.systemPrompt || DEFAULT_PERSONAS[bot.id]?.prompt || '');
-    setEditorProvider(bot.modelConfig?.provider || 'gemini');
-    setEditorModel(bot.modelConfig?.model || '');
-    setEditorTemperature(bot.modelConfig?.temperature || 0.7);
-    setEditorTelegramToken(bot.telegramBotToken || '');
-    setEditorTelegramUsername(bot.telegramBotUsername || '');
-    setTelegramConnectSuccess(null);
-    setTelegramConnectError(null);
-    setAvatarUploadError(null);
-
-    // Load or initialize Fallback Pipeline
-    let parsedPipeline: FallbackItem[] | null = null;
-    if (bot.modelConfig?.customEndpoint) {
-      try {
-        const parsed = JSON.parse(bot.modelConfig.customEndpoint);
-        if (Array.isArray(parsed?.fallbackPipeline)) {
-          parsedPipeline = parsed.fallbackPipeline;
-        }
-      } catch {}
-    }
-    if (!parsedPipeline && Array.isArray(bot.modelConfig?.fallbackPipeline)) {
-      parsedPipeline = bot.modelConfig.fallbackPipeline;
-    }
-
-    if (parsedPipeline && parsedPipeline.length > 0) {
-      setFallbackPipeline(parsedPipeline);
-    } else {
-      const primaryProv = bot.modelConfig?.provider || 'gemini';
-      const primaryModel = bot.modelConfig?.model || (primaryProv === 'gemini' ? 'gemini-2.5-flash' : 'llama-3.3-70b-versatile');
-      const defaultList: FallbackItem[] = [
-        { provider: primaryProv, model: primaryModel, enabled: true },
-        ...DEFAULT_FALLBACK_PIPELINE.filter((p) => p.provider !== primaryProv),
-      ];
-      setFallbackPipeline(defaultList);
-    }
-
-    // Load or initialize Permissions
-    const existingPerms =
-      bot.persona?.traits?.permissions ||
-      bot.permissions ||
-      DEFAULT_PERMISSIONS_BY_BOT[bot.id || ''] || {
-        canAccessNox: true,
-        canSearchWeb: true,
-        canAuditCode: true,
-        canAdaptPersona: true,
-        canAccessMemory: true,
-      };
-    setEditorPermissions({
-      canAccessNox: existingPerms.canAccessNox !== false,
-      canSearchWeb: existingPerms.canSearchWeb !== false,
-      canAuditCode: existingPerms.canAuditCode === true || bot.id === 'lucifer' || bot.id === 'riven',
-      canAdaptPersona: existingPerms.canAdaptPersona !== false,
-      canAccessMemory: existingPerms.canAccessMemory !== false,
-    });
-
-    setShowEditorModal(true);
-
-    // Fetch full bot details if instruction wasn't loaded
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${bot.id}`);
-      const detailed = await readCouncilData(res, 'bot details') as any;
-      if (!detailed || typeof detailed !== 'object' || Array.isArray(detailed)) {
-        throw new Error('Council returned invalid bot details');
-      }
-      if (detailed) {
-        if (detailed?.instruction?.systemPrompt) {
-          setEditorPrompt(detailed.instruction.systemPrompt);
-        }
-        if (detailed?.telegramBotToken) {
-          setEditorTelegramToken(detailed.telegramBotToken);
-        }
-        if (detailed?.telegramBotUsername) {
-          setEditorTelegramUsername(detailed.telegramBotUsername);
-        }
-        if (detailed?.persona?.traits?.permissions) {
-          setEditorPermissions((prev) => ({
-            ...prev,
-            ...detailed.persona.traits.permissions,
-          }));
-        }
-        if (detailed?.modelConfig?.customEndpoint) {
-          try {
-            const parsed = JSON.parse(detailed.modelConfig.customEndpoint);
-            if (Array.isArray(parsed?.fallbackPipeline)) {
-              setFallbackPipeline(parsed.fallbackPipeline);
-            }
-          } catch (err) {
-            console.warn('Could not parse bot fallback configuration:', err);
-            reportIntegrationError(err, 'Bot fallback configuration could not be loaded');
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Could not fetch full bot instructions:', err);
-    }
-  };
-
-  // Connect Telegram Bot Token & Auto-Register Webhook
-  const handleConnectTelegram = async () => {
-    if (!editorTelegramToken.trim()) {
-      setTelegramConnectError('Please enter a Telegram Bot Token from @BotFather.');
-      return;
-    }
-
-    if (!editingBotId) {
-      setTelegramConnectError('Please save the bot first before testing the Telegram connection.');
-      return;
-    }
-
-    setIsConnectingTelegram(true);
-    setTelegramConnectError(null);
-    setTelegramConnectSuccess(null);
-
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${editingBotId}/telegram/connect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: editorTelegramToken.trim() }),
-      });
-      const data = await readCouncilData(res, 'Telegram bot connection') as { botUsername?: string };
-      if (!data.botUsername) throw new Error('Council returned no Telegram bot username');
-      setEditorTelegramUsername(data.botUsername);
-      setTelegramConnectSuccess(`Connected to @${data.botUsername}! Webhook registered.`);
-      await fetchBots();
-    } catch (err: any) {
-      setTelegramConnectError(err?.message || 'Failed to connect Telegram bot.');
-    } finally {
-      setIsConnectingTelegram(false);
-    }
-  };
-
-  // Save Bot (Create or Edit)
-  const handleSaveBot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionNotice(null);
-    if (!editorName.trim()) return;
-
-    setSavingBot(true);
-    try {
-      // Primary provider is the top-most enabled item in fallbackPipeline, or editorProvider
-      const primaryCandidate = fallbackPipeline.find((p) => p.enabled) || fallbackPipeline[0] || { provider: editorProvider, model: editorModel };
-
-      const payload: any = {
-        name: editorName.trim(),
-        role: editorRole.trim() || 'AI Assistant',
-        avatar: editorAvatar || '🤖',
-        description: editorDesc.trim(),
-        instruction: {
-          systemPrompt: editorPrompt.trim(),
-        },
-        persona: {
-          traits: {
-            permissions: editorPermissions,
-          },
-        },
-        permissions: editorPermissions,
-        modelConfig: {
-          provider: primaryCandidate.provider || editorProvider,
-          model: primaryCandidate.model || editorModel.trim() || undefined,
-          temperature: editorTemperature,
-          customEndpoint: JSON.stringify({ fallbackPipeline }),
-        },
-        telegramBotToken: editorTelegramToken.trim() || null,
-        telegramBotUsername: editorTelegramUsername.trim() || null,
-      };
-
-      if (editingBotId) {
-        // PATCH existing bot
-        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${editingBotId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        await readCouncilData(res, 'bot update');
-      } else {
-        // POST new bot
-        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        const created = await readCouncilData(res, 'bot creation') as { id?: string } | null;
-        if (created?.id) {
-          setActiveBotId(created.id);
-        } else {
-          throw new Error('Council returned no created bot');
-        }
-      }
-
-      setShowEditorModal(false);
-      await fetchBots();
-      setActionNotice({ type: 'success', message: editingBotId ? 'Bot updated.' : 'Bot created.' });
-    } catch (err) {
-      setActionNotice({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Could not save the bot.',
-      });
-    } finally {
-      setSavingBot(false);
-    }
-  };
-
-  // Duplicate Bot
-  const handleDuplicateBot = async (botId: string) => {
-    setActionNotice(null);
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${botId}/duplicate`, {
-        method: 'POST',
-      });
-      await readCouncilData(res, 'bot duplication');
-      await fetchBots();
-      setActionNotice({ type: 'success', message: 'Bot duplicated successfully.' });
-    } catch (err) {
-      setActionNotice({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Could not duplicate the bot.',
-      });
-    }
-  };
-
-  // Delete Bot
-  const handleDeleteBot = async (botId: string, botName: string) => {
-    setPendingConfirmation({
-      title: `Delete ${botName}?`,
-      message: 'This bot will be removed from your workspace.',
-      confirmLabel: 'Delete bot',
-      onConfirm: async () => {
-        setActionNotice(null);
-        try {
-          const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${botId}`, {
-            method: 'DELETE',
-          });
-          await readCouncilData(res, 'bot deletion');
-          await fetchBots();
-          if (activeBotId === botId) {
-            setActiveBotId('sofi');
-            createNewSession('sofi', true);
-          }
-          setActionNotice({ type: 'success', message: `${botName} was deleted.` });
-        } catch (err) {
-          setActionNotice({
-            type: 'error',
-            message: err instanceof Error ? err.message : 'Could not delete the bot.',
-          });
-        }
-      },
-    });
-  };
-
-  // Save BYOK Key
-  const handleSaveCredential = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!credKey.trim()) return;
-
-    setActionNotice(null);
-    setSavingCred(true);
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials`, {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/deliberate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: credProvider,
-          label: credLabel.trim() || `${credProvider.toUpperCase()} Key`,
-          apiKey: credKey.trim(),
+          topic: userDelibMsg.content,
+          sessionId: `delib_${Date.now()}`,
         }),
       });
 
-      await readCouncilData(res, 'provider credential save');
+      const data = (await readCouncilData(res, 'deliberation')) as {
+        deliberation?: DeliberationItem[];
+        synthesis?: string;
+      };
 
-      setCredKey('');
-      setCredLabel('');
-      await fetchCredentials();
-      setActionNotice({ type: 'success', message: 'Provider credential saved securely.' });
+      const deliberationReply: Message = {
+        id: `delib_res_${Date.now()}`,
+        sender: 'assistant',
+        content: data.synthesis || 'Council deliberation concluded.',
+        deliberation: data.deliberation || [],
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setDeliberationMessages(prev => [...prev, deliberationReply]);
     } catch (err) {
-      setActionNotice({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Could not save the provider credential.',
-      });
+      console.error('Deliberation error:', err);
+      const errorMsg: Message = {
+        id: `delib_err_${Date.now()}`,
+        sender: 'assistant',
+        content: `Council Deliberation Error: ${err instanceof Error ? err.message : 'Could not conclude deliberation.'}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isError: true,
+      };
+      setDeliberationMessages(prev => [...prev, errorMsg]);
     } finally {
-      setSavingCred(false);
+      setIsThinking(false);
+      setDeliberationProgress(null);
     }
   };
 
-  // Delete BYOK Key
-  const handleDeleteCredential = async (credId: string) => {
-    setPendingConfirmation({
-      title: 'Revoke provider credential?',
-      message: 'Bots using this credential may no longer be able to access their model provider.',
-      confirmLabel: 'Revoke credential',
-      onConfirm: async () => {
-        setActionNotice(null);
-        try {
-          const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials/${credId}`, {
-            method: 'DELETE',
-          });
-          await readCouncilData(res, 'provider credential deletion');
-          await fetchCredentials();
-          setActionNotice({ type: 'success', message: 'Provider credential revoked.' });
-        } catch (err) {
-          setActionNotice({
-            type: 'error',
-            message: err instanceof Error ? err.message : 'Could not revoke the provider credential.',
-          });
-        }
-      },
-    });
+  // Load an existing session
+  const handleLoadSession = async (sessId: string) => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions/${sessId}`);
+      const data = (await readCouncilData(res, 'session history')) as {
+        personaId?: string;
+        messages?: Array<{
+          id: string;
+          sender: 'user' | 'assistant';
+          content: string;
+          createdAt?: string;
+        }>;
+      };
+
+      if (data && Array.isArray(data.messages)) {
+        setSessionId(sessId);
+        if (data.personaId) setActiveBotId(data.personaId);
+        setMessages(
+          data.messages.map(m => ({
+            id: m.id,
+            sender: m.sender,
+            content: m.content,
+            timestamp: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+          }))
+        );
+        setShowSessionsDrawer(false);
+        setActionNotice({ type: 'success', message: 'Chat session restored.' });
+      }
+    } catch (err) {
+      setActionNotice({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not load session.',
+      });
+    }
   };
 
-  // Add Fact to Memory
+  // Delete Session
+  const handleDeleteSession = async (sessId: string) => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions/${sessId}`, {
+        method: 'DELETE',
+      });
+      await readCouncilData(res, 'session deletion');
+      await fetchSessions();
+      if (sessionId === sessId) {
+        createNewSession(activeBotId, true);
+      }
+      setActionNotice({ type: 'success', message: 'Session deleted.' });
+    } catch (err) {
+      setActionNotice({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not delete session.',
+      });
+    }
+  };
+
+  // Add Memory Fact
   const handleAddFact = async () => {
     if (!newFact.trim()) return;
     setIsAddingFact(true);
@@ -1298,90 +728,149 @@ export default function CouncilView({
         body: JSON.stringify({
           fact: newFact.trim(),
           category: newFactCategory,
-          sourcePersona: activeBotId,
         }),
       });
-
-      await readCouncilData(res, 'memory fact creation');
+      await readCouncilData(res, 'memory fact addition');
       setNewFact('');
       await fetchMemory();
+      setActionNotice({ type: 'success', message: 'Fact stored in long-term memory vault.' });
     } catch (err) {
-      console.warn('Failed to add memory fact:', err);
+      setActionNotice({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not add fact to memory.',
+      });
     } finally {
       setIsAddingFact(false);
     }
   };
 
-  // Compile bot tabs
-  const displayedBots = bots.length > 0 ? bots : [
-    { id: 'sofi', name: 'Sofi', role: 'Executive PA & Girlfriend', avatar: '💖', modelConfig: { provider: 'gemini', model: 'gemini-2.5-flash' } },
-    { id: 'riven', name: 'Riven', role: 'Chief Architect & Idea Shaper', avatar: '🧭', modelConfig: { provider: 'groq', model: 'llama-3.3-70b-versatile' } },
-    { id: 'lucifer', name: 'Lucifer', role: 'Partner in Crime & Auditor', avatar: '🔥', modelConfig: { provider: 'groq', model: 'llama-3.3-70b-versatile' } },
-  ];
+  // Delete Memory Fact
+  const handleDeleteFact = async (factId: string) => {
+    try {
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/memory/${factId}`, {
+        method: 'DELETE',
+      });
+      await readCouncilData(res, 'memory fact deletion');
+      await fetchMemory();
+      setActionNotice({ type: 'success', message: 'Fact removed from memory.' });
+    } catch (err) {
+      setActionNotice({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not delete fact.',
+      });
+    }
+  };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-      {/* Studio Master Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md flex-wrap gap-2">
-        {/* View Mode Switcher */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 text-xs font-semibold">
-          <button
-            onClick={() => setStudioView('chat')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
-              studioView === 'chat'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-            }`}
-          >
-            <MessageSquare size={13} />
-            <span>Chat Studio</span>
-          </button>
-          <button
-            onClick={() => setStudioView('bots')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
-              studioView === 'bots'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-            }`}
-          >
-            <Bot size={13} />
-            <span>My Bots ({displayedBots.length})</span>
-          </button>
-          <button
-            onClick={() => setStudioView('byok')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
-              studioView === 'byok'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-            }`}
-          >
-            <Key size={13} />
-            <span>BYOK Vault</span>
-          </button>
-          <button
-            onClick={() => setStudioView('deliberate')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
-              studioView === 'deliberate'
-                ? 'bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-            }`}
-          >
-            <Sparkles size={13} />
-            <span>Deliberation</span>
-          </button>
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden flex flex-col h-[calc(100vh-140px)] min-h-[580px] relative">
+      
+      {/* ── TOP MINIMAL COMMAND BAR ── */}
+      <header className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 shrink-0 z-20">
+        
+        {/* Left: Active Bot Avatar & Selector Dropdown */}
+        <div className="flex items-center space-x-3.5 min-w-0">
+          
+          {/* Large 48px Avatar */}
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center text-2xl shrink-0 overflow-hidden">
+            <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-2xl" />
+          </div>
+
+          {/* Bot Selector Dropdown */}
+          <div className="relative" ref={botDropdownRef}>
+            <button
+              onClick={() => setIsBotDropdownOpen(!isBotDropdownOpen)}
+              className="flex items-center space-x-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800/80 px-2.5 py-1.5 rounded-xl transition cursor-pointer group"
+            >
+              <div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="font-display font-bold text-base text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    {activeBot.name}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-transform ${isBotDropdownOpen ? 'rotate-180' : ''}`} />
+                </div>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium line-clamp-1">
+                  {activeBot.role}
+                </p>
+              </div>
+            </button>
+
+            {/* Dropdown Popover Menu */}
+            {isBotDropdownOpen && (
+              <div className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 py-2 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                  Select Active Bot
+                </div>
+
+                <div className="max-h-64 overflow-y-auto px-1 space-y-1">
+                  {displayedBots.map((b) => {
+                    const isSelected = b.id === activeBot.id || b.slug === activeBot.id;
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => handleSelectBot(b.id)}
+                        className={`w-full flex items-center space-x-3 p-2.5 rounded-xl text-left transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-lg shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
+                          <BotAvatarDisplay avatar={b.avatar} name={b.name} className="w-full h-full text-lg" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold leading-tight truncate">{b.name}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{b.role}</p>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Settings Redirect Footer in Dropdown */}
+                <div className="pt-2 mt-1 border-t border-slate-100 dark:border-slate-800 px-2">
+                  <button
+                    onClick={() => {
+                      setIsBotDropdownOpen(false);
+                      onOpenSettings?.('council');
+                    }}
+                    className="w-full flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-bold transition cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>Manage Bots & Models in Settings</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Global Utilities */}
-        <div className="flex items-center gap-2 text-xs">
+        {/* Right: Deliberation Switch, Memory, Sessions, Server Status & Settings */}
+        <div className="flex items-center space-x-2 shrink-0">
+          
+          {/* Deliberation Mode Toggle */}
+          <button
+            onClick={() => setIsDeliberation(!isDeliberation)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-xs ${
+              isDeliberation
+                ? 'bg-gradient-to-r from-rose-500 via-amber-500 to-indigo-600 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+            }`}
+            title="Toggle Multi-Bot Deliberation Mode"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{isDeliberation ? 'Council Deliberation' : '1-on-1 Chat'}</span>
+          </button>
+
           {/* Memory Vault Button */}
           <button
             onClick={() => setShowMemoryDrawer(true)}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
-            title="Memory Vault"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+            title="Open Long-Term Memory Vault"
           >
-            <Brain size={13} className="text-indigo-500" />
-            <span className="hidden sm:inline">Memory</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-600 font-mono text-[10px]">
+            <Brain className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="hidden md:inline">Memory</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
               {memoryProfile?.facts?.length || 0}
             </span>
           </button>
@@ -1389,21 +878,21 @@ export default function CouncilView({
           {/* Sessions Drawer Button */}
           <button
             onClick={() => setShowSessionsDrawer(true)}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition"
-            title="Chat History"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+            title="Chat Sessions History"
           >
-            <MessageSquare size={13} className="text-cyan-500" />
-            <span className="hidden sm:inline">Sessions</span>
+            <MessageSquare className="w-3.5 h-3.5 text-sky-500" />
+            <span className="hidden md:inline">Sessions</span>
             <span className="px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono text-[10px]">
               {sessions.length}
             </span>
           </button>
 
-          {/* Interactive Ping / Wake Controller */}
+          {/* Council Server Ping Pill */}
           <button
             onClick={() => handleWakeOrPingCouncil(!isOnline)}
             disabled={isPinging}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono transition shadow-xs ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono transition cursor-pointer ${
               isPinging
                 ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400 cursor-wait'
                 : isOnline
@@ -1412,393 +901,182 @@ export default function CouncilView({
             }`}
             title={
               isPinging
-                ? `Waking Council container... elapsed ${wakeSecondsElapsed}s`
+                ? `Waking Council container... (${wakeSecondsElapsed}s)`
                 : isOnline
-                ? `Council is live (${pingLatency ? `${pingLatency}ms` : 'active'}). Click to re-ping latency.`
-                : 'Council is on Standby (Render free tier). Click to wake container.'
+                ? `Council is live (${pingLatency ? `${pingLatency}ms` : 'active'}). Click to re-ping.`
+                : 'Council is on Standby. Click to wake.'
             }
           >
             {isPinging ? (
               <>
-                <RefreshCw size={12} className="animate-spin text-amber-500" />
-                <span>Waking... ({wakeSecondsElapsed}s)</span>
+                <RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
+                <span className="hidden sm:inline">Waking... ({wakeSecondsElapsed}s)</span>
               </>
             ) : isOnline ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Online{pingLatency ? ` (${pingLatency}ms)` : ''}</span>
-                <RefreshCw size={10} className="opacity-60 hover:opacity-100" />
+                <span className="hidden sm:inline">Online{pingLatency ? ` (${pingLatency}ms)` : ''}</span>
               </>
             ) : (
               <>
                 <span className="w-2 h-2 rounded-full bg-amber-500" />
-                <span className="font-semibold">Standby • Wake</span>
-                <RefreshCw size={10} className="opacity-70" />
+                <span className="hidden sm:inline font-semibold">Standby • Wake</span>
               </>
             )}
           </button>
 
-          {/* + Create Bot Trigger */}
+          {/* Dedicated Settings Button */}
           <button
-            onClick={handleOpenCreateBot}
-            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1 transition"
+            onClick={() => onOpenSettings?.('council')}
+            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+            title="Configure Bots, Model Pipelines & BYOK in Settings"
           >
-            <Plus size={14} />
-            <span className="hidden sm:inline">Create Bot</span>
+            <Settings className="w-4 h-4" />
           </button>
         </div>
-      </div>
+      </header>
 
+      {/* Standby Wake Alert Banner if sleeping */}
+      {isOnline === false && !dismissStandbyBanner && (
+        <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-800 dark:text-amber-200 text-xs shrink-0">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>
+              <strong>Council Standby:</strong> The AI Council service is idling on Render free-tier.
+              {wakeError && !isPinging && <span className="ml-1 text-rose-500 font-mono">({wakeError})</span>}
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleWakeOrPingCouncil(true)}
+              disabled={isPinging}
+              className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs flex items-center space-x-1.5 transition disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin' : ''}`} />
+              <span>{isPinging ? `Waking... (${wakeSecondsElapsed}s)` : 'Wake Council Now'}</span>
+            </button>
+            <button onClick={() => setDismissStandbyBanner(true)} className="p-1 text-amber-700 dark:text-amber-300 rounded">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Action Notice Alert */}
       {actionNotice && (
         <div
-          role={actionNotice.type === 'error' ? 'alert' : 'status'}
-          className={`flex items-center justify-between gap-3 border-b px-4 py-2 text-xs ${
+          className={`flex items-center justify-between px-4 py-2 text-xs border-b ${
             actionNotice.type === 'error'
-              ? 'border-rose-500/20 bg-rose-500/10 text-rose-800 dark:text-rose-200'
-              : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200'
+              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-800 dark:text-rose-200'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-800 dark:text-emerald-200'
           }`}
         >
-          <span className="flex items-center gap-2">
-            {actionNotice.type === 'error' ? (
-              <AlertCircle size={15} className="shrink-0 text-rose-500" />
-            ) : (
-              <CheckCircle2 size={15} className="shrink-0 text-emerald-500" />
-            )}
-            {actionNotice.message}
-          </span>
-          <button
-            type="button"
-            onClick={() => setActionNotice(null)}
-            aria-label="Dismiss notification"
-            className="shrink-0 rounded p-1 hover:bg-black/5 dark:hover:bg-white/10"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-      {integrationError && (
-        <div role="alert" className="flex items-center justify-between gap-3 border-b border-rose-500/20 bg-rose-500/10 px-4 py-2 text-xs text-rose-800 dark:text-rose-200">
-          <span className="flex items-center gap-2">
-            <AlertCircle size={15} className="shrink-0 text-rose-500" />
-            <span>Council connection issue: {integrationError}</span>
-          </span>
-          <button
-            type="button"
-            onClick={async () => {
-              const results = await Promise.all([
-                fetchBots(),
-                fetchCredentials(),
-                fetchSessions(),
-                fetchMemory(),
-              ]);
-              if (results.every(Boolean)) setIntegrationError(null);
-            }}
-            className="shrink-0 rounded-lg border border-rose-500/30 px-2.5 py-1 font-semibold hover:bg-rose-500/10"
-          >
-            Retry
+          <div className="flex items-center space-x-2">
+            {actionNotice.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-500" /> : <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+            <span>{actionNotice.message}</span>
+          </div>
+          <button onClick={() => setActionNotice(null)} className="p-1 hover:opacity-75">
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* VIEW 1: CHAT STUDIO */}
-      {studioView === 'chat' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Standby Wake Alert Banner */}
-          {isOnline === false && !dismissStandbyBanner && (
-            <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-800 dark:text-amber-200 text-xs shrink-0">
-              <div className="flex items-center gap-2">
-                <AlertCircle size={15} className="text-amber-500 shrink-0" />
-                <span>
-                  <strong>Council Standby:</strong>{' '}
-                  {isPinging
-                    ? wakeSecondsElapsed < 12
-                      ? 'Triggering Render container start...'
-                      : wakeSecondsElapsed < 28
-                      ? 'Render container booting (~25-35s typical for cold start)...'
-                      : 'Almost ready, waiting for port to accept traffic...'
-                    : 'The AI Council service is sleeping on Render free-tier.'}
-                  {wakeError && !isPinging && <span className="ml-1 text-rose-500 font-mono">({wakeError})</span>}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleWakeOrPingCouncil(true)}
-                  disabled={isPinging}
-                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs flex items-center gap-1.5 transition disabled:opacity-50"
-                >
-                  <RefreshCw size={12} className={isPinging ? 'animate-spin' : ''} />
-                  <span>{isPinging ? `Waking... (${wakeSecondsElapsed}s)` : 'Wake Council Now'}</span>
-                </button>
-                <button
-                  onClick={() => setDismissStandbyBanner(true)}
-                  className="p-1 text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-white rounded"
-                  title="Dismiss notice"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-          )}
-          {/* Active Bot Bar & Tabs */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-            {/* Horizontal Bot Switcher */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-              {displayedBots.map((b) => {
-                const isSelected = activeBotId === b.id || activeBotId === b.slug;
+      {/* ── MAIN WORKSPACE CANVAS ── */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        
+        {/* ── MODE A: 1-ON-1 BOT CHAT ── */}
+        {!isDeliberation && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Messages Scroll Area */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+              {messages.map((msg) => {
+                const isUser = msg.sender === 'user';
                 return (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      setActiveBotId(b.id);
-                      createNewSession(b.id, true);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl flex items-center space-x-1.5 transition text-xs shrink-0 ${
-                      isSelected
-                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800'
-                    }`}
+                  <div
+                    key={msg.id}
+                    className={`flex items-start space-x-3 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-150`}
                   >
-                    <BotAvatarDisplay avatar={b.avatar} name={b.name} className="w-4 h-4 rounded-md text-xs" />
-                    <span>{b.name}</span>
-                  </button>
+                    {!isUser && (
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg shrink-0 overflow-hidden mt-0.5">
+                        <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-lg" />
+                      </div>
+                    )}
+
+                    <div
+                      className={`max-w-2xl rounded-3xl p-4 sm:p-5 shadow-xs ${
+                        isUser
+                          ? 'bg-indigo-600 text-white rounded-tr-none'
+                          : msg.isError
+                          ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100 rounded-tl-none'
+                          : 'bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 rounded-tl-none'
+                      }`}
+                    >
+                      {/* Executed Tools / Actions */}
+                      {msg.executedActions && msg.executedActions.length > 0 && (
+                        <div className="mb-3 space-y-1.5 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
+                          {msg.executedActions.map((act, i) => (
+                            <div key={i} className="flex items-center space-x-2 text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-900/60">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Executed: {act.toolName}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
+                        <MarkdownRenderer content={msg.content} />
+                      </div>
+
+                      <div className={`mt-2 flex items-center justify-between text-[10px] ${isUser ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        <span>{msg.timestamp}</span>
+                        {!isUser && !msg.isError && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.content);
+                              setActionNotice({ type: 'success', message: 'Copied to clipboard.' });
+                            }}
+                            className="hover:text-slate-600 dark:hover:text-slate-200 transition p-1"
+                            title="Copy reply"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        )}
+                        {msg.isError && msg.failedPrompt && (
+                          <button
+                            onClick={() => handleSendMessage(msg.failedPrompt)}
+                            className="text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center space-x-1"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>Retry</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
-            </div>
 
-            {/* In-Chat Edit Bot Button */}
-            <div className="flex items-center gap-2">
-              <div className="hidden md:flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                <span>⚙️ {currentBotProvider}</span>
-                <span>•</span>
-                <span className={hasKeyForActiveBot ? 'text-emerald-500 font-medium' : 'text-amber-500'}>
-                  {hasKeyForActiveBot ? '🔑 Key Active' : 'No Key'}
-                </span>
-              </div>
-
-              {onNavigate && (
-                <button
-                  type="button"
-                  onClick={() => onNavigate('messages')}
-                  className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium transition cursor-pointer"
-                  title="View Message Ingest & Forwarder Bot Webhook"
-                >
-                  <Share2 size={12} className="text-sky-500" />
-                  <span>Forwarder Bot</span>
-                </button>
+              {isThinking && (
+                <div className="flex items-center space-x-3 animate-pulse">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg">
+                    <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-lg" />
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-500 font-mono flex items-center space-x-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                    <span>{activeBot.name} is reasoning & drafting plan...</span>
+                  </div>
+                </div>
               )}
 
-              <button
-                onClick={() => handleOpenEditBot(activeBot || { id: activeBotId, name: currentBotName, role: currentBotRole, avatar: currentBotAvatar })}
-                className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-                title="Edit this bot's instructions, avatar, or AI model"
-              >
-                <Edit3 size={13} />
-                <span>Edit Bot</span>
-              </button>
-
-              <button
-                onClick={() => createNewSession(activeBotId, true)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
-                title="New Chat Session"
-              >
-                <RefreshCw size={14} />
-              </button>
+              <div ref={messagesEndRef} />
             </div>
-          </div>
 
-          {/* Conversation Stream */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-sm scroll-smooth">
-            {messages.map((m) => (
-              <div
-                key={m.id}
-                className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'} max-w-3xl ${
-                  m.sender === 'user' ? 'ml-auto' : 'mr-auto'
-                } w-full`}
-              >
-                <div className="flex items-center space-x-1.5 mb-1 px-1 text-[11px] text-slate-400">
-                  {m.sender === 'assistant' ? (
-                    <>
-                      <BotAvatarDisplay avatar={currentBotAvatar} name={currentBotName} className="w-4 h-4 rounded-md text-xs" />
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">{currentBotName}</span>
-                    </>
-                  ) : (
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">You</span>
-                  )}
-                  <span>•</span>
-                  <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-
-                <div
-                  className={`p-4 rounded-2xl leading-relaxed text-sm ${
-                    m.sender === 'user'
-                      ? 'bg-indigo-600 dark:bg-indigo-600 text-white rounded-tr-none shadow-xs font-normal'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200/80 dark:border-slate-700/80'
-                  }`}
-                >
-                  {m.sender === 'user' ? (
-                    <div className="whitespace-pre-wrap break-words text-white font-medium text-sm selection:bg-indigo-400 selection:text-white">
-                      {m.content}
-                    </div>
-                  ) : (
-                    <MarkdownRenderer content={m.content} />
-                  )}
-
-                  {/* Retry & Restore Bar on Error */}
-                  {m.isError && m.failedPrompt && (
-                    <div className="mt-3 pt-3 border-t border-rose-200 dark:border-rose-900/60 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1.5">
-                        <AlertCircle size={13} />
-                        <span>Failed to deliver message</span>
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInputMessage(m.failedPrompt!);
-                            setTimeout(() => textareaRef.current?.focus(), 50);
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-                          title="Restore failed message to input box"
-                        >
-                          Edit / Restore
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMessages((prev) => prev.filter((msg) => msg.id !== m.id));
-                            handleSendMessage(m.failedPrompt);
-                          }}
-                          disabled={loading}
-                          className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs disabled:opacity-50"
-                        >
-                          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-                          <span>Retry</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Executed Action Cards */}
-                  {m.executedActions && m.executedActions.filter((a: any) => a && (a.toolName || a.name)).length > 0 && (
-                    <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        ⚡ Executed Actions:
-                      </div>
-                      {m.executedActions
-                        .filter((act: any) => act && (act.toolName || act.name))
-                        .map((act: any, i) => {
-                          const toolName = act.toolName || act.name || 'action';
-                          const isAdaptPersona = toolName === 'adapt_persona';
-                          const isWebSearch = toolName === 'web_search';
-                          return (
-                            <div
-                              key={i}
-                              className={`p-2.5 rounded-xl border text-xs font-mono ${
-                                isAdaptPersona
-                                  ? 'bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-indigo-500/10 border-purple-200 dark:border-purple-800/60'
-                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span
-                                  className={`font-bold ${
-                                    isAdaptPersona
-                                      ? 'text-purple-600 dark:text-purple-400'
-                                      : 'text-indigo-600 dark:text-indigo-400'
-                                  }`}
-                                >
-                                  {isAdaptPersona ? '🎭 adapt_persona' : isWebSearch ? '🔍 web_search' : `⚡ ${toolName}`}
-                                </span>
-                                {isAdaptPersona && (
-                                  <span className="text-[10px] font-sans px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-semibold">
-                                    Character & Instructions Adapted
-                                  </span>
-                                )}
-                              </div>
-                              {act.params && Object.keys(act.params).length > 0 && (
-                                <div className="text-slate-500 text-[10px] mt-1 break-all">
-                                  {JSON.stringify(act.params)}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-
-                  {/* Deliberation Items */}
-                  {m.deliberation && m.deliberation.length > 0 && (
-                    <div className="mt-3 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2">
-                      {m.deliberation.map((delib, idx) => (
-                        <div
-                          key={idx}
-                          className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1"
-                        >
-                          <div className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                            {delib.name} ({delib.role})
-                          </div>
-                          <div className="text-xs text-slate-600 dark:text-slate-300">{delib.opinion || delib.synthesis}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {loading && (
-              <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
-                <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                <span>{currentBotName} is thinking...</span>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Chat Input Container */}
-          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
-            {/* Long message helper bar */}
-            {inputMessage.length > 120 && (
-              <div className="flex items-center justify-between px-2 text-[11px] text-slate-500 dark:text-slate-400">
-                <div className="flex items-center gap-2 font-mono">
-                  <span>{inputMessage.length.toLocaleString()} chars</span>
-                  <span>•</span>
-                  <span>{inputMessage.split('\n').length} lines</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsInputExpanded(!isInputExpanded)}
-                    className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition"
-                    title={isInputExpanded ? 'Collapse Input Box' : 'Expand Input Box'}
-                  >
-                    {isInputExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-                    <span>{isInputExpanded ? 'Collapse' : 'Expand'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInputMessage('')}
-                    className="hover:text-rose-500 flex items-center gap-0.5 transition"
-                    title="Clear text"
-                  >
-                    <X size={12} />
-                    <span>Clear</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendMessage();
-              }}
-              className="flex items-end gap-2"
-            >
-              <div className="flex-1 relative flex items-end">
+            {/* Bottom Chat Composer Bar */}
+            <div className="p-3 sm:p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+              <div className="max-w-4xl mx-auto flex items-end space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 transition">
                 <textarea
                   ref={textareaRef}
+                  rows={1}
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyDown={(e) => {
@@ -1807,1012 +1085,353 @@ export default function CouncilView({
                       handleSendMessage();
                     }
                   }}
-                  placeholder={`Message ${currentBotName}... (Press Enter to send, Shift+Enter for newline)`}
-                  rows={1}
-                  className="w-full bg-slate-100 dark:bg-slate-800 rounded-xl p-3 pr-8 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none resize-none focus:ring-2 focus:ring-indigo-500 overflow-y-auto leading-relaxed transition-all"
-                  style={{ minHeight: '48px', maxHeight: isInputExpanded ? '380px' : '200px' }}
+                  placeholder={`Message ${activeBot.name}... (Press Enter to send, Shift+Enter for newline)`}
+                  className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none resize-none px-2 py-1 max-h-32"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => setIsInputExpanded(!isInputExpanded)}
-                  className="absolute right-2.5 top-2.5 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition"
-                  title={isInputExpanded ? 'Collapse Input Box' : 'Expand Input Box for long message'}
-                >
-                  {isInputExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                </button>
+                <div className="flex items-center space-x-1.5 shrink-0">
+                  <button
+                    onClick={() => createNewSession(activeBot.id, true)}
+                    className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                    title="Clear chat and start fresh session"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleSendMessage()}
+                    disabled={!inputMessage.trim() || isThinking}
+                    className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 transition cursor-pointer shadow-sm"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-
-              <button
-                type="submit"
-                disabled={!inputMessage.trim() || loading}
-                className="h-12 w-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition flex items-center justify-center shrink-0 disabled:opacity-50 shadow-xs"
-              >
-                <Send size={16} />
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW 2: MY BOTS (GRID & WORKSHOP) */}
-      {studioView === 'bots' && (
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">AI Bot Workshop</h2>
-              <p className="text-xs text-slate-500">
-                Personal AI assistants configured with your instructions, models, and shared BYOK keys.
-              </p>
             </div>
-            <button
-              onClick={handleOpenCreateBot}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
-            >
-              <Plus size={15} />
-              <span>Create New Bot</span>
-            </button>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayedBots.map((b) => {
-              const prov = b.modelConfig?.provider || 'gemini';
-              const mod = b.modelConfig?.model || 'default';
-              const keyActive = credentials.some((c) => (c.provider === prov || c.status === 'ACTIVE') && c.status === 'ACTIVE');
-
-              return (
-                <div
-                  key={b.id}
-                  className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-blue-400 dark:hover:border-blue-500 transition group shadow-sm"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-2xl shadow-xs overflow-hidden">
-                        <BotAvatarDisplay avatar={b.avatar} name={b.name} className="w-full h-full text-2xl flex items-center justify-center" />
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                        {b.status || 'ACTIVE'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-blue-500 transition">
-                        {b.name}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{b.role}</p>
-                    </div>
-
-                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
-                      {b.description || b.instruction?.systemPrompt || 'Personalized AI assistant.'}
-                    </p>
-
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-600 dark:text-slate-300">
-                        ⚙️ {prov} / {mod}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-medium ${
-                          keyActive
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                        }`}
-                      >
-                        {keyActive ? '🔑 Key Active' : 'No Key'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5 pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
-                    <button
-                      onClick={() => {
-                        setActiveBotId(b.id);
-                        createNewSession(b.id, true);
-                        setStudioView('chat');
-                      }}
-                      className="flex-1 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition flex items-center justify-center gap-1 shadow-xs"
-                    >
-                      <MessageSquare size={13} />
-                      <span>Chat</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleOpenEditBot(b)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs transition"
-                      title="Edit Bot Instructions & Model"
-                    >
-                      <Edit3 size={13} />
-                    </button>
-
-                    <button
-                      onClick={() => handleDuplicateBot(b.id)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs transition"
-                      title="Duplicate Bot"
-                    >
-                      <Copy size={13} />
-                    </button>
-
-                    {!b.isDefault && (
-                      <button
-                        onClick={() => handleDeleteBot(b.id, b.name)}
-                        className="px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs transition"
-                        title="Delete Bot"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
+        {/* ── MODE B: MULTI-BOT COUNCIL DELIBERATION ── */}
+        {isDeliberation && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              {/* Deliberation Header Card */}
+              <div className="p-6 rounded-3xl bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-indigo-500/10 border border-indigo-200/50 dark:border-indigo-900/40 space-y-3">
+                <div className="flex items-center space-x-2.5">
+                  <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Multi-Agent Deliberation Chamber</h3>
                 </div>
-              );
-            })}
-
-            {/* Dedicated Forwarder Bot Card */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-sky-500/5 via-blue-500/5 to-indigo-500/5 border border-sky-200/80 dark:border-sky-900/60 flex flex-col justify-between hover:border-sky-400 dark:hover:border-sky-500 transition group shadow-sm">
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-sky-100 dark:bg-sky-900/50 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-2xl shadow-xs">
-                    <Share2 className="w-6 h-6 text-sky-500" />
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-                    INGESTION BOT
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-sky-500 transition">
-                    Telegram & HTTP Forwarder
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Message Ingest & Direct Inbox Routing</p>
-                </div>
-
-                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
-                  Dedicated forwarding bot for saving raw messages, iOS Shortcuts, and webhooks straight to your NOX inbox without AI interruption.
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Pose strategic dilemmas, technical architecture decisions, or workload prioritization problems. Sofi, Riven, and Lucifer will debate perspectives and construct a synthesized, actionable consensus.
                 </p>
 
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-[10px] font-mono text-sky-700 dark:text-sky-300">
-                    ⚡ Direct Webhook
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium">
-                    ✓ No AI Hijacking
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => onNavigate && onNavigate('messages')}
-                  className="w-full py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <span>Configure in Message Ingest</span>
-                  <ArrowRight size={13} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW 3: BYOK KEY VAULT */}
-      {studioView === 'byok' && (
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">BYOK Credential Vault</h2>
-            <p className="text-xs text-slate-500">
-              Bring Your Own Key (BYOK) encrypted with AES-256-GCM. A single key automatically powers all bots using that provider.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Add/Update Key Form */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-              <div className="flex items-center gap-2">
-                <Key size={16} className="text-amber-500" />
-                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Connect Provider Key</h3>
-              </div>
-
-              <form onSubmit={handleSaveCredential} className="space-y-3 text-xs">
-                <div>
-                  <label className="font-semibold block mb-1">Provider</label>
-                  <select
-                    value={credProvider}
-                    onChange={(e) => setCredProvider(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                  >
-                    <option value="gemini">Google Gemini (Free at aistudio.google.com)</option>
-                    <option value="groq">Groq Cloud (Free at console.groq.com)</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="ollama">Ollama (Local)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold block mb-1">Key Label</label>
-                  <input
-                    value={credLabel}
-                    onChange={(e) => setCredLabel(e.target.value)}
-                    placeholder="e.g. My Personal Gemini API Key"
-                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-semibold block mb-1">API Key *</label>
-                  <input
-                    type="password"
-                    value={credKey}
-                    onChange={(e) => setCredKey(e.target.value)}
-                    required
-                    placeholder="AIza... or sk-..."
-                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                  />
-                </div>
-
-                <div className="text-[11px] text-slate-500">
-                  🔒 Keys are validated with the provider, encrypted with AES-256-GCM, and immediately activate across all matching bots.
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={savingCred}
-                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold transition disabled:opacity-50"
-                >
-                  {savingCred ? 'Validating Key...' : 'Validate & Save Encrypted Key'}
-                </button>
-              </form>
-            </div>
-
-            {/* Active Keys List */}
-            <div className="space-y-3">
-              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Configured Credentials</h3>
-              {credentials.length === 0 ? (
-                <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
-                  No custom BYOK keys added yet. Add a free Google Gemini key or Groq key to get started!
-                </div>
-              ) : (
-                credentials.map((c) => (
-                  <div
-                    key={c.id}
-                    className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold uppercase text-slate-900 dark:text-slate-100">{c.provider}</span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-500">
-                          {c.status}
-                        </span>
-                      </div>
-                      <div className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">{c.label}</div>
-                      <div className="font-mono text-[10px] text-slate-400 mt-1">{c.maskedKey}</div>
-                    </div>
-
+                {/* Debate suggestions */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {DEBATE_SUGGESTIONS.map((sug) => (
                     <button
-                      onClick={() => handleDeleteCredential(c.id)}
-                      className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition"
-                      title="Revoke and delete key"
+                      key={sug}
+                      onClick={() => handleRunDeliberation(sug)}
+                      className="text-[11px] px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-slate-700 dark:text-slate-300 font-medium transition cursor-pointer"
                     >
-                      <Trash2 size={16} />
+                      💡 {sug}
                     </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Deliberation Stream */}
+              {deliberationMessages.map((msg) => {
+                const isUser = msg.sender === 'user';
+                return (
+                  <div key={msg.id} className="space-y-4">
+                    {isUser ? (
+                      <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900">
+                        <span className="text-[10px] font-mono font-bold uppercase text-indigo-600 dark:text-indigo-400">Deliberation Topic</span>
+                        <p className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 mt-1">{msg.content}</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Round table opinions */}
+                        {msg.deliberation && msg.deliberation.length > 0 && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {msg.deliberation.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xl">
+                                    {item.persona === 'sofi' ? '💖' : item.persona === 'riven' ? '🧭' : '🔥'}
+                                  </span>
+                                  <div>
+                                    <h4 className="font-display font-bold text-xs text-slate-900 dark:text-slate-100">{item.name}</h4>
+                                    <p className="text-[10px] text-slate-500">{item.role}</p>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
+                                  "{item.opinion}"
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Synthesized Consensus */}
+                        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border-2 border-indigo-500/40 shadow-lg space-y-3">
+                          <div className="flex items-center space-x-2">
+                            <Zap className="w-5 h-5 text-amber-500" />
+                            <h4 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100">Synthesized Council Consensus</h4>
+                          </div>
+                          <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
+                            <MarkdownRenderer content={msg.content} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))
+                );
+              })}
+
+              {isThinking && deliberationProgress && (
+                <div className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-center space-x-3 text-xs font-mono text-amber-800 dark:text-amber-200">
+                  <RefreshCw className="w-4 h-4 animate-spin text-amber-500" />
+                  <span>{deliberationProgress}</span>
+                </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* VIEW 4: DELIBERATION STUDIO */}
-      {studioView === 'deliberate' && (
-        <div className="flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full space-y-6">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Summon Council Deliberation</h2>
-            <p className="text-xs text-slate-500">
-              Riven, Lucifer, and Sofi convene sequentially to debate your architectural dilemmas, deadlines, and project risks.
-            </p>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div>
-              <label className="text-xs font-semibold block mb-1.5">What topic or decision should the Council debate?</label>
-              <textarea
-                value={debateTopic}
-                onChange={(e) => setDebateTopic(e.target.value)}
-                placeholder="e.g. Should I stick with a modular monolith or break into microservices for the next milestone?"
-                rows={3}
-                className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-xs text-slate-900 dark:text-slate-100"
-              />
+            {/* Deliberation Composer Bar */}
+            <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+              <div className="max-w-4xl mx-auto flex items-center space-x-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-2">
+                <input
+                  type="text"
+                  value={deliberationTopic}
+                  onChange={(e) => setDeliberationTopic(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRunDeliberation();
+                  }}
+                  placeholder="Ask the Council to deliberate on any strategic choice or roadmap doubt..."
+                  className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none px-2"
+                />
+                <button
+                  onClick={() => handleRunDeliberation()}
+                  disabled={!deliberationTopic.trim() || isThinking}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-indigo-600 text-white font-bold text-xs disabled:opacity-40 transition cursor-pointer flex items-center space-x-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Deliberate</span>
+                </button>
+              </div>
             </div>
+          </div>
+        )}
+      </div>
 
-            <div className="space-y-1.5">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Quick Prompts:</span>
-              <div className="flex flex-wrap gap-1.5">
-                {DEBATE_SUGGESTIONS.map((sug, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setDebateTopic(sug)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
-                  >
-                    {sug}
-                  </button>
-                ))}
+      {/* ── MEMORY VAULT SLIDE-OVER DRAWER ── */}
+      {showMemoryDrawer && (
+        <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 h-full overflow-y-auto p-6 space-y-6 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div className="flex items-center space-x-2.5">
+                  <Brain className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <div>
+                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Long-Term Memory Vault</h3>
+                    <p className="text-[11px] text-slate-500">{memoryProfile?.facts?.length || 0} Learned facts</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowMemoryDrawer(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Add Fact Form */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Store Direct Memory</h4>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={newFact}
+                    onChange={(e) => setNewFact(e.target.value)}
+                    placeholder="e.g. Preparing for Snowflake architect interview"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-indigo-600"
+                  />
+                  <div className="flex items-center space-x-2">
+                    <select
+                      value={newFactCategory}
+                      onChange={(e) => setNewFactCategory(e.target.value as UserFact['category'])}
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-medium"
+                    >
+                      <option value="preference">Preference</option>
+                      <option value="goal">Goal</option>
+                      <option value="habit">Habit</option>
+                      <option value="tech_stack">Tech Stack</option>
+                      <option value="relationship">Relationship</option>
+                      <option value="general">General</option>
+                    </select>
+
+                    <button
+                      onClick={handleAddFact}
+                      disabled={isAddingFact || !newFact.trim()}
+                      className="flex-1 py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition disabled:opacity-50"
+                    >
+                      {isAddingFact ? 'Storing...' : '+ Add Fact'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Facts List */}
+              <div className="space-y-2.5">
+                {memoryProfile?.facts && memoryProfile.facts.length > 0 ? (
+                  memoryProfile.facts.map((fact) => (
+                    <div
+                      key={fact.id}
+                      className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex items-start justify-between gap-2"
+                    >
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                          {fact.category}
+                        </span>
+                        <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">{fact.fact}</p>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteFact(fact.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-400 text-center py-6">Memory vault is empty.</p>
+                )}
               </div>
             </div>
 
             <button
-              onClick={() => handleTriggerDebate()}
-              disabled={!debateTopic.trim() || debateLoading}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-white font-bold text-xs shadow-sm hover:opacity-95 transition disabled:opacity-50"
+              onClick={() => setShowMemoryDrawer(false)}
+              className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700"
             >
-              {debateLoading ? 'Deliberating...' : '⚡ Summon the Council'}
+              Close Memory Vault
             </button>
           </div>
         </div>
       )}
 
-      {/* UNIVERSAL BOT WORKSHOP SLIDE-OVER INSPECTOR (CREATE & EDIT) */}
-      {showEditorModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex justify-end z-50">
-          <div className="w-full max-w-xl bg-white dark:bg-slate-900 h-full p-6 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-4 overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-blue-600 text-white shadow-xs">
-                  <Bot size={18} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    {editingBotId ? `Edit "${editorName || 'Bot'}"` : 'Create Custom AI Bot'}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Configure personality, model routing, and permissions
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowEditorModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveBot} className="space-y-4 text-xs flex-1">
-              {/* Avatar Selector & Cloud Image Upload */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
-                <label className="font-semibold block text-slate-800 dark:text-slate-200">
-                  Bot Avatar (Image Upload or Emoji)
-                </label>
-                <div className="flex items-center gap-3">
-                  {/* Avatar Preview */}
-                  <div className="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-3xl shadow-xs overflow-hidden shrink-0">
-                    <BotAvatarDisplay avatar={editorAvatar} name={editorName} className="w-full h-full text-2xl flex items-center justify-center" />
-                  </div>
-
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={editorAvatar}
-                        onChange={(e) => setEditorAvatar(e.target.value)}
-                        placeholder="Emoji or Image URL (https://...)"
-                        className="flex-1 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none text-xs"
-                      />
-
-                      {/* Hidden File Input for Cloud Upload */}
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleAvatarFileUpload}
-                        accept="image/*"
-                        className="hidden"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploadingAvatar}
-                        className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold flex items-center gap-1.5 transition text-xs shrink-0 disabled:opacity-50"
-                        title="Upload custom image from your device to Cloudinary CDN"
-                      >
-                        {uploadingAvatar ? (
-                          <>
-                            <RefreshCw size={12} className="animate-spin" />
-                            <span>Uploading...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload size={12} />
-                            <span>Upload Image</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Suggested Emoji Chips */}
-                    <div className="flex flex-wrap gap-1 items-center">
-                      <span className="text-[10px] text-slate-400 font-medium mr-1">Suggested:</span>
-                      {SUGGESTED_EMOJIS.map((em) => (
-                        <button
-                          type="button"
-                          key={em}
-                          onClick={() => setEditorAvatar(em)}
-                          className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition flex items-center justify-center"
-                        >
-                          {em}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                {avatarUploadError && (
-                  <p className="text-[11px] text-rose-500">{avatarUploadError}</p>
-                )}
-              </div>
-
-              {/* Name & Role */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">Bot Name *</label>
-                  <input
-                    value={editorName}
-                    onChange={(e) => setEditorName(e.target.value)}
-                    required
-                    placeholder="e.g. Sage, DevCoach, Sofi"
-                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">Role / Persona Title *</label>
-                  <input
-                    value={editorRole}
-                    onChange={(e) => setEditorRole(e.target.value)}
-                    required
-                    placeholder="e.g. Senior Backend Architect"
-                    className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">Description</label>
-                <input
-                  value={editorDesc}
-                  onChange={(e) => setEditorDesc(e.target.value)}
-                  placeholder="Short description of what this bot specializes in..."
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none"
-                />
-              </div>
-
-              {/* MULTI-API FALLBACK REORDER PIPELINE */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Layers size={15} className="text-blue-500" />
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Multi-API Fallback Routing Pipeline
-                      </h4>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                        Ordered execution chain. If the primary API encounters rate limits or errors, it transparently fails over down the list.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  {fallbackPipeline.map((item, idx) => {
-                    const hasKey = credentials.some((c) => c.provider === item.provider && c.status === 'ACTIVE');
-                    return (
-                      <div
-                        key={item.provider}
-                        className={`flex items-center justify-between p-2 rounded-xl border text-xs transition ${
-                          item.enabled
-                            ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 shadow-xs'
-                            : 'bg-slate-100/60 dark:bg-slate-800/40 border-slate-200/50 dark:border-slate-800 opacity-60'
-                        }`}
-                      >
-                        {/* Order & Provider Label */}
-                        <div className="flex items-center gap-2">
-                          {/* Reorder Buttons */}
-                          <div className="flex flex-col gap-0.5">
-                            <button
-                              type="button"
-                              onClick={() => moveFallback(idx, 'up')}
-                              disabled={idx === 0}
-                              className="p-0.5 rounded text-slate-400 hover:text-blue-500 disabled:opacity-20 transition"
-                              title="Move up priority"
-                            >
-                              <ArrowUp size={11} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => moveFallback(idx, 'down')}
-                              disabled={idx === fallbackPipeline.length - 1}
-                              className="p-0.5 rounded text-slate-400 hover:text-blue-500 disabled:opacity-20 transition"
-                              title="Move down priority"
-                            >
-                              <ArrowDown size={11} />
-                            </button>
-                          </div>
-
-                          {/* Priority Badge */}
-                          <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 flex items-center justify-center">
-                            #{idx + 1}
-                          </span>
-
-                          <div>
-                            <span className="font-bold uppercase text-slate-900 dark:text-slate-100 mr-1.5 text-[11px]">
-                              {item.provider}
-                            </span>
-                            <span className={`text-[10px] font-medium ${hasKey ? 'text-emerald-500' : 'text-amber-500'}`}>
-                              {hasKey ? '✓ Active Key' : '⚠️ No BYOK Key'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Model Name & Enable Toggle */}
-                        <div className="flex items-center gap-2">
-                          <input
-                            value={item.model || ''}
-                            onChange={(e) => updateFallbackModel(idx, e.target.value)}
-                            placeholder="model name"
-                            className="w-36 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-mono outline-none"
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() => toggleFallback(idx)}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${
-                              item.enabled
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                            }`}
-                          >
-                            {item.enabled ? 'Enabled' : 'Disabled'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Creativity / Temperature Slider */}
-                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                  <div className="flex justify-between font-semibold mb-1 text-[11px] text-slate-700 dark:text-slate-300">
-                    <span>Creativity (Temperature)</span>
-                    <span>{editorTemperature.toFixed(2)}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={editorTemperature}
-                    onChange={(e) => setEditorTemperature(parseFloat(e.target.value))}
-                    className="w-full accent-blue-600"
-                  />
-                  <div className="flex justify-between text-[10px] text-slate-400">
-                    <span>0.0 (Deterministic)</span>
-                    <span>1.0 (Creative)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* GRANULAR CAPABILITIES & PERMISSIONS MATRIX */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={15} className="text-emerald-500" />
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      Granular Tool & Capability Permissions Matrix
-                    </h4>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Selectively assign or restrict tools, system control, and memory access for this bot.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  {/* NOX OS Access */}
-                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
-                    <input
-                      type="checkbox"
-                      checked={editorPermissions.canAccessNox}
-                      onChange={(e) =>
-                        setEditorPermissions((prev) => ({ ...prev, canAccessNox: e.target.checked }))
-                      }
-                      className="mt-0.5 accent-blue-600 rounded"
-                    />
-                    <div>
-                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
-                        <Database size={12} className="text-indigo-500" /> NOX OS Workspace
-                      </span>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                        Read & modify Tasks, Goals, Events, Notes, and Habits.
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Live Web Search */}
-                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
-                    <input
-                      type="checkbox"
-                      checked={editorPermissions.canSearchWeb}
-                      onChange={(e) =>
-                        setEditorPermissions((prev) => ({ ...prev, canSearchWeb: e.target.checked }))
-                      }
-                      className="mt-0.5 accent-blue-600 rounded"
-                    />
-                    <div>
-                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
-                        <Globe size={12} className="text-cyan-500" /> Live Web Search
-                      </span>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                        Query web search engines for up-to-date real-world facts.
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Codebase Audit & Architecture */}
-                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
-                    <input
-                      type="checkbox"
-                      checked={editorPermissions.canAuditCode}
-                      onChange={(e) =>
-                        setEditorPermissions((prev) => ({ ...prev, canAuditCode: e.target.checked }))
-                      }
-                      className="mt-0.5 accent-blue-600 rounded"
-                    />
-                    <div>
-                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
-                        <Terminal size={12} className="text-amber-500" /> Codebase Audit & Stress-Testing
-                      </span>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                        Run technical audits, architectural reviews, and system tests.
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Persona Dynamic Adaptation */}
-                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs">
-                    <input
-                      type="checkbox"
-                      checked={editorPermissions.canAdaptPersona}
-                      onChange={(e) =>
-                        setEditorPermissions((prev) => ({ ...prev, canAdaptPersona: e.target.checked }))
-                      }
-                      className="mt-0.5 accent-blue-600 rounded"
-                    />
-                    <div>
-                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
-                        <Sparkles size={12} className="text-purple-500" /> Persona Dynamic Adaptation
-                      </span>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                        Allow the bot to evolve instructions & tone based on user chats.
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Long-Term Memory Access */}
-                  <label className="flex items-start gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-400 transition shadow-xs sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={editorPermissions.canAccessMemory}
-                      onChange={(e) =>
-                        setEditorPermissions((prev) => ({ ...prev, canAccessMemory: e.target.checked }))
-                      }
-                      className="mt-0.5 accent-blue-600 rounded"
-                    />
-                    <div>
-                      <span className="font-bold text-[11px] text-slate-900 dark:text-slate-100 flex items-center gap-1">
-                        <Brain size={12} className="text-pink-500" /> Long-Term Memory Vault
-                      </span>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                        Store and recall user preferences, tech stack, and goals across chat sessions.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* System Instructions / Prompt */}
-              <div>
-                <label className="font-semibold block mb-1 text-slate-800 dark:text-slate-200">System Instructions / Prompt</label>
-                <textarea
-                  value={editorPrompt}
-                  onChange={(e) => setEditorPrompt(e.target.value)}
-                  rows={4}
-                  placeholder="Define this bot's personality, decision-making style, and behavior rules..."
-                  className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 outline-none resize-none font-mono text-[11px] leading-relaxed"
-                />
-              </div>
-
-              {/* Telegram Bot Integration */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <TelegramIcon className="w-5 h-5 text-sky-500 shrink-0" />
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Telegram Bot Integration</h4>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                        Connect a dedicated Telegram bot for 2-way text and audio voice note replies.
-                      </p>
-                    </div>
-                  </div>
-                  {editorTelegramUsername && (
-                    <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      @{editorTelegramUsername}
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block mb-1">
-                    Telegram Bot Token
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={editorTelegramToken}
-                      onChange={(e) => {
-                        setEditorTelegramToken(e.target.value);
-                        setTelegramConnectError(null);
-                        setTelegramConnectSuccess(null);
-                      }}
-                      placeholder="e.g. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-                      className="flex-1 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 outline-none focus:border-blue-500 transition"
-                    />
-                    {editingBotId ? (
-                      <button
-                        type="button"
-                        onClick={handleConnectTelegram}
-                        disabled={isConnectingTelegram || !editorTelegramToken.trim()}
-                        className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-semibold transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
-                      >
-                        {isConnectingTelegram ? (
-                          <>
-                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                            <span>Connecting...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>🔗</span>
-                            <span>Connect Bot</span>
-                          </>
-                        )}
-                      </button>
-                    ) : null}
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Create a bot with <span className="text-blue-500 font-semibold">@BotFather</span> on Telegram and paste its API token here.
-                  </p>
-                </div>
-
-                {/* Connection Status & Feedback */}
-                {telegramConnectSuccess && (
-                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <span>✓</span> {telegramConnectSuccess}
-                    </span>
-                    {editorTelegramUsername && (
-                      <a
-                        href={`https://t.me/${editorTelegramUsername}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-bold hover:bg-emerald-500 transition inline-flex items-center gap-1"
-                      >
-                        <span>Open in Telegram</span>
-                        <span>↗</span>
-                      </a>
-                    )}
-                  </div>
-                )}
-
-                {telegramConnectError && (
-                  <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-1.5">
-                    <span>⚠️</span> {telegramConnectError}
-                  </div>
-                )}
-
-                {!editingBotId && editorTelegramToken.trim() && (
-                  <p className="text-[10px] text-amber-500 dark:text-amber-400">
-                    💡 Click "Create Bot" below to save and link your Telegram webhook automatically.
-                  </p>
-                )}
-
-                {editingBotId && editorTelegramUsername && !telegramConnectSuccess && (
-                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                    <span className="text-slate-500">Connected Bot:</span>
-                    <a
-                      href={`https://t.me/${editorTelegramUsername}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500 hover:underline font-semibold inline-flex items-center gap-1"
-                    >
-                      @{editorTelegramUsername}
-                      <span>↗</span>
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Actions */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowEditorModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingBot}
-                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition disabled:opacity-50"
-                >
-                  {savingBot ? 'Saving...' : editingBotId ? 'Save Changes' : 'Create Bot'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* SESSIONS DRAWER */}
+      {/* ── SESSIONS HISTORY SLIDE-OVER DRAWER ── */}
       {showSessionsDrawer && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-end z-50">
-          <div className="w-full max-w-sm bg-white dark:bg-slate-900 h-full p-4 border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-cyan-500" />
-                <h3 className="font-bold text-sm">Chat Sessions</h3>
-              </div>
-              <button onClick={() => setShowSessionsDrawer(false)} className="p-1 text-slate-400 hover:text-white">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-              <input
-                value={sessionSearch}
-                onChange={(e) => setSessionSearch(e.target.value)}
-                placeholder="Search sessions..."
-                className="w-full pl-8 pr-3 py-2 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-              />
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-1.5">
-              {sessions
-                .filter((s) => !sessionSearch || (s.lastMessagePreview || '').toLowerCase().includes(sessionSearch.toLowerCase()))
-                .map((s) => (
-                  <div
-                    key={s.sessionId}
-                    onClick={() => {
-                      setSessionId(s.sessionId);
-                      loadSessionHistory(s.sessionId);
-                      setShowSessionsDrawer(false);
-                      setStudioView('chat');
-                    }}
-                    className={`p-3 rounded-xl border text-xs cursor-pointer transition ${
-                      s.sessionId === sessionId
-                        ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
-                      {s.lastMessagePreview || 'Conversation'}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-1">
-                      {new Date(s.updatedAt).toLocaleDateString()} • {s.messageCount} messages
-                    </div>
+        <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 h-full overflow-y-auto p-6 space-y-6 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div className="flex items-center space-x-2.5">
+                  <MessageSquare className="w-5 h-5 text-sky-500" />
+                  <div>
+                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Chat History</h3>
+                    <p className="text-[11px] text-slate-500">{sessions.length} Saved sessions</p>
                   </div>
-                ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MEMORY VAULT DRAWER */}
-      {showMemoryDrawer && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-end z-50">
-          <div className="w-full max-w-sm bg-white dark:bg-slate-900 h-full p-4 border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Brain className="w-4 h-4 text-indigo-500" />
-                <h3 className="font-bold text-sm">Persistent Memory</h3>
-              </div>
-              <button onClick={() => setShowMemoryDrawer(false)} className="p-1 text-slate-400 hover:text-white">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="space-y-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-              <span className="font-bold text-[11px] block">Record User Preference / Fact:</span>
-              <textarea
-                value={newFact}
-                onChange={(e) => setNewFact(e.target.value)}
-                placeholder="e.g. Prefers functional TypeScript, dislikes repetitive daily meetings..."
-                rows={2}
-                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg outline-none resize-none"
-              />
-              <div className="flex items-center justify-between gap-2">
-                <select
-                  value={newFactCategory}
-                  onChange={(e) => setNewFactCategory(e.target.value as any)}
-                  className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-[11px]"
-                >
-                  <option value="general">General</option>
-                  <option value="preference">Preference</option>
-                  <option value="goal">Goal</option>
-                  <option value="tech_stack">Tech Stack</option>
-                  <option value="habit">Habit</option>
-                </select>
-                <button
-                  onClick={handleAddFact}
-                  disabled={!newFact.trim() || isAddingFact}
-                  className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-500 disabled:opacity-50"
-                >
-                  Save Fact
+                </div>
+                <button onClick={() => setShowSessionsDrawer(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                  <X className="w-4 h-4" />
                 </button>
               </div>
+
+              <button
+                onClick={() => {
+                  createNewSession(activeBotId, true);
+                  setShowSessionsDrawer(false);
+                }}
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center space-x-1.5 shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Start New Conversation</span>
+              </button>
+
+              <div className="space-y-2">
+                {sessions.map((sess) => {
+                  const isCur = sess.sessionId === sessionId;
+                  return (
+                    <div
+                      key={sess.sessionId}
+                      onClick={() => handleLoadSession(sess.sessionId)}
+                      className={`p-3.5 rounded-2xl border cursor-pointer transition flex items-center justify-between gap-3 ${
+                        isCur
+                          ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-800'
+                          : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                            {sess.personaId || 'sofi'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {sess.updatedAt ? new Date(sess.updatedAt).toLocaleDateString() : ''}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate">
+                          {sess.lastMessagePreview || 'Conversation'}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSession(sess.sessionId);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 text-xs">
-              {memoryProfile?.facts?.map((f) => (
-                <div
-                  key={f.id}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"
-                >
-                  <span className="text-[10px] font-bold uppercase text-indigo-500">{f.category}</span>
-                  <div className="text-slate-800 dark:text-slate-200 mt-0.5">{f.fact}</div>
-                </div>
-              ))}
-            </div>
+            <button
+              onClick={() => setShowSessionsDrawer(false)}
+              className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
 
-      <DialogShell
-        isOpen={pendingConfirmation !== null}
-        onClose={() => setPendingConfirmation(null)}
-        label={pendingConfirmation?.title}
-        className="max-w-md"
-      >
-        {pendingConfirmation && (
-          <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex items-start gap-3">
-              <span className="rounded-xl bg-rose-100 p-2.5 text-rose-600 dark:bg-rose-950 dark:text-rose-400">
-                <AlertTriangle size={20} />
-              </span>
-              <div>
-                <h2 className="font-bold text-slate-900 dark:text-slate-100">{pendingConfirmation.title}</h2>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{pendingConfirmation.message}</p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
+      {/* Confirmation Dialog Shell */}
+      {pendingConfirmation && (
+        <DialogShell
+          isOpen={true}
+          label={pendingConfirmation.title}
+          onClose={() => setPendingConfirmation(null)}
+        >
+          <div className="space-y-4">
+            <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">{pendingConfirmation.title}</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300">{pendingConfirmation.message}</p>
+            <div className="flex items-center justify-end space-x-2 pt-2">
               <button
-                type="button"
                 onClick={() => setPendingConfirmation(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
-                type="button"
                 onClick={() => {
-                  const confirmation = pendingConfirmation;
+                  pendingConfirmation.onConfirm();
                   setPendingConfirmation(null);
-                  if (confirmation) void confirmation.onConfirm();
                 }}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold"
               >
-                {pendingConfirmation.confirmLabel}
+                {pendingConfirmation.confirmLabel || 'Confirm'}
               </button>
             </div>
           </div>
-        )}
-      </DialogShell>
+        </DialogShell>
+      )}
+
     </div>
   );
 }

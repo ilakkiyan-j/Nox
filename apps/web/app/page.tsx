@@ -51,6 +51,7 @@ export default function Home() {
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<'overview' | 'profile' | 'council' | 'preferences' | 'voice' | 'analytics' | 'data'>('overview');
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isTypographyOpen, setIsTypographyOpen] = useState(false);
 
@@ -391,6 +392,10 @@ export default function Home() {
             events={events}
             habits={habits}
             onNavigate={(tab) => setActiveTab(tab as NavTab)}
+            onOpenSettings={(section) => {
+              setSettingsInitialSection(section || 'council');
+              setIsProfileOpen(true);
+            }}
             onRefresh={() => {
               fetchTasks();
               fetchEvents();
@@ -643,6 +648,7 @@ export default function Home() {
             onClose={() => setIsProfileOpen(false)}
             onSignOut={handleSignOut}
             onOpenAdmin={() => setIsAdminOpen(true)}
+            initialSection={settingsInitialSection}
             onProfileUpdated={(user) => {
               setCurrentUser(user);
               setStoredUser(user);

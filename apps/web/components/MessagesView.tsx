@@ -111,7 +111,6 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
   const [searchQuery, setSearchQuery] = useState('');
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [showForwarderModal, setShowForwarderModal] = useState(false);
-  const [showDirectSend, setShowDirectSend] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Forwarder Bot State
@@ -127,12 +126,6 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
   const [isConnectingForwarder, setIsConnectingForwarder] = useState(false);
   const [forwarderSuccessMsg, setForwarderSuccessMsg] = useState<string | null>(null);
   const [forwarderErrorMsg, setForwarderErrorMsg] = useState<string | null>(null);
-
-  // New Direct Message State
-  const [manualText, setManualText] = useState('');
-  const [manualSource, setManualSource] = useState('WHATSAPP');
-  const [manualSender, setManualSender] = useState('WhatsApp Direct');
-  const [sending, setSending] = useState(false);
 
   // Confirm delete modal
   const [confirmState, setConfirmState] = useState<{
@@ -279,38 +272,6 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualText.trim()) return;
-
-    try {
-      setSending(true);
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: manualText.trim(),
-          source: manualSource,
-          sender: manualSender,
-        }),
-      });
-
-      await assertApiSuccess(res, 'Failed to send message');
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setManualText('');
-        setShowDirectSend(false);
-        loadMessages();
-      } else {
-        setActionError(data.error?.message || 'Failed to send message');
-      }
-    } catch (err) {
-      console.error('Failed to send message:', err);
-      setActionError(err instanceof Error ? err.message : 'Failed to send message');
-    } finally {
-      setSending(false);
-    }
-  };
 
   const handleToggleStar = async (id: string, current: boolean) => {
     try {
@@ -526,14 +487,6 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
           </button>
 
           <button
-            onClick={() => setShowDirectSend(!showDirectSend)}
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 shadow-2xs transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>Quick Ingest</span>
-          </button>
-
-          <button
             onClick={() => setShowSetupModal(true)}
             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
           >
@@ -542,78 +495,6 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
           </button>
         </div>
       </div>
-
-      {/* Manual Quick Ingest Simulation Box */}
-      {showDirectSend && (
-        <form
-          onSubmit={handleSendMessage}
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700/80 shadow-md space-y-3 animate-in fade-in duration-200"
-        >
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-1.5">
-              <Share2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Simulate / Send Direct Message to NOX</span>
-            </h3>
-            <button
-              type="button"
-              onClick={() => setShowDirectSend(false)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <textarea
-            value={manualText}
-            onChange={(e) => setManualText(e.target.value)}
-            placeholder="Paste forwarded WhatsApp chat snippet, article link, or job posting..."
-            rows={3}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-            required
-          />
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center space-x-2">
-              <select
-                value={manualSource}
-                onChange={(e) => setManualSource(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
-              >
-                <option value="WHATSAPP">Source: WhatsApp</option>
-                <option value="TELEGRAM">Source: Telegram</option>
-                <option value="SHORTCUT">Source: Shortcut</option>
-                <option value="DIRECT">Source: Direct Note</option>
-              </select>
-
-              <input
-                type="text"
-                placeholder="Sender name (e.g. Alex)"
-                value={manualSender}
-                onChange={(e) => setManualSender(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 w-36"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={() => setShowDirectSend(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={sending}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{sending ? 'Sending...' : 'Save to Messages'}</span>
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
