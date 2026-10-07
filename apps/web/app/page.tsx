@@ -323,6 +323,7 @@ export default function Home() {
             tasks={tasks}
             events={events}
             habits={habits}
+            onNavigate={(tab) => setActiveTab(tab as any)}
             onRefresh={() => {
               fetchTasks();
               fetchEvents();
@@ -485,7 +486,6 @@ export default function Home() {
               activeTabTitle={activeTab}
               onOpenSearch={() => setIsSearchOpen(true)}
               onOpenQuickCapture={() => setIsQuickCaptureOpen(true)}
-              onOpenTypography={() => setIsTypographyOpen(true)}
               notifications={notifications}
               onRefreshNotifications={fetchNotifications}
               onBackToLanding={handleSignOut}

@@ -300,6 +300,66 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
   }
 });
 
+// POST /api/v1/messages/webhook — Ingest webhook for HTTP Shortcuts (iOS / Android / IFTTT / Zapier)
+messagesPublicRouter.post('/messages/webhook', async (req: Request, res: Response) => {
+  try {
+    const { content, text, message, url, sender, source, userId: requestedUserId } = (req.body ?? {}) as Record<string, unknown>;
+    const rawContent = (content || text || message || '') as string;
+
+    if (!rawContent && !url) {
+      return res.status(400).json({ success: false, error: 'Message text or url is required' });
+    }
+
+    let targetUserId = typeof requestedUserId === 'string' && requestedUserId.trim() ? requestedUserId.trim() : null;
+
+    if (!targetUserId) {
+      const user =
+        (await db.user.findFirst({
+          where: { NOT: { email: { endsWith: '@nox.internal' } } },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        })) ||
+        (await db.user.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        }));
+      if (user) {
+        targetUserId = user.id;
+      }
+    }
+
+    if (!targetUserId) {
+      return res.status(404).json({ success: false, error: 'No active user found to ingest message' });
+    }
+
+    const rawUrl = typeof url === 'string' ? url.trim() : null;
+    let validatedUrl: string | null = null;
+    if (rawUrl) {
+      const urlCheck = parseSafeUrl(rawUrl);
+      if (urlCheck.ok) {
+        validatedUrl = urlCheck.value ?? null;
+      }
+    }
+
+    const created = await db.message.create({
+      data: {
+        userId: targetUserId,
+        content: limitString(String(rawContent || rawUrl).trim(), 10000),
+        source: isSafeString(source) ? String(source).toUpperCase() : 'SHORTCUT',
+        sender: isSafeString(sender) ? String(sender) : 'HTTP Shortcut',
+        url: validatedUrl,
+        metadata: JSON.stringify(req.body ?? {}),
+      },
+    });
+
+    return res.status(201).json({ success: true, data: created });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : 'Webhook ingestion failed';
+    return res.status(500).json({ success: false, error: errorMsg });
+  }
+});
+
+
 // =========================================================================
 // FORWARDER BOT CONFIGURATION & WEBHOOK REGISTRATION ENDPOINTS
 // =========================================================================

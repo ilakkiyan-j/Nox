@@ -26,8 +26,6 @@ import {
   ExternalLink,
   Maximize2,
   Minimize2,
-  PhoneCall,
-  Mic,
   Upload,
   ArrowUp,
   ArrowDown,
@@ -36,11 +34,12 @@ import {
   Terminal,
   Layers,
   Sparkle,
+  Share2,
+  ArrowRight,
 } from 'lucide-react';
 import { TelegramIcon } from './ui/BrandIcons';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
-import VoiceCallModal from './VoiceCallModal';
 
 export type StudioView = 'chat' | 'bots' | 'byok' | 'deliberate';
 
@@ -160,6 +159,7 @@ export interface CouncilViewProps {
   tasks?: any[];
   events?: any[];
   habits?: any[];
+  onNavigate?: (tab: string) => void;
   onRefresh?: () => void;
 }
 
@@ -259,6 +259,7 @@ export default function CouncilView({
   tasks = [],
   events = [],
   habits = [],
+  onNavigate,
   onRefresh,
 }: CouncilViewProps) {
   // Navigation View Mode
@@ -330,7 +331,6 @@ export default function CouncilView({
   const [newFactCategory, setNewFactCategory] = useState<UserFact['category']>('general');
   const [isAddingFact, setIsAddingFact] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
-  const [isVoiceCallOpen, setIsVoiceCallOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -873,8 +873,8 @@ export default function CouncilView({
         img.src = dataUrl;
       });
 
-      // 3. Upload to Cloudinary CDN via API
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/auth/avatar/upload`, {
+      // 3. Upload to Cloud CDN via generic image upload API (does not mutate user profile)
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/upload/image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: compressedDataUrl }),
@@ -1455,9 +1455,21 @@ export default function CouncilView({
                 </span>
               </div>
 
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('messages')}
+                  className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium transition cursor-pointer"
+                  title="View Message Ingest & Forwarder Bot Webhook"
+                >
+                  <Share2 size={12} className="text-sky-500" />
+                  <span>Forwarder Bot</span>
+                </button>
+              )}
+
               <button
                 onClick={() => handleOpenEditBot(activeBot || { id: activeBotId, name: currentBotName, role: currentBotRole, avatar: currentBotAvatar })}
-                className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-100 text-xs font-semibold flex items-center gap-1 transition"
+                className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
                 title="Edit this bot's instructions, avatar, or AI model"
               >
                 <Edit3 size={13} />
@@ -1465,18 +1477,8 @@ export default function CouncilView({
               </button>
 
               <button
-                type="button"
-                onClick={() => setIsVoiceCallOpen(true)}
-                className="px-3 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-                title={`Start Live Real-Time Voice Call with ${currentBotName}`}
-              >
-                <PhoneCall size={13} />
-                <span>Call {currentBotName}</span>
-              </button>
-
-              <button
                 onClick={() => createNewSession(activeBotId, true)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
                 title="New Chat Session"
               >
                 <RefreshCw size={14} />
@@ -1823,6 +1825,51 @@ export default function CouncilView({
                 </div>
               );
             })}
+
+            {/* Dedicated Forwarder Bot Card */}
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-sky-500/5 via-blue-500/5 to-indigo-500/5 border border-sky-200/80 dark:border-sky-900/60 flex flex-col justify-between hover:border-sky-400 dark:hover:border-sky-500 transition group shadow-sm">
+              <div className="space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-100 dark:bg-sky-900/50 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-2xl shadow-xs">
+                    <Share2 className="w-6 h-6 text-sky-500" />
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                    INGESTION BOT
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-sky-500 transition">
+                    Telegram & HTTP Forwarder
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Message Ingest & Direct Inbox Routing</p>
+                </div>
+
+                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                  Dedicated forwarding bot for saving raw messages, iOS Shortcuts, and webhooks straight to your NOX inbox without AI interruption.
+                </p>
+
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-[10px] font-mono text-sky-700 dark:text-sky-300">
+                    ⚡ Direct Webhook
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium">
+                    ✓ No AI Hijacking
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => onNavigate && onNavigate('messages')}
+                  className="w-full py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <span>Configure in Message Ingest</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1983,30 +2030,33 @@ export default function CouncilView({
         </div>
       )}
 
-      {/* UNIVERSAL BOT WORKSHOP MODAL (CREATE & EDIT) */}
+      {/* UNIVERSAL BOT WORKSHOP SLIDE-OVER INSPECTOR (CREATE & EDIT) */}
       {showEditorModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-blue-600 text-white">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex justify-end z-50">
+          <div className="w-full max-w-xl bg-white dark:bg-slate-900 h-full p-6 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col space-y-4 overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-blue-600 text-white shadow-xs">
                   <Bot size={18} />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                     {editingBotId ? `Edit "${editorName || 'Bot'}"` : 'Create Custom AI Bot'}
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Customize the personality, system prompt, and model configuration
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Configure personality, model routing, and permissions
                   </p>
                 </div>
               </div>
-              <button onClick={() => setShowEditorModal(false)} className="p-1 text-slate-400 hover:text-white">
+              <button
+                onClick={() => setShowEditorModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveBot} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveBot} className="space-y-4 text-xs flex-1">
               {/* Avatar Selector & Cloud Image Upload */}
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
                 <label className="font-semibold block text-slate-800 dark:text-slate-200">
@@ -2602,16 +2652,6 @@ export default function CouncilView({
           </div>
         </div>
       )}
-
-      {/* Live Voice Call Modal */}
-      <VoiceCallModal
-        isOpen={isVoiceCallOpen}
-        onClose={() => setIsVoiceCallOpen(false)}
-        botName={currentBotName}
-        botRole={currentBotRole}
-        botAvatar={currentBotAvatar}
-        botSlug={activeBotId}
-      />
     </div>
   );
 }

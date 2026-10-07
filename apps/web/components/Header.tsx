@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Plus, Bell, Sun, Moon, Type } from 'lucide-react';
+import { Search, Plus, Bell, Sun, Moon } from 'lucide-react';
 import NotificationsDropdown from './NotificationsDropdown';
 import { useTheme } from './ThemeContext';
 import Avatar from './Avatar';
@@ -27,7 +27,6 @@ export default function Header({
   onRefreshNotifications,
   onBackToLanding,
   onOpenProfile,
-  onOpenTypography,
   currentUser,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
@@ -63,18 +62,6 @@ export default function Header({
             ⌘K
           </kbd>
         </button>
-
-        {/* Typography Studio & Visualizer Button */}
-        {onOpenTypography && (
-          <button
-            onClick={onOpenTypography}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
-            title="Typography Studio & Visualizer"
-          >
-            <Type className="w-4 h-4 text-indigo-500 shrink-0" />
-            <span className="hidden md:inline">Fonts</span>
-          </button>
-        )}
 
         {/* Dynamic Light/Dark Theme Toggle Button */}
         <button

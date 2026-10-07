@@ -23,6 +23,7 @@ import timeRouter from './routes/time';
 import searchRouter from './routes/search';
 import { messagesPublicRouter, messagesPrivateRouter } from './routes/messages';
 import { councilPublicRouter, councilPrivateRouter } from './routes/council';
+import uploadRouter from './routes/upload';
 
 export function createApp() {
   const app = express();
@@ -125,6 +126,7 @@ export function createApp() {
   app.use('/api/v1', timeRouter);
   app.use('/api/v1', searchRouter);
   app.use('/api/v1', councilPrivateRouter);
+  app.use('/api/v1', uploadRouter);
 
   // 404 for unmatched API routes
   app.use('/api/v1', (req, res) => {
