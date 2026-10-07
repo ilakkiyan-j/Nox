@@ -75,15 +75,6 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
   // Use the user's local calendar day for habit logs and event comparisons.
   const todayKey = toLocalDateKey();
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12
-    ? { text: 'Good morning', icon: '🌅' }
-    : hour < 17
-      ? { text: 'Good afternoon', icon: '☀️' }
-      : hour < 21
-        ? { text: 'Good evening', icon: '🌆' }
-        : { text: 'Good night', icon: '🌙' };
-
   // Generate 14-day history dates for habit heatmap
   const habitPastDays = useMemo(() => {
     const days: string[] = [];
@@ -199,11 +190,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
             <div className="flex items-center space-x-2">
-              <span className="text-base">{greeting.icon}</span>
-              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                {greeting.text}, Partner
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold">
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold">
                 {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
               </span>
             </div>

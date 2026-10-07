@@ -1,10 +1,28 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse } from '../lib/http';
+import { signToken } from '../lib/auth';
 
 const publicRouter = Router();
 const privateRouter = Router();
 export const COUNCIL_API_URL = (process.env.COUNCIL_API_URL || 'http://localhost:4100').replace(/\/+$/, '');
+
+/**
+ * Builds the Authorization header for upstream Council calls.
+ * If the current request is authenticated via Nox session (req.user),
+ * issues a fresh, cryptographically valid token signed with the active JWT_SECRET.
+ */
+function getCouncilAuthHeader(req: Request): string {
+  if (req.user) {
+    try {
+      const freshToken = signToken(req.user as any);
+      return `Bearer ${freshToken}`;
+    } catch {
+      // fallback to incoming authorization header
+    }
+  }
+  return (req.headers.authorization as string) || '';
+}
 
 /**
  * Maps upstream Council HTTP statuses so that upstream 401/403 errors NEVER
@@ -209,13 +227,12 @@ privateRouter.post('/council/chat', async (req: Request, res: Response) => {
 
     const sessionId = ensureUserSessionId(userId, rawSessionId);
     const userContext = await getUserCouncilContext(userId);
-    const authHeader = req.headers.authorization || '';
 
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: authHeader,
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
       body: JSON.stringify({
@@ -250,7 +267,7 @@ privateRouter.get('/council/bots', async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots`, {
       headers: {
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
     });
@@ -281,7 +298,7 @@ privateRouter.post('/council/bots', async (req: Request, res: Response) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
       body: JSON.stringify(req.body),
@@ -308,7 +325,7 @@ privateRouter.get('/council/bots/:id', async (req: Request, res: Response) => {
     const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}`, {
       headers: {
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
     });
@@ -336,7 +353,7 @@ privateRouter.patch('/council/bots/:id', async (req: Request, res: Response) => 
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
       body: JSON.stringify(req.body),
@@ -365,7 +382,7 @@ privateRouter.post('/council/bots/:id/telegram/connect', async (req: Request, re
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
       body: JSON.stringify(req.body),
@@ -393,7 +410,7 @@ privateRouter.post('/council/bots/:id/duplicate', async (req: Request, res: Resp
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}/duplicate`, {
       method: 'POST',
       headers: {
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
     });
@@ -420,7 +437,7 @@ privateRouter.delete('/council/bots/:id', async (req: Request, res: Response) =>
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${encodeURIComponent(rawId)}`, {
       method: 'DELETE',
       headers: {
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
     });
@@ -442,7 +459,7 @@ privateRouter.get('/council/provider-credentials', async (req: Request, res: Res
     const userId = req.user!.id;
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/provider-credentials`, {
       headers: {
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
     });
@@ -473,7 +490,7 @@ privateRouter.post('/council/provider-credentials', async (req: Request, res: Re
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
       body: JSON.stringify(req.body),
@@ -501,7 +518,7 @@ privateRouter.delete('/council/provider-credentials/:id', async (req: Request, r
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/provider-credentials/${encodeURIComponent(rawId)}`, {
       method: 'DELETE',
       headers: {
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
     });
@@ -522,7 +539,7 @@ privateRouter.get('/council/sessions', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const authHeaders = {
-      Authorization: req.headers.authorization || '',
+      Authorization: getCouncilAuthHeader(req),
       'X-User-Id': userId,
     };
 
@@ -572,7 +589,7 @@ privateRouter.get('/council/sessions/:id', async (req: Request, res: Response) =
     const userId = req.user!.id;
     const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const authHeaders = {
-      Authorization: req.headers.authorization || '',
+      Authorization: getCouncilAuthHeader(req),
       'X-User-Id': userId,
     };
 
@@ -626,7 +643,7 @@ privateRouter.delete('/council/sessions/:id', async (req: Request, res: Response
     const userId = req.user!.id;
     const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const authHeaders = {
-      Authorization: req.headers.authorization || '',
+      Authorization: getCouncilAuthHeader(req),
       'X-User-Id': userId,
     };
 
@@ -667,7 +684,7 @@ privateRouter.get('/council/memory', async (req: Request, res: Response) => {
 
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/memory?userId=${encodeURIComponent(councilUserId)}`, {
       headers: {
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
     });
@@ -705,7 +722,7 @@ privateRouter.post('/council/memory', async (req: Request, res: Response) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: req.headers.authorization || '',
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
       body: JSON.stringify({
@@ -742,13 +759,12 @@ privateRouter.post('/council/debate', async (req: Request, res: Response) => {
     }
 
     const userContext = await getUserCouncilContext(userId);
-    const authHeader = req.headers.authorization || '';
 
     const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/council/deliberate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: authHeader,
+        Authorization: getCouncilAuthHeader(req),
         'X-User-Id': userId,
       },
       body: JSON.stringify({
@@ -780,9 +796,8 @@ privateRouter.post('/council/debate', async (req: Request, res: Response) => {
 privateRouter.get('/voice/preferences', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const authHeader = req.headers.authorization || '';
     const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/preferences`, {
-      headers: { Authorization: authHeader, 'X-User-Id': userId },
+      headers: { Authorization: getCouncilAuthHeader(req), 'X-User-Id': userId },
     });
     const data = await upstreamRes.json().catch(() => ({}));
     if (!upstreamRes.ok) {
@@ -798,10 +813,9 @@ privateRouter.get('/voice/preferences', async (req: Request, res: Response) => {
 privateRouter.patch('/voice/preferences', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const authHeader = req.headers.authorization || '';
     const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/preferences`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: authHeader, 'X-User-Id': userId },
+      headers: { 'Content-Type': 'application/json', Authorization: getCouncilAuthHeader(req), 'X-User-Id': userId },
       body: JSON.stringify(req.body),
     });
     const data = await upstreamRes.json().catch(() => ({}));
@@ -818,9 +832,8 @@ privateRouter.patch('/voice/preferences', async (req: Request, res: Response) =>
 privateRouter.get('/voice/catalog', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const authHeader = req.headers.authorization || '';
     const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/catalog`, {
-      headers: { Authorization: authHeader, 'X-User-Id': userId },
+      headers: { Authorization: getCouncilAuthHeader(req), 'X-User-Id': userId },
     });
     const data = await upstreamRes.json().catch(() => ({}));
     if (!upstreamRes.ok) {
@@ -836,10 +849,9 @@ privateRouter.get('/voice/catalog', async (req: Request, res: Response) => {
 privateRouter.post('/voice/test', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const authHeader = req.headers.authorization || '';
     const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/test`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: authHeader, 'X-User-Id': userId },
+      headers: { 'Content-Type': 'application/json', Authorization: getCouncilAuthHeader(req), 'X-User-Id': userId },
       body: JSON.stringify(req.body),
     });
     if (!upstreamRes.ok) {
@@ -861,11 +873,10 @@ privateRouter.post('/voice/test', async (req: Request, res: Response) => {
 privateRouter.post('/voice/call-turn', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const authHeader = req.headers.authorization || '';
     const userContext = await getUserCouncilContext(userId);
     const upstreamRes = await fetch(`${COUNCIL_API_URL}/api/v1/voice/call-turn`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: authHeader, 'X-User-Id': userId },
+      headers: { 'Content-Type': 'application/json', Authorization: getCouncilAuthHeader(req), 'X-User-Id': userId },
       body: JSON.stringify({
         ...req.body,
         userContext,
