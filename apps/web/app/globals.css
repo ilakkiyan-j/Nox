@@ -177,3 +177,228 @@ select option {
   color: #F8FAFC;
   padding: 8px 12px;
 }
+
+.nox-landing-bg {
+  background-image:
+    radial-gradient(ellipse at 80% 16%, rgba(99, 102, 241, 0.09), transparent 38%),
+    radial-gradient(ellipse at 16% 58%, rgba(14, 165, 233, 0.05), transparent 34%);
+}
+
+.dark .nox-landing-bg {
+  background-image:
+    radial-gradient(ellipse at 80% 16%, rgba(79, 70, 229, 0.2), transparent 38%),
+    radial-gradient(ellipse at 16% 58%, rgba(8, 145, 178, 0.1), transparent 34%);
+}
+
+.nox-hero-scene {
+  position: relative;
+  min-height: 420px;
+  perspective: 1200px;
+  isolation: isolate;
+}
+
+.nox-scene-glow {
+  position: absolute;
+  inset: 15% 10%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(99, 102, 241, 0.18), rgba(14, 165, 233, 0.06) 44%, transparent 70%);
+}
+
+.nox-scene-orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(88%, 520px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(99, 102, 241, 0.14);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotateX(64deg) rotateZ(-24deg);
+}
+
+.nox-scene-orbit-back {
+  width: min(70%, 410px);
+  border-color: rgba(14, 165, 233, 0.22);
+  transform: translate(-50%, -50%) rotateX(68deg) rotateZ(30deg);
+}
+
+.nox-scene-orbit-front {
+  border-style: dashed;
+  transform: translate(-50%, -50%) rotateX(67deg) rotateZ(-42deg);
+}
+
+.nox-scene-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(78%, 420px);
+  transform: translate3d(-50%, -50%, 40px) rotateY(-9deg) rotateX(5deg);
+  transform-style: preserve-3d;
+  animation: nox-scene-float 8s ease-in-out infinite;
+}
+
+.nox-scene-window {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 32px 90px -32px rgba(15, 23, 42, 0.42), 0 10px 30px -16px rgba(79, 70, 229, 0.32);
+  backdrop-filter: blur(14px);
+}
+
+.dark .nox-scene-window {
+  border-color: rgba(71, 85, 105, 0.65);
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 38px 100px -34px rgba(0, 0, 0, 0.8), 0 10px 36px -18px rgba(79, 70, 229, 0.4);
+}
+
+.nox-scene-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 15px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.nox-scene-toolbar > span:not(.nox-scene-toolbar-label) {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.nox-scene-toolbar > span:nth-child(1) { background: #fda4af; }
+.nox-scene-toolbar > span:nth-child(2) { background: #fcd34d; }
+.nox-scene-toolbar > span:nth-child(3) { background: #6ee7b7; }
+
+.nox-scene-toolbar-label {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.nox-scene-content {
+  padding: 22px;
+  color: #0f172a;
+}
+
+.dark .nox-scene-content { color: #f8fafc; }
+
+.nox-scene-eyebrow {
+  color: #6366f1;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.nox-scene-title {
+  margin: 7px 0 18px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.nox-scene-task {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dark .nox-scene-task { border-color: #334155; }
+
+.nox-scene-check {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border-radius: 6px;
+  color: #4f46e5;
+  background: #eef2ff;
+}
+
+.nox-scene-task-muted { color: #64748b; }
+.dark .nox-scene-task-muted { color: #94a3b8; }
+.nox-scene-task-muted .nox-scene-check { border: 1px solid #cbd5e1; background: transparent; }
+.dark .nox-scene-task-muted .nox-scene-check { border-color: #475569; }
+
+.nox-scene-time {
+  margin-left: auto;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.nox-scene-progress { margin-top: 15px; }
+.nox-scene-progress > div:first-child { display: flex; justify-content: space-between; color: #64748b; font-size: 9px; }
+.nox-scene-progress strong { color: #4f46e5; }
+.nox-scene-progress-track { height: 5px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.nox-scene-progress-track span { display: block; width: 62%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4f46e5, #06b6d4); }
+.dark .nox-scene-progress-track { background: #334155; }
+
+.nox-scene-card {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 184px;
+  padding: 12px 14px;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 40px -24px rgba(15, 23, 42, 0.52);
+  transform-style: preserve-3d;
+  animation: nox-scene-float 7s ease-in-out infinite;
+}
+
+.dark .nox-scene-card {
+  border-color: rgba(71, 85, 105, 0.72);
+  background: rgba(30, 41, 59, 0.96);
+}
+
+.nox-scene-card > div:nth-child(2) { display: grid; gap: 4px; }
+.nox-scene-card > div:nth-child(2) span { color: #94a3b8; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; }
+.nox-scene-card > div:nth-child(2) strong { color: #1e293b; font-size: 10px; }
+.dark .nox-scene-card > div:nth-child(2) strong { color: #f1f5f9; }
+
+.nox-scene-card-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 10px;
+  color: #4f46e5;
+  background: #eef2ff;
+}
+
+.nox-scene-card-icon.habit { color: #d97706; background: #fffbeb; }
+.nox-scene-card-goal { left: 0; top: 20%; transform: translateZ(95px) rotateY(8deg); }
+.nox-scene-card-habit { right: 0; bottom: 16%; transform: translateZ(110px) rotateY(-7deg); animation-delay: -3s; }
+.nox-scene-streak { margin-left: auto; color: #d97706; font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+
+@keyframes nox-scene-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
+
+@media (max-width: 767px) {
+  .nox-hero-scene { min-height: 350px; overflow: hidden; }
+  .nox-scene-core { width: min(82%, 390px); }
+  .nox-scene-card { min-width: 150px; padding: 9px 10px; }
+  .nox-scene-card-goal { left: -1%; top: 8%; }
+  .nox-scene-card-habit { right: -1%; bottom: 5%; }
+  .nox-scene-title { font-size: 20px; }
+  .nox-scene-content { padding: 17px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nox-scene-core,
+  .nox-scene-card { animation: none; }
+}

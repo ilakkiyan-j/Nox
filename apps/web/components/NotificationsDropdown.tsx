@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Bell, Trophy, Calendar, Flame, X, Check } from 'lucide-react';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 
 interface NotificationsDropdownProps {
   isOpen: boolean;
@@ -17,14 +18,18 @@ export default function NotificationsDropdown({
   notifications,
   onRefresh,
 }: NotificationsDropdownProps) {
+  const [error, setError] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+      await assertApiSuccess(response, 'Could not mark notification as read');
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to mark notification as read:', err);
+      setError(err instanceof Error ? err.message : 'Could not mark notification as read');
     }
   };
 
@@ -43,6 +48,7 @@ export default function NotificationsDropdown({
 
   return (
     <div className="absolute right-0 top-12 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 p-4 space-y-3 transition-colors">
+      <ApiErrorNotice message={error} onDismiss={() => setError(null)} />
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
         <div className="flex items-center space-x-2">
           <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />

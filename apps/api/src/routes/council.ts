@@ -255,14 +255,18 @@ privateRouter.get('/council/bots', async (req: Request, res: Response) => {
       },
     });
 
+    const data = await councilResponse.json().catch(() => null);
     if (!councilResponse.ok) {
-      return apiResponse(res, []);
+      return apiError(res, data?.error?.message || 'Failed to load Council bots', mapCouncilStatus(councilResponse.status));
     }
-
-    const data = await councilResponse.json();
-    return apiResponse(res, data.data || data || []);
-  } catch (_err) {
-    return apiResponse(res, []);
+    const bots = data?.data ?? data;
+    if (!Array.isArray(bots)) {
+      return apiError(res, 'Council returned an invalid bots response', 502);
+    }
+    return apiResponse(res, bots);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to load Council bots';
+    return apiError(res, message, 502);
   }
 });
 
@@ -443,29 +447,18 @@ privateRouter.get('/council/provider-credentials', async (req: Request, res: Res
       },
     });
 
-    let creds: any[] = [];
-    if (councilResponse.ok) {
-      const data = await councilResponse.json();
-      creds = data.data || data || [];
+    const data = await councilResponse.json().catch(() => null);
+    if (!councilResponse.ok) {
+      return apiError(res, data?.error?.message || 'Failed to load provider credentials', mapCouncilStatus(councilResponse.status));
     }
-
-    // Workspace fallback: If 0 credentials found for this account, query active workspace credentials via primary owner
-    if (creds.length === 0) {
-      const fallbackRes = await fetch(`${COUNCIL_API_URL}/api/v1/provider-credentials`, {
-        headers: {
-          'X-User-Id': 'cmttwn1zg0000h4iajwvjrlf0',
-        },
-      }).catch(() => null);
-
-      if (fallbackRes && fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json();
-        creds = fallbackData.data || fallbackData || [];
-      }
+    const credentials = data?.data ?? data;
+    if (!Array.isArray(credentials)) {
+      return apiError(res, 'Council returned an invalid provider credentials response', 502);
     }
-
-    return apiResponse(res, creds);
-  } catch (_err) {
-    return apiResponse(res, []);
+    return apiResponse(res, credentials);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to load provider credentials';
+    return apiError(res, message, 502);
   }
 });
 
@@ -528,76 +521,45 @@ privateRouter.delete('/council/provider-credentials/:id', async (req: Request, r
 privateRouter.get('/council/sessions', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const userPrefix = `user_${userId}`;
     const authHeaders = {
       Authorization: req.headers.authorization || '',
       'X-User-Id': userId,
     };
 
-    // 1. Try legacy /api/v1/sessions
     let councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/sessions`, {
       headers: authHeaders,
-    }).catch(() => null);
+    });
+    let isLegacyResponse = true;
 
-    if (councilResponse && councilResponse.ok) {
-      const councilData = await councilResponse.json().catch(() => ({}));
-      const allSessions: any[] = councilData?.data || [];
-      const userSessions = allSessions.filter((s) => {
-        return typeof s.sessionId === 'string' && (s.sessionId.startsWith(userPrefix) || s.sessionId === userPrefix || !s.sessionId.startsWith('user_'));
+    if (!councilResponse.ok) {
+      councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/conversations`, {
+        headers: authHeaders,
       });
-      if (userSessions.length > 0) {
-        return apiResponse(res, userSessions);
-      }
+      isLegacyResponse = false;
     }
 
-    // 2. Fallback to Council V2 /api/v1/conversations
-    councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/conversations`, {
-      headers: authHeaders,
-    }).catch(() => null);
-
-    if (councilResponse && councilResponse.ok) {
-      const councilData = await councilResponse.json().catch(() => ({}));
-      const conversations: any[] = councilData?.data || councilData || [];
-      const mapped = conversations.map((c: any) => ({
-        sessionId: c.id,
-        personaId: c.bot?.slug || c.botId || 'sofi',
-        createdAt: c.createdAt,
-        updatedAt: c.updatedAt,
-        messageCount: c._count?.messages ?? (c.messages?.length || 0),
-        lastMessagePreview: c.title || (c.messages?.[c.messages.length - 1]?.content) || 'Chat conversation',
-      }));
-      if (mapped.length > 0) {
-        return apiResponse(res, mapped);
-      }
+    const councilData = await councilResponse.json().catch(() => null);
+    if (!councilResponse.ok) {
+      return apiError(res, councilData?.error?.message || 'Failed to load Council sessions', mapCouncilStatus(councilResponse.status));
     }
-
-    // 3. Workspace fallback: If no sessions found for current account, check primary owner
-    if (userId !== 'cmttwn1zg0000h4iajwvjrlf0') {
-      const fallbackRes = await fetch(`${COUNCIL_API_URL}/api/v1/conversations`, {
-        headers: {
-          Authorization: req.headers.authorization || '',
-          'X-User-Id': 'cmttwn1zg0000h4iajwvjrlf0',
-        },
-      }).catch(() => null);
-
-      if (fallbackRes && fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json().catch(() => ({}));
-        const conversations: any[] = fallbackData?.data || fallbackData || [];
-        const mapped = conversations.map((c: any) => ({
-          sessionId: c.id,
-          personaId: c.bot?.slug || c.botId || 'sofi',
-          createdAt: c.createdAt,
-          updatedAt: c.updatedAt,
-          messageCount: c._count?.messages ?? (c.messages?.length || 0),
-          lastMessagePreview: c.title || (c.messages?.[c.messages.length - 1]?.content) || 'Chat conversation',
-        }));
-        return apiResponse(res, mapped);
-      }
+    const sessions = councilData?.data ?? councilData;
+    if (!Array.isArray(sessions)) {
+      return apiError(res, 'Council returned an invalid sessions response', 502);
     }
-
-    return apiResponse(res, []);
-  } catch (_err: unknown) {
-    return apiResponse(res, []);
+    if (isLegacyResponse) {
+      return apiResponse(res, sessions);
+    }
+    return apiResponse(res, sessions.map((c: any) => ({
+      sessionId: c.id,
+      personaId: c.bot?.slug || c.botId || 'sofi',
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      messageCount: c._count?.messages ?? (c.messages?.length || 0),
+      lastMessagePreview: c.title || (c.messages?.[c.messages.length - 1]?.content) || 'Chat conversation',
+    })));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to load Council sessions';
+    return apiError(res, message, 502);
   }
 });
 
@@ -648,35 +610,6 @@ privateRouter.get('/council/sessions/:id', async (req: Request, res: Response) =
       });
     }
 
-    // 3. Fallback check with workspace owner
-    if (userId !== 'cmttwn1zg0000h4iajwvjrlf0') {
-      const ownerRes = await fetch(`${COUNCIL_API_URL}/api/v1/conversations/${encodeURIComponent(rawId)}`, {
-        headers: {
-          Authorization: req.headers.authorization || '',
-          'X-User-Id': 'cmttwn1zg0000h4iajwvjrlf0',
-        },
-      }).catch(() => null);
-
-      if (ownerRes && ownerRes.ok) {
-        const convData = await ownerRes.json().catch(() => ({}));
-        const conv = convData.data || convData;
-        return apiResponse(res, {
-          sessionId: conv.id,
-          personaId: conv.bot?.slug || conv.botId || 'sofi',
-          createdAt: conv.createdAt,
-          updatedAt: conv.updatedAt,
-          messages: (conv.messages || []).map((m: any) => ({
-            id: m.id,
-            sender: m.role === 'assistant' ? 'assistant' : 'user',
-            persona: conv.bot?.slug || 'sofi',
-            content: m.content,
-            timestamp: m.createdAt,
-            executedActions: m.toolCalls,
-          })),
-        });
-      }
-    }
-
     return apiError(res, 'Session not found', 404);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to retrieve session';
@@ -709,8 +642,14 @@ privateRouter.delete('/council/sessions/:id', async (req: Request, res: Response
       }).catch(() => null);
     }
 
-    const councilData = councilResponse ? await councilResponse.json().catch(() => ({})) : { success: true };
-    return apiResponse(res, councilData);
+    if (!councilResponse) {
+      return apiError(res, 'Failed to communicate with Council', 502);
+    }
+    const councilData = await councilResponse.json().catch(() => null);
+    if (!councilResponse.ok) {
+      return apiError(res, councilData?.error?.message || 'Failed to delete session', mapCouncilStatus(councilResponse.status));
+    }
+    return apiResponse(res, councilData?.data ?? councilData);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to delete session';
     return apiError(res, message, 502);
@@ -733,33 +672,18 @@ privateRouter.get('/council/memory', async (req: Request, res: Response) => {
       },
     });
 
-    let profile: any = { userId, facts: [] };
-    if (councilResponse.ok) {
-      const councilData = await councilResponse.json();
-      profile = councilData.data || councilData || { userId, facts: [] };
+    const councilData = await councilResponse.json().catch(() => null);
+    if (!councilResponse.ok) {
+      return apiError(res, councilData?.error?.message || 'Failed to load Council memory', mapCouncilStatus(councilResponse.status));
     }
-
-    // Workspace fallback: If 0 facts found for this account, query primary owner
-    if ((!profile.facts || profile.facts.length === 0) && userId !== 'cmttwn1zg0000h4iajwvjrlf0') {
-      const fallbackRes = await fetch(`${COUNCIL_API_URL}/api/v1/memory?userId=user_cmttwn1zg0000h4iajwvjrlf0`, {
-        headers: {
-          Authorization: req.headers.authorization || '',
-          'X-User-Id': 'cmttwn1zg0000h4iajwvjrlf0',
-        },
-      }).catch(() => null);
-
-      if (fallbackRes && fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json();
-        const fallbackProfile = fallbackData.data || fallbackData;
-        if (fallbackProfile && fallbackProfile.facts && fallbackProfile.facts.length > 0) {
-          return apiResponse(res, fallbackProfile);
-        }
-      }
+    const profile = councilData?.data ?? councilData;
+    if (!profile || profile.userId !== userId || !Array.isArray(profile.facts)) {
+      return apiError(res, 'Council returned an invalid memory profile', 502);
     }
-
     return apiResponse(res, profile);
-  } catch (_err: unknown) {
-    return apiResponse(res, { userId: req.user!.id, facts: [] });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to load Council memory';
+    return apiError(res, message, 502);
   }
 });
 
@@ -919,7 +843,8 @@ privateRouter.post('/voice/test', async (req: Request, res: Response) => {
       body: JSON.stringify(req.body),
     });
     if (!upstreamRes.ok) {
-      return apiResponse(res, { audioUrl: null, sampleText: req.body?.text || '' });
+      const data = await upstreamRes.json().catch(() => ({}));
+      return apiError(res, data?.error?.message || 'Failed to generate voice sample', mapCouncilStatus(upstreamRes.status));
     }
     const data = await upstreamRes.json().catch(() => ({}));
     if (data.data?.audioUrl && data.data.audioUrl.startsWith('/')) {
@@ -927,7 +852,8 @@ privateRouter.post('/voice/test', async (req: Request, res: Response) => {
     }
     return apiResponse(res, data.data || data);
   } catch (err: unknown) {
-    return apiResponse(res, { audioUrl: null, sampleText: req.body?.text || '' });
+    const message = err instanceof Error ? err.message : 'Failed to generate voice sample';
+    return apiError(res, message, 502);
   }
 });
 

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { calendarDateToLocalDate, formatCalendarDate, toCalendarDateKey, toLocalDateKey } from '../lib/date';
 
 interface EventsViewProps {
   events: any[];
@@ -33,6 +34,7 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
   const [showCreate, setShowCreate] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
   const [inspectingEvent, setInspectingEvent] = useState<any | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<'UPCOMING' | 'PAST' | 'ALL'>('UPCOMING');
   const [viewMode, setViewMode] = useState<'CARDS' | 'GANTT'>('GANTT');
   const [ganttRangeDays, setGanttRangeDays] = useState<number>(30);
@@ -64,6 +66,15 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
   const [eventTaskDueDate, setEventTaskDueDate] = useState('');
   const [savingEventTask, setSavingEventTask] = useState(false);
 
+  const requestEventMutation = async (url: string, options: RequestInit) => {
+    const response = await fetchWithUser(url, options);
+    const data = await response.json();
+    if (!response.ok || data?.success !== true) {
+      throw new Error(data?.error?.message || `Event action failed (HTTP ${response.status})`);
+    }
+    return data;
+  };
+
   const handleOpenCreateTaskForEvent = (ev: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setTaskForEvent(ev);
@@ -78,8 +89,9 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
     if (!eventTaskTitle.trim() || !taskForEvent) return;
 
     try {
+      setActionError(null);
       setSavingEventTask(true);
-      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks`, {
+      await requestEventMutation(`${API_BASE_URL}/api/v1/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -94,6 +106,7 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
       onRefresh();
     } catch (err) {
       console.error('Failed to create task for event:', err);
+      setActionError(err instanceof Error ? err.message : 'Unable to create a task for this event.');
     } finally {
       setSavingEventTask(false);
     }
@@ -104,6 +117,7 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
     if (!title.trim() || !date) return;
 
     try {
+      setActionError(null);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,10 +148,11 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
         setShowCreate(false);
         onRefresh();
       } else {
-        alert(data.error?.message || 'Failed to create event. Please check inputs.');
+        setActionError(data.error?.message || 'Failed to create event. Please check inputs.');
       }
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to create the event.');
     }
   };
 
@@ -146,6 +161,7 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
     if (!editingEvent) return;
 
     try {
+      setActionError(null);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/events/${editingEvent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -170,10 +186,11 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
         }
         onRefresh();
       } else {
-        alert(data.error?.message || 'Failed to update event details.');
+        setActionError(data.error?.message || 'Failed to update event details.');
       }
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to update the event.');
     }
   };
 
@@ -184,11 +201,13 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
       message: 'Are you sure you want to delete this Event?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/events/${eventId}`, { method: 'DELETE' });
+          setActionError(null);
+          await requestEventMutation(`${API_BASE_URL}/api/v1/events/${eventId}`, { method: 'DELETE' });
           if (inspectingEvent?.id === eventId) setInspectingEvent(null);
           onRefresh();
         } catch (err) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : 'Unable to delete the event.');
         }
       },
     });
@@ -196,7 +215,8 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
 
   const handleQuickAddReminder = async (event: any) => {
     try {
-      const d = new Date(event.date);
+      const d = calendarDateToLocalDate(event.date);
+      if (!d) throw new Error('Event has an invalid date');
       let hours = 9;
       let minutes = 0;
       if (event.startTime) {
@@ -213,7 +233,8 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
       }
       d.setHours(hours, minutes, 0, 0);
 
-      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders`, {
+      setActionError(null);
+      await requestEventMutation(`${API_BASE_URL}/api/v1/reminders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -227,62 +248,43 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
       if (onNavigate) onNavigate('reminders');
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to create a reminder for this event.');
     }
   };
 
   const formatDateForInput = (val?: string | Date | null) => {
-    if (!val) return '';
-    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
-    try {
-      const d = new Date(val);
-      if (isNaN(d.getTime())) return '';
-      return d.toISOString().split('T')[0];
-    } catch {
-      return '';
-    }
+    return toCalendarDateKey(val) || '';
   };
 
   const formatDateRange = (startDateStr: string, endDateStr?: string) => {
-    const start = new Date(startDateStr);
-    const startFormatted = start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const startFormatted = formatCalendarDate(startDateStr, undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     if (!endDateStr) return startFormatted;
-    const end = new Date(endDateStr);
-    const endFormatted = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const endFormatted = formatCalendarDate(endDateStr, undefined, { month: 'short', day: 'numeric' });
     return `${startFormatted} – ${endFormatted}`;
   };
 
-  // ---- Accurate Event Active Duration (Fixed: Event stays active until endDate) ----
-  const todayStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }, []);
-
-  const todayEnd = useMemo(() => {
-    const d = new Date();
-    d.setHours(23, 59, 59, 999);
-    return d.getTime();
-  }, []);
+  const todayKey = toLocalDateKey();
+  const todayStart = calendarDateToLocalDate(todayKey)!.getTime();
 
   const isEventOngoing = (e: any) => {
-    const start = new Date(e.date).getTime();
-    const end = e.endDate ? new Date(e.endDate).setHours(23, 59, 59, 999) : new Date(e.date).setHours(23, 59, 59, 999);
-    return start <= todayEnd && end >= todayStart;
+    const start = toCalendarDateKey(e.date);
+    const end = toCalendarDateKey(e.endDate) || start;
+    return Boolean(start && end && start <= todayKey && end >= todayKey);
   };
 
   const upcomingEvents = useMemo(() => {
     return events.filter((e) => {
-      const effectiveEnd = e.endDate ? new Date(e.endDate).setHours(23, 59, 59, 999) : new Date(e.date).setHours(23, 59, 59, 999);
-      return effectiveEnd >= todayStart;
+      const end = toCalendarDateKey(e.endDate) || toCalendarDateKey(e.date);
+      return Boolean(end && end >= todayKey);
     });
-  }, [events, todayStart]);
+  }, [events, todayKey]);
 
   const pastEvents = useMemo(() => {
     return events.filter((e) => {
-      const effectiveEnd = e.endDate ? new Date(e.endDate).setHours(23, 59, 59, 999) : new Date(e.date).setHours(23, 59, 59, 999);
-      return effectiveEnd < todayStart;
+      const end = toCalendarDateKey(e.endDate) || toCalendarDateKey(e.date);
+      return Boolean(end && end < todayKey);
     });
-  }, [events, todayStart]);
+  }, [events, todayKey]);
 
   const displayedEvents = activeFilter === 'UPCOMING' ? upcomingEvents : activeFilter === 'PAST' ? pastEvents : events;
 
@@ -293,13 +295,16 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
     baseDate.setHours(0, 0, 0, 0);
 
     const rangeStart = baseDate.getTime();
-    const rangeEnd = rangeStart + ganttRangeDays * 24 * 60 * 60 * 1000;
+    const rangeEndDate = new Date(baseDate);
+    rangeEndDate.setDate(rangeEndDate.getDate() + ganttRangeDays);
+    const rangeEnd = rangeEndDate.getTime();
 
     // Generate days in range
     const days: { date: Date; label: string; dayNum: number; isToday: boolean; isWeekend: boolean }[] = [];
     for (let i = 0; i < ganttRangeDays; i++) {
-      const d = new Date(rangeStart + i * 24 * 60 * 60 * 1000);
-      const isToday = d.setHours(0, 0, 0, 0) === todayStart;
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + i);
+      const isToday = toLocalDateKey(d) === todayKey;
       const dayOfWeek = d.getDay();
       days.push({
         date: d,
@@ -313,11 +318,13 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
     // Filter events overlapping with this timeline window
     const windowEvents = events
       .map((e) => {
-        const start = new Date(e.date).getTime();
-        const end = e.endDate ? new Date(e.endDate).setHours(23, 59, 59, 999) : new Date(e.date).setHours(23, 59, 59, 999);
+        const startDate = calendarDateToLocalDate(e.date);
+        const endDate = calendarDateToLocalDate(e.endDate || e.date, true);
+        const start = startDate?.getTime() ?? Number.NaN;
+        const end = endDate?.getTime() ?? Number.NaN;
         return { ...e, _start: start, _end: end };
       })
-      .filter((e) => e._end >= rangeStart && e._start <= rangeEnd)
+      .filter((e) => Number.isFinite(e._start) && Number.isFinite(e._end) && e._end >= rangeStart && e._start < rangeEnd)
       .sort((a, b) => a._start - b._start || (b._end - b._start) - (a._end - a._start));
 
     // Greedy Interval Scheduling Lane Packing
@@ -344,10 +351,23 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
     const showTodayIndicator = todayPercent >= 0 && todayPercent <= 100;
 
     return { days, rangeStart, rangeEnd, lanes, showTodayIndicator, todayPercent };
-  }, [events, ganttOffsetDays, ganttRangeDays, todayStart]);
+  }, [events, ganttOffsetDays, ganttRangeDays, todayKey]);
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-200">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss event error"
+            className="rounded-lg p-1 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Header with View Mode Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -848,7 +868,8 @@ export default function EventsView({ events, onRefresh, onNavigate }: EventsView
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {displayedEvents.map((event) => {
                 const isOngoing = isEventOngoing(event);
-                const isPast = (event.endDate ? new Date(event.endDate).setHours(23, 59, 59, 999) : new Date(event.date).setHours(23, 59, 59, 999)) < todayStart;
+                const eventEnd = toCalendarDateKey(event.endDate) || toCalendarDateKey(event.date);
+                const isPast = Boolean(eventEnd && eventEnd < todayKey);
 
                 return (
                   <div

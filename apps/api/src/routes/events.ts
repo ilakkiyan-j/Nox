@@ -1,17 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
+import { parseDateInput } from '../lib/date-validation';
 import { getOwnedEvent, validateGoalRelation, validateLearningRelation, validateRoadmapRelation } from '../lib/ownership';
 import { isSafeString, limitString, parseSafeUrl } from '../lib/validate';
 
 const router = Router();
-
-function parseDate(value: unknown): Date | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const d = new Date(String(value));
-  return isNaN(d.getTime()) ? null : d;
-}
 
 function normalizeTime(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -19,6 +13,12 @@ function normalizeTime(value: unknown): string | null {
   const t = value.trim();
   if (!t) return null;
   return limitString(t, 50);
+}
+
+function validateEventDateRange(startDate: Date, endDate: Date | null): void {
+  if (endDate && endDate.toISOString().slice(0, 10) < startDate.toISOString().slice(0, 10)) {
+    throw new HttpError('Event end date cannot be before its start date', 400);
+  }
 }
 
 router.get('/events', async (req: Request, res: Response) => {
@@ -51,13 +51,17 @@ router.post('/events', async (req: Request, res: Response) => {
     const urlCheck = parseSafeUrl(url);
     if (!urlCheck.ok) return apiError(res, urlCheck.error, 400);
 
+    const eventDate = (parseDateInput(date, 'Event date') ?? new Date()) as Date;
+    const eventEndDate = (parseDateInput(endDate, 'Event end date') ?? null) as Date | null;
+    validateEventDateRange(eventDate, eventEndDate);
+
     const event = await db.event.create({
       data: {
         userId: req.user!.id,
         title: limitString(title.trim(), 200),
         description: typeof description === 'string' ? limitString(description, 2000) : (description as string | null),
-        date: (parseDate(date) ?? new Date()) as Date,
-        endDate: (parseDate(endDate) ?? null) as Date | null,
+        date: eventDate,
+        endDate: eventEndDate,
         startTime: normalizeTime(startTime),
         endTime: normalizeTime(endTime),
         location: typeof location === 'string' && location.trim() ? limitString(location.trim(), 300) : null,
@@ -79,7 +83,7 @@ router.post('/events', async (req: Request, res: Response) => {
 router.patch('/events/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await getOwnedEvent(id, req.user!.id);
+    const existing = await getOwnedEvent(id, req.user!.id);
 
     const { title, description, date, endDate, startTime, endTime, location, url, isOnline } = (req.body ?? {}) as Record<string, unknown>;
 
@@ -89,12 +93,14 @@ router.patch('/events/:id', async (req: Request, res: Response) => {
       data.title = limitString(title.trim(), 200);
     }
     if (description !== undefined) data.description = typeof description === 'string' ? limitString(description, 2000) : null;
-    if (date !== undefined) {
-      const parsed = parseDate(date);
-      if (!parsed) return apiError(res, 'Event date is invalid');
-      data.date = parsed;
-    }
-    if (endDate !== undefined) data.endDate = (parseDate(endDate) ?? null) as Date | null;
+    const parsedDate = date !== undefined ? parseDateInput(date, 'Event date') : existing.date;
+    if (!parsedDate) return apiError(res, 'Event date is invalid');
+    const parsedEndDate = endDate !== undefined
+      ? (parseDateInput(endDate, 'Event end date') ?? null) as Date | null
+      : existing.endDate as Date | null;
+    validateEventDateRange(parsedDate, parsedEndDate);
+    if (date !== undefined) data.date = parsedDate;
+    if (endDate !== undefined) data.endDate = parsedEndDate;
     if (startTime !== undefined) data.startTime = normalizeTime(startTime);
     if (endTime !== undefined) data.endTime = normalizeTime(endTime);
     if (location !== undefined) data.location = typeof location === 'string' && location.trim() ? limitString(location.trim(), 300) : null;

@@ -1,19 +1,71 @@
+import { createHmac, timingSafeEqual } from 'crypto';
+import jwt from 'jsonwebtoken';
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
+import { parseDateInput } from '../lib/date-validation';
 import { getOwnedMessage } from '../lib/ownership';
 import { isSafeString, limitString, parseSafeUrl } from '../lib/validate';
 import { formatMarkdownForTelegram, sendTelegramFormattedReply } from '../lib/telegramFormat';
+import { COUNCIL_API_URL, getUserCouncilContext } from './council';
 
 export const messagesPublicRouter = Router();
 export const messagesPrivateRouter = Router();
 const router = messagesPrivateRouter;
 
-import { COUNCIL_API_URL, getUserCouncilContext } from './council';
+function telegramWebhookSecretForUser(userId: string, jwtSecret: string): string {
+  return createHmac('sha256', jwtSecret).update(`telegram-webhook:${userId}`).digest('base64url');
+}
+
+function hasValidTelegramWebhookSecret(req: Request, userId: string, jwtSecret: string): boolean {
+  const provided = req.get('x-telegram-bot-api-secret-token');
+  if (!provided) return false;
+  const expected = telegramWebhookSecretForUser(userId, jwtSecret);
+  const providedBytes = Buffer.from(provided);
+  const expectedBytes = Buffer.from(expected);
+  return providedBytes.length === expectedBytes.length && timingSafeEqual(providedBytes, expectedBytes);
+}
+
+function createCouncilUserToken(userId: string, userName: string | null, jwtSecret: string): string {
+  return jwt.sign(
+    { sub: userId, role: 'USER', name: userName || 'Nox User' },
+    jwtSecret,
+    { algorithm: 'HS256', expiresIn: '2m' },
+  );
+}
+
+function councilUserHeaders(userId: string, authorization?: string): Record<string, string> {
+  return {
+    ...(authorization ? { Authorization: authorization } : {}),
+    'X-User-Id': userId,
+  };
+}
+
+function isOwnerScopedTelegramWebhook(value: unknown, userId: string): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    return new URL(value).searchParams.get('userId') === userId;
+  } catch {
+    return false;
+  }
+}
 
 // POST /api/v1/messages/telegram — Public Telegram Webhook Endpoint (Supports forwarder mode, ?persona=sofi, or custom bots)
 messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Response) => {
   try {
+    const jwtSecret = process.env.JWT_SECRET?.trim();
+    if (!jwtSecret || jwtSecret.length < 32) {
+      return apiError(res, 'Telegram webhook authentication is not configured', 503);
+    }
+    const webhookUserId = req.query.userId;
+    if (
+      typeof webhookUserId !== 'string' ||
+      !webhookUserId ||
+      !hasValidTelegramWebhookSecret(req, webhookUserId, jwtSecret)
+    ) {
+      return apiError(res, 'Invalid Telegram webhook authentication', 401);
+    }
+
     const update = req.body ?? {};
     const msg = update?.message || update?.channel_post || update?.edited_message;
     if (!msg) {
@@ -40,42 +92,39 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
       requestedPersona = 'sofi';
     }
 
-    // Identify user: prioritize real user account (non-internal email) or most recent active user
-    let user = await db.user.findFirst({
-      where: {
-        NOT: { email: { endsWith: '@nox.internal' } },
-      },
-      orderBy: { createdAt: 'desc' },
+    const user = await db.user.findUnique({
+      where: { id: webhookUserId },
       select: { id: true, name: true },
     });
     if (!user) {
-      user = await db.user.findFirst({
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, name: true },
-      });
+      return apiError(res, 'Telegram webhook owner not found', 401);
     }
+    const councilToken = createCouncilUserToken(user.id, user.name, jwtSecret);
 
-    if (!user) {
-      return res.status(200).json({ ok: true });
-    }
-
-    // Resolve bot token dynamically from Council backend
-    let botToken = process.env.TELEGRAM_BOT_TOKEN || '';
+    // Resolve the user's bot token dynamically from Council backend.
+    let botToken = '';
     const targetSlug = isForwarderMode ? 'forwarder' : requestedPersona;
 
     if (targetSlug) {
-      try {
-        const botInfoRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/${encodeURIComponent(targetSlug.toLowerCase())}`, {
-          headers: { 'X-User-Id': user.id },
-        });
-        if (botInfoRes.ok) {
-          const botJson = (await botInfoRes.json()) as any;
-          if (botJson?.data?.telegramBotToken) {
-            botToken = botJson.data.telegramBotToken;
-          }
+      const botInfoRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/${encodeURIComponent(targetSlug.toLowerCase())}`, {
+        headers: councilUserHeaders(user.id, `Bearer ${councilToken}`),
+      });
+      const botJson = await botInfoRes.json().catch(() => null) as any;
+      if (!botInfoRes.ok) {
+        if (isForwarderMode && botInfoRes.status === 404) {
+          return res.status(200).json({ ok: true });
         }
-      } catch (err) {
-        console.warn('Could not fetch dynamic bot token for slug:', targetSlug);
+        return apiError(res, botJson?.error?.message || 'Could not load the configured Telegram bot', 502);
+      }
+      const botInfo = botJson?.data;
+      if (!botInfo || typeof botInfo !== 'object') {
+        return apiError(res, 'Council returned an invalid Telegram bot response', 502);
+      }
+      if (isForwarderMode && !isOwnerScopedTelegramWebhook(botInfo.telegramWebhookUrl, user.id)) {
+        return res.status(200).json({ ok: true });
+      }
+      if (typeof botInfo.telegramBotToken === 'string') {
+        botToken = botInfo.telegramBotToken;
       }
     }
 
@@ -146,7 +195,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           const fileInfo = (await fileInfoRes.json()) as any;
           if (fileInfo?.ok && fileInfo.result?.file_path) {
             const telegramAudioUrl = `https://api.telegram.org/file/bot${botToken}/${fileInfo.result.file_path}`;
-            console.log(`[Telegram Voice Ingest] Downloading voice note from ${telegramAudioUrl}...`);
+            console.log('[Telegram Voice Ingest] Downloading voice note from Telegram...');
             const audioFetch = await fetch(telegramAudioUrl);
             if (audioFetch.ok) {
               const audioArr = await audioFetch.arrayBuffer();
@@ -160,7 +209,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-User-Id': user.id,
+            ...councilUserHeaders(user.id, `Bearer ${councilToken}`),
           },
           body: JSON.stringify({
             persona: requestedPersona.toLowerCase(),
@@ -243,7 +292,7 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-User-Id': user.id,
+            ...councilUserHeaders(user.id, `Bearer ${councilToken}`),
           },
           body: JSON.stringify({
             persona: requestedPersona.toLowerCase(),
@@ -296,41 +345,21 @@ messagesPublicRouter.post('/messages/telegram', async (req: Request, res: Respon
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error('Telegram webhook error:', err);
-    return res.status(200).json({ ok: true });
+    return res.status(500).json({ ok: false, description: 'Telegram update processing failed' });
   }
 });
 
-// POST /api/v1/messages/webhook — Ingest webhook for HTTP Shortcuts (iOS / Android / IFTTT / Zapier)
-messagesPublicRouter.post('/messages/webhook', async (req: Request, res: Response) => {
+// POST /api/v1/messages/webhook — Authenticated ingestion for shortcuts and webhook clients
+router.post('/messages/webhook', async (req: Request, res: Response) => {
   try {
-    const { content, text, message, url, sender, source, userId: requestedUserId } = (req.body ?? {}) as Record<string, unknown>;
+    const { content, text, message, url, sender, source } = (req.body ?? {}) as Record<string, unknown>;
     const rawContent = (content || text || message || '') as string;
 
     if (!rawContent && !url) {
       return res.status(400).json({ success: false, error: 'Message text or url is required' });
     }
 
-    let targetUserId = typeof requestedUserId === 'string' && requestedUserId.trim() ? requestedUserId.trim() : null;
-
-    if (!targetUserId) {
-      const user =
-        (await db.user.findFirst({
-          where: { NOT: { email: { endsWith: '@nox.internal' } } },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true },
-        })) ||
-        (await db.user.findFirst({
-          orderBy: { createdAt: 'desc' },
-          select: { id: true },
-        }));
-      if (user) {
-        targetUserId = user.id;
-      }
-    }
-
-    if (!targetUserId) {
-      return res.status(404).json({ success: false, error: 'No active user found to ingest message' });
-    }
+    const targetUserId = req.user!.id;
 
     const rawUrl = typeof url === 'string' ? url.trim() : null;
     let validatedUrl: string | null = null;
@@ -393,49 +422,69 @@ router.post('/messages/telegram/forwarder/connect', async (req: Request, res: Re
 
     // 2. Register Webhook pointing to ?mode=forwarder
     const noxApiBase = process.env.NOX_PUBLIC_API_URL || 'https://nox-a1nr.onrender.com';
-    const webhookUrl = `${noxApiBase}/api/v1/messages/telegram?mode=forwarder`;
+    const webhookUrl = new URL('/api/v1/messages/telegram', noxApiBase);
+    webhookUrl.searchParams.set('mode', 'forwarder');
+    webhookUrl.searchParams.set('userId', userId);
+    const jwtSecret = process.env.JWT_SECRET?.trim();
+    if (!jwtSecret || jwtSecret.length < 32) {
+      return apiError(res, 'Telegram webhook authentication is not configured', 503);
+    }
+    const webhookSecret = telegramWebhookSecretForUser(userId, jwtSecret);
 
     const setWebhookRes = await fetch(`https://api.telegram.org/bot${cleanToken}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: webhookUrl,
+        url: webhookUrl.toString(),
+        secret_token: webhookSecret,
         allowed_updates: ['message', 'edited_message', 'channel_post'],
         drop_pending_updates: false,
       }),
     });
     const setWebhookData = (await setWebhookRes.json()) as any;
+    if (!setWebhookRes.ok || !setWebhookData?.ok) {
+      return apiError(
+        res,
+        setWebhookData?.description || 'Telegram rejected webhook registration',
+        502,
+      );
+    }
 
     // 3. Persist Forwarder Bot to Council Bot Service / DB
-    try {
-      await fetch(`${COUNCIL_API_URL}/api/v1/bots`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId,
-        },
-        body: JSON.stringify({
-          name: 'Telegram Forwarder & Ingest',
-          slug: 'forwarder',
-          role: 'Share Ingest & Inbox Forwarder',
-          description: 'Dedicated bot for forwarding articles, links, and job postings into NOX Inbox',
-          avatar: '📥',
-          color: '#059669',
-          telegramBotToken: cleanToken,
-          telegramBotUsername: botUsername,
-          telegramWebhookUrl: webhookUrl,
-        }),
-      });
-    } catch (saveErr) {
-      console.warn('Could not persist forwarder bot to Council service:', saveErr);
+    const councilResponse = await fetch(`${COUNCIL_API_URL}/api/v1/bots`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...councilUserHeaders(userId, req.headers.authorization),
+      },
+      body: JSON.stringify({
+        name: 'Telegram Forwarder & Ingest',
+        slug: 'forwarder',
+        role: 'Share Ingest & Inbox Forwarder',
+        description: 'Dedicated bot for forwarding articles, links, and job postings into NOX Inbox',
+        avatar: '📥',
+        color: '#059669',
+        telegramBotToken: cleanToken,
+        telegramBotUsername: botUsername,
+        telegramWebhookUrl: webhookUrl.toString(),
+      }),
+    });
+    const councilData = await councilResponse.json().catch(() => null) as any;
+    if (!councilResponse.ok) {
+      await fetch(`https://api.telegram.org/bot${cleanToken}/deleteWebhook`).catch(() => undefined);
+      return apiError(
+        res,
+        councilData?.error?.message || 'Council could not save the Telegram forwarder configuration',
+        502,
+      );
     }
 
     return apiResponse(res, {
       botUsername,
       botFirstName,
-      webhookUrl,
+      webhookUrl: webhookUrl.toString(),
       telegramUrl: `https://t.me/${botUsername}`,
-      webhookStatus: setWebhookData.ok ? 'ACTIVE' : 'FAILED',
+      webhookStatus: 'ACTIVE',
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to connect Telegram Forwarder bot';
@@ -447,24 +496,24 @@ router.post('/messages/telegram/forwarder/connect', async (req: Request, res: Re
 router.get('/messages/telegram/forwarder/status', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    let botInfo: any = null;
-
-    try {
-      const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/forwarder`, {
-        headers: { 'X-User-Id': userId },
-      });
-      if (councilRes.ok) {
-        const json = (await councilRes.json()) as any;
-        if (json?.data) {
-          botInfo = json.data;
-        }
-      }
-    } catch (cErr) {
-      console.warn('Could not query Council for forwarder bot:', cErr);
+    const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/forwarder`, {
+      headers: councilUserHeaders(userId, req.headers.authorization),
+    });
+    const json = await councilRes.json().catch(() => null) as any;
+    if (!councilRes.ok) {
+      return apiError(res, json?.error?.message || 'Could not query Council for the forwarder bot', 502);
+    }
+    const botInfo = json?.data ?? null;
+    if (botInfo !== null && typeof botInfo !== 'object') {
+      return apiError(res, 'Council returned an invalid forwarder bot response', 502);
     }
 
     return apiResponse(res, {
-      isConfigured: Boolean(botInfo?.telegramBotTokenMasked || botInfo?.telegramBotUsername),
+      isConfigured: Boolean(
+        botInfo?.telegramBotTokenMasked &&
+        botInfo?.telegramBotUsername &&
+        isOwnerScopedTelegramWebhook(botInfo?.telegramWebhookUrl, userId),
+      ),
       botUsername: botInfo?.telegramBotUsername || null,
       telegramBotTokenMasked: botInfo?.telegramBotTokenMasked || null,
       webhookUrl: botInfo?.telegramWebhookUrl || null,
@@ -480,25 +529,23 @@ router.get('/messages/telegram/forwarder/status', async (req: Request, res: Resp
 router.post('/messages/telegram/forwarder/disconnect', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    let botInfo: any = null;
-
-    try {
-      const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/forwarder`, {
-        headers: { 'X-User-Id': userId },
-      });
-      if (councilRes.ok) {
-        const json = (await councilRes.json()) as any;
-        botInfo = json?.data;
-      }
-    } catch (err) {
-      console.warn('Could not fetch bot to disconnect:', err);
+    const councilRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/slug/forwarder`, {
+      headers: councilUserHeaders(userId, req.headers.authorization),
+    });
+    const json = await councilRes.json().catch(() => null) as any;
+    if (!councilRes.ok) {
+      return apiError(res, json?.error?.message || 'Could not fetch the forwarder bot to disconnect', 502);
+    }
+    const botInfo = json?.data ?? null;
+    if (botInfo !== null && typeof botInfo !== 'object') {
+      return apiError(res, 'Council returned an invalid forwarder bot response', 502);
     }
 
     if (botInfo?.id) {
       // Remove webhook from Telegram if token available
       try {
         const rawRes = await fetch(`${COUNCIL_API_URL}/api/v1/bots/${botInfo.id}`, {
-          headers: { 'X-User-Id': userId },
+          headers: councilUserHeaders(userId, req.headers.authorization),
         });
         const rawJson = (await rawRes.json()) as any;
         const fullToken = rawJson?.data?.telegramBotToken;
@@ -512,7 +559,7 @@ router.post('/messages/telegram/forwarder/disconnect', async (req: Request, res:
       // Delete/clear bot config in Council
       await fetch(`${COUNCIL_API_URL}/api/v1/bots/${botInfo.id}`, {
         method: 'DELETE',
-        headers: { 'X-User-Id': userId },
+        headers: councilUserHeaders(userId, req.headers.authorization),
       });
     }
 
@@ -630,7 +677,7 @@ router.post('/messages/:id/convert', async (req: Request, res: Response) => {
           title: derivedTitle,
           description: target.content,
           priority: typeof priority === 'string' && ['LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(priority.toUpperCase()) ? priority.toUpperCase() : 'MEDIUM',
-          dueDate: dueDate ? new Date(String(dueDate)) : null,
+          dueDate: parseDateInput(dueDate, 'Task due date') ?? null,
           status: 'TODO',
         },
       });

@@ -1,14 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
-import { apiError, apiResponse } from '../lib/http';
+import { apiError, apiResponse, HttpError } from '../lib/http';
+import { dateOnlyFromKey, getTimeZone, zonedDateKey } from '../lib/timezone';
 
 const router = Router();
 
 router.get('/dashboard', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const timeZone = getTimeZone(req.query.timeZone);
+    const today = dateOnlyFromKey(zonedDateKey(new Date(), timeZone));
 
     const [tasks, upcomingEvents, activeGoals, activeLearning, habits, reminders, unreadNotifications, recentNotes] = await Promise.all([
       db.task.findMany({
@@ -21,8 +22,8 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         where: {
           userId,
           OR: [
-            { endDate: { gte: todayStart } },
-            { AND: [{ endDate: null }, { date: { gte: todayStart } }] },
+            { endDate: { gte: today } },
+            { AND: [{ endDate: null }, { date: { gte: today } }] },
           ],
         },
         orderBy: { date: 'asc' },
@@ -73,7 +74,8 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to load dashboard';
-    return apiError(res, message, 500);
+    const status = err instanceof HttpError ? err.statusCode : 500;
+    return apiError(res, message, status);
   }
 });
 

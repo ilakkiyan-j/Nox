@@ -20,6 +20,7 @@ const MODELS = [
   'event',
   'habit',
   'habitLog',
+  'message',
   'note',
   'reminder',
   'notification',
@@ -33,6 +34,8 @@ function matches(record: AnyRecord, where: AnyRecord | undefined): boolean {
         if (!cond.in.includes(record[key])) return false;
         continue;
       }
+      if ('lt' in cond && !(record[key] < cond.lt)) return false;
+      if ('lte' in cond && !(record[key] <= cond.lte)) return false;
       if ('not' in cond && record[key] === cond.not) return false;
       if ('gte' in cond && !(record[key] >= cond.gte)) return false;
       if ('contains' in cond) {
@@ -57,9 +60,13 @@ function matches(record: AnyRecord, where: AnyRecord | undefined): boolean {
 function matchesAny(record: AnyRecord, where: AnyRecord | undefined, store: Record<string, AnyRecord[]>): boolean {
   if (!where) return true;
   for (const [key, cond] of Object.entries(where)) {
-    if (cond && typeof cond === 'object' && !(cond instanceof Date) && !Array.isArray(cond) && !('in' in cond) && !('not' in cond) && !('gte' in cond) && !('contains' in cond) && !('OR' in cond)) {
+    if (cond && typeof cond === 'object' && !(cond instanceof Date) && !Array.isArray(cond) && !('in' in cond) && !('not' in cond) && !('gte' in cond) && !('gt' in cond) && !('lte' in cond) && !('lt' in cond) && !('contains' in cond) && !('OR' in cond) && !('AND' in cond)) {
       const related = (store[key] ?? []).find((r) => r.id === record[key]);
       if (!related || !matchesAny(related, cond, store)) return false;
+    } else if (key === 'AND' && Array.isArray(cond)) {
+      if (!cond.every((part) => matchesAny(record, part, store))) return false;
+    } else if (key === 'OR' && Array.isArray(cond)) {
+      if (!cond.some((part) => matchesAny(record, part, store))) return false;
     } else if (!matches(record, { [key]: cond })) {
       return false;
     }

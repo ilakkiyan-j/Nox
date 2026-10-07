@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { formatCalendarDate, toCalendarDateKey } from '../lib/date';
 
 interface TasksViewProps {
   tasks: any[];
@@ -41,6 +42,7 @@ export default function TasksView({
 }: TasksViewProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,12 +83,22 @@ export default function TasksView({
     setShowCreate(false);
   };
 
+  const requestTaskMutation = async (url: string, options: RequestInit) => {
+    const response = await fetchWithUser(url, options);
+    const data = await response.json();
+    if (!response.ok || data?.success !== true) {
+      throw new Error(data?.error?.message || `Task update failed (HTTP ${response.status})`);
+    }
+    return data;
+  };
+
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks`, {
+      setActionError(null);
+      await requestTaskMutation(`${API_BASE_URL}/api/v1/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -105,6 +117,7 @@ export default function TasksView({
       onRefresh();
     } catch (err) {
       console.error('Failed to create task:', err);
+      setActionError(err instanceof Error ? err.message : 'Unable to create the task.');
     }
   };
 
@@ -122,7 +135,7 @@ export default function TasksView({
       roadmapId: task.roadmapId || '',
       learningId: task.learningId || '',
       eventId: task.eventId || '',
-      dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+      dueDate: toCalendarDateKey(task.dueDate) || '',
     });
   };
 
@@ -131,7 +144,8 @@ export default function TasksView({
     if (!editingTask) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${editingTask.id}`, {
+      setActionError(null);
+      await requestTaskMutation(`${API_BASE_URL}/api/v1/tasks/${editingTask.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -150,6 +164,7 @@ export default function TasksView({
       onRefresh();
     } catch (err) {
       console.error('Failed to update task:', err);
+      setActionError(err instanceof Error ? err.message : 'Unable to update the task.');
     }
   };
 
@@ -160,10 +175,12 @@ export default function TasksView({
       message: 'Are you sure you want to permanently delete this task?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, { method: 'DELETE' });
+          setActionError(null);
+          await requestTaskMutation(`${API_BASE_URL}/api/v1/tasks/${taskId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : 'Unable to delete the task.');
         }
       },
     });
@@ -179,10 +196,12 @@ export default function TasksView({
       message: `Are you sure you want to permanently delete all ${count} completed tasks? This cannot be undone.`,
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/completed`, { method: 'DELETE' });
+          setActionError(null);
+          await requestTaskMutation(`${API_BASE_URL}/api/v1/tasks/completed`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : 'Unable to clear completed tasks.');
         }
       },
     });
@@ -191,7 +210,8 @@ export default function TasksView({
   const handleToggleTask = async (taskId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'TODO' : 'COMPLETED';
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
+      setActionError(null);
+      await requestTaskMutation(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -199,6 +219,7 @@ export default function TasksView({
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to change the task status.');
     }
   };
 
@@ -277,6 +298,19 @@ export default function TasksView({
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-200">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss task error"
+            className="rounded-lg p-1 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Header with Mobile-Optimized Layout */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -769,7 +803,7 @@ export default function TasksView({
                     {task.dueDate && (
                       <span className="text-slate-500 dark:text-slate-400 font-mono flex items-center space-x-1">
                         <Clock className="w-3 h-3 text-slate-400" />
-                        <span>Due {new Date(task.dueDate).toLocaleDateString()}</span>
+                        <span>Due {formatCalendarDate(task.dueDate)}</span>
                       </span>
                     )}
                   </div>

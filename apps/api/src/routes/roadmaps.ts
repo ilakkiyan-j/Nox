@@ -1,17 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
+import { parseDateInput } from '../lib/date-validation';
 import { getOwnedGoal, getOwnedMilestone, getOwnedRoadmap, validateGoalRelation, validateMilestoneRelation, validateRoadmapRelation } from '../lib/ownership';
 import { MILESTONE_STATUSES, TASK_PRIORITIES, isSafeString, limitString, validateRoadmapPlan } from '../lib/validate';
 
 const router = Router();
-
-function parseDate(value: unknown): Date | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const d = new Date(String(value));
-  return isNaN(d.getTime()) ? null : d;
-}
 
 // ---- Roadmaps ---------------------------------------------------------------
 
@@ -85,7 +79,7 @@ router.post('/roadmaps/import', async (req: Request, res: Response) => {
             title: limitString(String(m.title).trim(), 200),
             description: typeof m.description === 'string' && m.description.trim() ? limitString(m.description, 2000) : null,
             order: mIdx + 1,
-            targetDate: m.targetDate ? new Date(String(m.targetDate)) : null,
+            targetDate: parseDateInput(m.targetDate, 'Milestone target date') ?? null,
           },
         });
 
@@ -101,31 +95,34 @@ router.post('/roadmaps/import', async (req: Request, res: Response) => {
                 description: typeof t.description === 'string' && t.description.trim() ? limitString(t.description, 2000) : null,
                 priority: TASK_PRIORITIES.includes((t.priority as any)) ? t.priority : 'MEDIUM',
                 estimatedMinutes: typeof t.estimatedMinutes === 'number' ? t.estimatedMinutes : null,
-                dueDate: t.dueDate ? new Date(String(t.dueDate)) : null,
+                dueDate: parseDateInput(t.dueDate, 'Task due date') ?? null,
               },
             });
           }
         }
       }
 
-      return tx.roadmap.findUnique({
+      const roadmapWithRelations = await tx.roadmap.findUnique({
         where: { id: roadmap.id },
         include: { milestones: { include: { tasks: true } } },
       });
-    });
+      if (!roadmapWithRelations) {
+        throw new Error('Created roadmap could not be retrieved');
+      }
 
-    if (createdRoadmap) {
-      await db.notification.create({
+      await tx.notification.create({
         data: {
           userId: req.user!.id,
           title: 'Roadmap plan imported',
-          message: `Imported "${createdRoadmap.title}" with ${createdRoadmap.milestones.length} milestones.`,
+          message: `Imported "${roadmapWithRelations.title}" with ${roadmapWithRelations.milestones.length} milestones.`,
           type: 'ROADMAP_UPDATED',
           entityType: 'ROADMAP',
-          entityId: createdRoadmap.id,
+          entityId: roadmapWithRelations.id,
         },
       });
-    }
+
+      return roadmapWithRelations;
+    });
 
     return apiResponse(res, createdRoadmap, 201, 'Roadmap imported successfully');
   } catch (err: unknown) {
@@ -212,7 +209,7 @@ router.post('/milestones', async (req: Request, res: Response) => {
         roadmapId: (roadmapId as string) || null,
         title: limitString(title.trim(), 200),
         description: typeof description === 'string' ? limitString(description, 2000) : (description as string | null),
-        targetDate: (parseDate(targetDate) ?? null) as Date | null,
+        targetDate: parseDateInput(targetDate, 'Milestone target date') ?? null,
       },
     });
     return apiResponse(res, milestone, 201);

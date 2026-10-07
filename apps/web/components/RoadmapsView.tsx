@@ -7,7 +7,7 @@ import {
   Search, Filter, Maximize2, Minimize2, Eye, LayoutGrid, ListFilter,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 
 interface RoadmapsViewProps {
   roadmaps: any[];
@@ -177,47 +177,42 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
     setSaving(true);
     setGlobalError(null);
     try {
-      // 1. Create the roadmap
-      const rmRes = await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps`, {
+      const validPhases = phases.filter((phase) => phase.title.trim());
+      const hasPhases = validPhases.length > 0;
+      const endpoint = hasPhases
+        ? `${API_BASE_URL}/api/v1/roadmaps/import`
+        : `${API_BASE_URL}/api/v1/roadmaps`;
+      const payload = hasPhases
+        ? {
+            title: rmTitle.trim(),
+            description: rmDescription.trim() || undefined,
+            goalId: rmGoalId || undefined,
+            milestones: validPhases.map((phase) => ({
+              title: phase.title.trim(),
+              description: phase.description.trim() || undefined,
+            })),
+          }
+        : {
+            title: rmTitle.trim(),
+            description: rmDescription.trim() || null,
+            goalId: rmGoalId || null,
+          };
+
+      const response = await fetchWithUser(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: rmTitle,
-          description: rmDescription || null,
-          goalId: rmGoalId || null,
-        }),
+        body: JSON.stringify(payload),
       });
-      const rmData = await rmRes.json();
-      if (!rmData.success) {
-        setGlobalError(rmData.error?.message || 'Failed to create roadmap');
-        return;
-      }
-      const roadmapId = rmData.data?.id;
-
-      // 2. Create each valid phase as a milestone
-      const validPhases = phases.filter((p) => p.title.trim());
-      for (let i = 0; i < validPhases.length; i++) {
-        const msRes = await fetchWithUser(`${API_BASE_URL}/api/v1/milestones`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            roadmapId,
-            goalId: rmGoalId || null,
-            title: validPhases[i].title,
-            description: validPhases[i].description || null,
-          }),
-        });
-        const msData = await msRes.json();
-        if (!msData.success) {
-          setGlobalError(`Phase ${i + 1} failed: ${msData.error?.message || 'Unknown error'}`);
-        }
-      }
+      await assertApiSuccess(response, 'Failed to create roadmap');
 
       setRmTitle(''); setRmDescription(''); setRmGoalId('');
       setPhases([newPhaseRow()]);
       setShowCreate(false);
       onRefresh();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error('Failed to create roadmap:', err);
+      setGlobalError(err instanceof Error ? err.message : 'Failed to create roadmap');
+    }
     finally { setSaving(false); }
   };
 
@@ -251,12 +246,16 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
           milestones: parsedPreview.milestones,
         }),
       });
+      await assertApiSuccess(res, 'Import failed');
       const data = await res.json();
       if (!data.success) { setJsonError(data.error?.message || 'Import failed'); return; }
       setJsonInput(''); setParsedPreview(null); setJsonError(null);
       setShowCreate(false);
       onRefresh();
-    } catch (err: any) { setJsonError(`Import failed: ${err.message}`); }
+    } catch (err) {
+      console.error('Failed to import roadmap:', err);
+      setJsonError(err instanceof Error ? err.message : 'Import failed');
+    }
     finally { setImporting(false); }
   };
 
@@ -265,7 +264,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
     e.preventDefault();
     if (!editingRoadmap) return;
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/${editingRoadmap.id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/${editingRoadmap.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -274,9 +273,13 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
           status: editingRoadmap.status,
         }),
       });
+      await assertApiSuccess(response, 'Could not update roadmap');
       setEditingRoadmap(null);
       onRefresh();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error('Failed to update roadmap:', err);
+      setGlobalError(err instanceof Error ? err.message : 'Could not update roadmap');
+    }
   };
 
   // ── Delete roadmap ────────────────────────────────────────────────────────────
@@ -287,10 +290,14 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
       message: `Delete "${title}" and all its phases?`,
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/${id}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/roadmaps/${id}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete roadmap');
           if (focusedRoadmapId === id) setFocusedRoadmapId(null);
           onRefresh();
-        } catch (err) { console.error(err); }
+        } catch (err) {
+          console.error('Failed to delete roadmap:', err);
+          setGlobalError(err instanceof Error ? err.message : 'Could not delete roadmap');
+        }
       },
     });
   };
@@ -299,7 +306,7 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
   const handleAddPhase = async (roadmapId: string, goalId?: string) => {
     if (!newPhaseTitle.trim()) return;
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/milestones`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/milestones`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -309,23 +316,31 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
           description: newPhaseDesc || undefined,
         }),
       });
+      await assertApiSuccess(response, 'Could not add phase');
       setNewPhaseTitle(''); setNewPhaseDesc('');
       setAddingPhaseFor(null);
       onRefresh();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error('Failed to add roadmap phase:', err);
+      setGlobalError(err instanceof Error ? err.message : 'Could not add phase');
+    }
   };
 
   // ── Toggle phase complete ──────────────────────────────────────────────────────
   const handleTogglePhase = async (id: string, status: string) => {
     const next = status === 'COMPLETED' ? 'NOT_STARTED' : 'COMPLETED';
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: next }),
       });
+      await assertApiSuccess(response, 'Could not update phase status');
       onRefresh();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error('Failed to update roadmap phase:', err);
+      setGlobalError(err instanceof Error ? err.message : 'Could not update phase status');
+    }
   };
 
   // ── Update phase ──────────────────────────────────────────────────────────────
@@ -333,14 +348,18 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
     e.preventDefault();
     if (!editingPhase) return;
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${editingPhase.id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${editingPhase.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editingPhase.title, description: editingPhase.description }),
       });
+      await assertApiSuccess(response, 'Could not update phase');
       setEditingPhase(null);
       onRefresh();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error('Failed to update roadmap phase:', err);
+      setGlobalError(err instanceof Error ? err.message : 'Could not update phase');
+    }
   };
 
   // ── Delete phase ──────────────────────────────────────────────────────────────
@@ -351,9 +370,13 @@ export default function RoadmapsView({ roadmaps, goals, onRefresh }: RoadmapsVie
       message: `Delete phase "${title}"?`,
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${id}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/milestones/${id}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete phase');
           onRefresh();
-        } catch (err) { console.error(err); }
+        } catch (err) {
+          console.error('Failed to delete roadmap phase:', err);
+          setGlobalError(err instanceof Error ? err.message : 'Could not delete phase');
+        }
       },
     });
   };

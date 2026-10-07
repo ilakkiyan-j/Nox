@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
+import { parseDateInput } from '../lib/date-validation';
 import {
   getOwnedTask,
   validateEventRelation,
@@ -12,13 +13,6 @@ import {
 import { isSafeString, limitString, TASK_PRIORITIES, TASK_STATUSES } from '../lib/validate';
 
 const router = Router();
-
-function parseDate(value: unknown): Date | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const d = new Date(String(value));
-  return isNaN(d.getTime()) ? null : d;
-}
 
 router.get('/tasks', async (req: Request, res: Response) => {
   try {
@@ -54,8 +48,8 @@ router.post('/tasks', async (req: Request, res: Response) => {
         title: limitString(title.trim(), 200),
         description: typeof description === 'string' ? limitString(description, 2000) : (description as string | null),
         priority: TASK_PRIORITIES.includes((priority as any)) ? (priority as string) : 'MEDIUM',
-        dueDate: (parseDate(dueDate) ?? null) as Date | null,
-        startDate: (parseDate(startDate) ?? null) as Date | null,
+        dueDate: (parseDateInput(dueDate, 'Due date') ?? null) as Date | null,
+        startDate: (parseDateInput(startDate, 'Start date') ?? null) as Date | null,
         estimatedMinutes:
           estimatedMinutes === undefined || estimatedMinutes === null || estimatedMinutes === ''
             ? null
@@ -109,8 +103,8 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
       if (!TASK_PRIORITIES.includes(priority as any)) return apiError(res, `Priority must be one of ${TASK_PRIORITIES.join(', ')}`);
       data.priority = priority;
     }
-    if (dueDate !== undefined) data.dueDate = (parseDate(dueDate) ?? null) as Date | null;
-    if (startDate !== undefined) data.startDate = (parseDate(startDate) ?? null) as Date | null;
+    if (dueDate !== undefined) data.dueDate = (parseDateInput(dueDate, 'Due date') ?? null) as Date | null;
+    if (startDate !== undefined) data.startDate = (parseDateInput(startDate, 'Start date') ?? null) as Date | null;
     if (estimatedMinutes !== undefined) {
       data.estimatedMinutes =
         estimatedMinutes === null || estimatedMinutes === ''

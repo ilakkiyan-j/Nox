@@ -136,6 +136,18 @@ npm run dev
 
 ---
 
+## 🔗 Message Ingestion Integrations
+
+- `POST /api/v1/messages/webhook` requires a Nox bearer token. Messages are always stored for the authenticated account; a `userId` in the request body is ignored.
+- Telegram Forwarder webhooks are registered with a per-account Telegram secret token and signed owner ID. Reconnect previously configured Telegram Forwarder bots after upgrading so Telegram receives the new authenticated callback URL.
+- Keep `JWT_SECRET` configured with at least 32 characters in the Nox API environment. The API uses it to validate Telegram callbacks and issue short-lived, user-scoped Council assertions.
+
+## 🕒 Calendar Timezone Behavior
+
+- The web app supplies the browser's IANA timezone to `GET /api/v1/dashboard` and `GET /api/v1/time` so date-only events, deadlines, and daily grouping follow the user's calendar day.
+- Other clients may pass the same timezone as a `timeZone` query parameter. Requests that omit it use UTC.
+- Date-only values remain calendar dates; reminder instants are formatted and grouped in the requested timezone.
+
 ## 🧪 Testing & Quality Assurance
 
 NOX maintains automated test coverage across unit, integration, and end-to-end user workflows:

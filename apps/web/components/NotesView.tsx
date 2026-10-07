@@ -23,8 +23,9 @@ import {
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
 import DialogShell from './ui/Dialog';
+import ApiErrorNotice from './ui/ApiErrorNotice';
 import NoteStudioModal from './NoteStudioModal';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 
 interface NotesViewProps {
   notes: any[];
@@ -42,6 +43,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [studioNote, setStudioNote] = useState<any | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
     title: string;
@@ -105,7 +107,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
   const handleSaveStudioNote = async (data: { id?: string; title: string; content: string; url?: string; folderId?: string | null }) => {
     try {
       if (data.id) {
-        await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${data.id}`, {
+        const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${data.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -115,8 +117,9 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
             folderId: data.folderId || null,
           }),
         });
+        await assertApiSuccess(response, 'Could not save note');
       } else {
-        await fetchWithUser(`${API_BASE_URL}/api/v1/notes`, {
+        const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -126,10 +129,13 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
             folderId: data.folderId || undefined,
           }),
         });
+        await assertApiSuccess(response, 'Could not save note');
       }
       onRefresh();
     } catch (err) {
       console.error('Save note error:', err);
+      setError(err instanceof Error ? err.message : 'Could not save note');
+      throw err;
     }
   };
 
@@ -149,7 +155,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
     if (!editingNote) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${editingNote.id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${editingNote.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,13 +165,15 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
           folderId: editingNote.folderId,
         }),
       });
+      await assertApiSuccess(response, 'Could not update note');
       setEditingNote(null);
       if (viewingNote?.id === editingNote.id) {
         setViewingNote({ ...editingNote });
       }
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to update note:', err);
+      setError(err instanceof Error ? err.message : 'Could not update note');
     }
   };
 
@@ -178,14 +186,16 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       initialValue: currentName,
       onSubmit: async (val: string) => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/folders/${folderId}`, {
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/folders/${folderId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
           });
+          await assertApiSuccess(response, 'Could not rename folder');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to rename folder:', err);
+          setError(err instanceof Error ? err.message : 'Could not rename folder');
         }
       },
     });
@@ -199,12 +209,14 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       message: 'Are you sure you want to delete this Note?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${noteId}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notes/${noteId}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete note');
           if (viewingNote?.id === noteId) setViewingNote(null);
           if (editingNote?.id === noteId) setEditingNote(null);
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to delete note:', err);
+          setError(err instanceof Error ? err.message : 'Could not delete note');
         }
       },
     });
@@ -218,14 +230,16 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       initialValue: '',
       onSubmit: async (val: string) => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/folders`, {
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/folders`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: val }),
           });
+          await assertApiSuccess(response, 'Could not create folder');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to create folder:', err);
+          setError(err instanceof Error ? err.message : 'Could not create folder');
         }
       },
     });
@@ -239,11 +253,13 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
       message: `Are you sure you want to delete folder "${folderName}"? Notes inside will be moved to Unsorted.`,
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/folders/${folderId}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/folders/${folderId}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete folder');
           if (selectedFolderId === folderId) setSelectedFolderId(null);
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to delete folder:', err);
+          setError(err instanceof Error ? err.message : 'Could not delete folder');
         }
       },
     });
@@ -251,6 +267,7 @@ export default function NotesView({ notes, folders, onOpenQuickCapture, onRefres
 
   return (
     <div className="space-y-6 w-full max-w-full min-w-0 overflow-hidden">
+      <ApiErrorNotice message={error} onDismiss={() => setError(null)} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

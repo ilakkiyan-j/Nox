@@ -277,6 +277,7 @@ describe('Input validation & security', () => {
     expect(fakeDb.store.roadmap).toHaveLength(1);
     expect(fakeDb.store.milestone).toHaveLength(2);
     expect(fakeDb.store.task).toHaveLength(2);
+    expect(fakeDb.store.notification).toHaveLength(1);
     const tasks = fakeDb.store.task!;
     expect(tasks.every((t: any) => t.userId === user.id)).toBe(true);
     expect((res.body.data.milestones ?? []).length).toBe(2);

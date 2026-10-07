@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
+import { isValidCalendarDate } from '../lib/date-validation';
 import { getOwnedHabit, getOwnedHabitLog } from '../lib/ownership';
 import { isSafeString, limitString } from '../lib/validate';
 import { computeBestStreak, computeCurrentStreak, dateToKey } from '../lib/streaks';
@@ -10,14 +11,31 @@ const router = Router();
 const FREQ_PATTERN = /^(DAILY|WEEKLY)$/;
 
 function toLocalDateKey(value: unknown): string | null {
-  if (value === undefined || value === null || value === '') return null;
-  const raw = String(value);
+  if (value === undefined) return null;
+  if (value === null || value === '') throw new HttpError('Date must be a valid date string', 400);
+  if (typeof value !== 'string') throw new HttpError('Date must be a valid date string', 400);
+  const raw = value.trim();
   // YYYY-MM-DD
   const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.exec(raw);
-  if (match) return raw;
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (!isValidCalendarDate(year, month, day)) {
+      throw new HttpError('Date must be a valid calendar date', 400);
+    }
+    return raw;
+  }
+  const datePrefix = /^(\d{4})-(\d{2})-(\d{2})(?=T|\s)/.exec(raw);
+  if (
+    datePrefix &&
+    !isValidCalendarDate(Number(datePrefix[1]), Number(datePrefix[2]), Number(datePrefix[3]))
+  ) {
+    throw new HttpError('Date must be a valid calendar date', 400);
+  }
   // ISO date string
   const d = new Date(raw);
-  if (isNaN(d.getTime())) return null;
+  if (isNaN(d.getTime())) throw new HttpError('Date must be a valid date string', 400);
   return dateToKey(d);
 }
 

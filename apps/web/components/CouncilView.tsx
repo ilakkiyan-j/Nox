@@ -23,6 +23,7 @@ import {
   Sliders,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ExternalLink,
   Maximize2,
   Minimize2,
@@ -38,6 +39,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { TelegramIcon } from './ui/BrandIcons';
+import DialogShell from './ui/Dialog';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
 import MarkdownRenderer from './MarkdownRenderer';
 
@@ -254,6 +256,26 @@ const DEBATE_SUGGESTIONS = [
   'Review my current workload and audit my burnout risk',
 ];
 
+async function readCouncilData(response: Response, resource: string): Promise<unknown> {
+  const payload = await response.json().catch(() => null) as {
+    success?: unknown;
+    data?: unknown;
+    error?: { message?: unknown };
+  } | null;
+  if (!response.ok) {
+    const message = typeof payload?.error?.message === 'string'
+      ? payload.error.message
+      : `Failed to load ${resource} (HTTP ${response.status})`;
+    throw new Error(message);
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.success !== true) {
+    const message = typeof payload?.error?.message === 'string' ? payload.error.message : null;
+    if (message) throw new Error(message);
+    throw new Error(`Council returned an invalid ${resource} response`);
+  }
+  return payload.data;
+}
+
 export default function CouncilView({
   currentUser,
   tasks = [],
@@ -275,6 +297,7 @@ export default function CouncilView({
   const [credLabel, setCredLabel] = useState('');
   const [credKey, setCredKey] = useState('');
   const [savingCred, setSavingCred] = useState(false);
+  const [actionNotice, setActionNotice] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
 
   // Bot Workshop Modal (Create & Edit)
   const [showEditorModal, setShowEditorModal] = useState(false);
@@ -327,13 +350,33 @@ export default function CouncilView({
   const [debateTopic, setDebateTopic] = useState('');
   const [debateLoading, setDebateLoading] = useState(false);
   const [memoryProfile, setMemoryProfile] = useState<MemoryProfile | null>(null);
+  const [integrationError, setIntegrationError] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
   const [newFact, setNewFact] = useState('');
   const [newFactCategory, setNewFactCategory] = useState<UserFact['category']>('general');
   const [isAddingFact, setIsAddingFact] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
 
+  const reportIntegrationError = (error: unknown, fallbackMessage: string) => {
+    const message = error instanceof Error ? error.message : fallbackMessage;
+    setIntegrationError((current) => {
+      const existingMessages = current?.split(' • ') ?? [];
+      return existingMessages.includes(message)
+        ? current
+        : [...existingMessages, message].filter(Boolean).join(' • ');
+    });
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sessionStorageKey = currentUser?.id
+    ? `nox_council_active_session_${encodeURIComponent(currentUser.id)}`
+    : null;
   const pendingTasksCount = tasks.filter((t: any) => t.status !== 'COMPLETED').length;
 
   // Auto-resize textarea on input / paste
@@ -360,26 +403,20 @@ export default function CouncilView({
   const hasKeyForActiveBot = hasExactKey || hasActiveKey;
 
   useEffect(() => {
-    // 1. Instantly restore cached credentials so keys display active without waiting on network
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('nox_council_creds_cache');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setCredentials(parsed);
-          }
-        }
-      } catch {}
-    }
-
+    setBots([]);
+    setCredentials([]);
+    setSessions([]);
+    setMemoryProfile(null);
+    setIntegrationError(null);
     checkCouncilStatus();
     fetchBots();
     fetchCredentials();
     fetchSessions();
     fetchMemory();
 
-    const storedSid = typeof window !== 'undefined' ? localStorage.getItem('nox_council_active_session') : null;
+    const storedSid = typeof window !== 'undefined' && sessionStorageKey
+      ? localStorage.getItem(sessionStorageKey)
+      : null;
     if (storedSid) {
       setSessionId(storedSid);
       loadSessionHistory(storedSid);
@@ -539,65 +576,72 @@ export default function CouncilView({
   const fetchBots = async () => {
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`);
-      if (res.ok) {
-        const json = await res.json();
-        const loadedBots = json?.data || [];
-        if (loadedBots.length > 0) {
-          setBots(loadedBots);
-        }
-      }
+      const loadedBots = await readCouncilData(res, 'bots');
+      if (!Array.isArray(loadedBots)) throw new Error('Council returned invalid bots');
+      setBots(loadedBots);
+      return true;
     } catch (err) {
       console.warn('Failed to fetch bots:', err);
+      reportIntegrationError(err, 'Failed to load Council bots');
+      return false;
     }
   };
 
   const fetchCredentials = async () => {
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials`);
-      if (res.ok) {
-        const json = await res.json();
-        const loaded = json?.data || [];
-        if (Array.isArray(loaded) && loaded.length > 0) {
-          setCredentials(loaded);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('nox_council_creds_cache', JSON.stringify(loaded));
-          }
-        }
-      }
+      const loadedCredentials = await readCouncilData(res, 'provider credentials');
+      if (!Array.isArray(loadedCredentials)) throw new Error('Council returned invalid provider credentials');
+      setCredentials(loadedCredentials);
+      return true;
     } catch (err) {
-      console.warn('Failed to fetch credentials:', err);
+      console.warn('Failed to load provider credentials:', err);
+      reportIntegrationError(err, 'Failed to load provider credentials');
+      return false;
     }
   };
 
   const fetchSessions = async () => {
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions`);
-      if (res.ok) {
-        const json = await res.json();
-        setSessions(json?.data || []);
-      }
+      const loadedSessions = await readCouncilData(res, 'sessions');
+      if (!Array.isArray(loadedSessions)) throw new Error('Council returned invalid sessions');
+      setSessions(loadedSessions);
+      return true;
     } catch (err) {
       console.warn('Failed to load sessions:', err);
+      reportIntegrationError(err, 'Failed to load Council sessions');
+      return false;
     }
   };
 
   const fetchMemory = async () => {
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/memory`);
-      if (res.ok) {
-        const json = await res.json();
-        setMemoryProfile(json?.data || null);
+      const profile = await readCouncilData(res, 'memory');
+      if (
+        !profile ||
+        typeof profile !== 'object' ||
+        !('userId' in profile) ||
+        !('facts' in profile) ||
+        !Array.isArray(profile.facts)
+      ) {
+        throw new Error('Council returned an invalid memory profile');
       }
+      setMemoryProfile(profile as MemoryProfile);
+      return true;
     } catch (err) {
       console.warn('Failed to load memory:', err);
+      reportIntegrationError(err, 'Failed to load Council memory');
+      return false;
     }
   };
 
   const createNewSession = (botId: string = activeBotId, saveToStorage: boolean = true) => {
     const newSid = `session_${Date.now()}`;
     setSessionId(newSid);
-    if (saveToStorage && typeof window !== 'undefined') {
-      localStorage.setItem('nox_council_active_session', newSid);
+    if (saveToStorage && typeof window !== 'undefined' && sessionStorageKey) {
+      localStorage.setItem(sessionStorageKey, newSid);
     }
     setActiveBotId(botId);
 
@@ -620,37 +664,40 @@ export default function CouncilView({
     try {
       setLoading(true);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions/${encodeURIComponent(sid)}`);
-      if (!res.ok) {
+      if (res.status === 404) {
         createNewSession(activeBotId, true);
         return;
       }
-      const json = await res.json();
-      const sessionData = json?.data;
-      if (sessionData && Array.isArray(sessionData.messages)) {
-        const loadedMsgs: Message[] = sessionData.messages.map((m: any, idx: number) => ({
-          id: `hist-${idx}-${Date.now()}`,
-          sender: m.role === 'assistant' ? 'assistant' : 'user',
-          persona: sessionData.personaId || activeBotId,
-          content: m.content || '',
-          executedActions: Array.isArray(m.toolCalls)
-            ? m.toolCalls
-                .filter((tc: any) => tc && (tc.toolName || tc.name))
-                .map((tc: any) => ({
-                  toolName: tc.toolName || tc.name || 'action',
-                  params: tc.params || {},
-                  result: tc.result || {},
-                }))
-            : [],
-          timestamp: m.timestamp || new Date().toISOString(),
-        }));
-        setMessages(loadedMsgs);
-        if (sessionData.personaId) {
-          setActiveBotId(sessionData.personaId);
-        }
+      const sessionData = await readCouncilData(res, 'session history') as {
+        messages?: unknown;
+        personaId?: string;
+      } | null;
+      if (!sessionData || !Array.isArray(sessionData.messages)) {
+        throw new Error('Council returned invalid session history');
+      }
+      const loadedMsgs: Message[] = sessionData.messages.map((m: any, idx: number) => ({
+        id: `hist-${idx}-${Date.now()}`,
+        sender: m.role === 'assistant' ? 'assistant' : 'user',
+        persona: sessionData.personaId || activeBotId,
+        content: m.content || '',
+        executedActions: Array.isArray(m.toolCalls)
+          ? m.toolCalls
+              .filter((tc: any) => tc && (tc.toolName || tc.name))
+              .map((tc: any) => ({
+                toolName: tc.toolName || tc.name || 'action',
+                params: tc.params || {},
+                result: tc.result || {},
+              }))
+          : [],
+        timestamp: m.timestamp || new Date().toISOString(),
+      }));
+      setMessages(loadedMsgs);
+      if (sessionData.personaId) {
+        setActiveBotId(sessionData.personaId);
       }
     } catch (err) {
       console.warn('Failed to load session:', err);
-      createNewSession(activeBotId, true);
+      reportIntegrationError(err, 'Failed to load Council session history');
     } finally {
       setLoading(false);
     }
@@ -691,8 +738,8 @@ export default function CouncilView({
       const data = json?.data;
       if (data?.sessionId && data.sessionId !== sessionId) {
         setSessionId(data.sessionId);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('nox_council_active_session', data.sessionId);
+        if (typeof window !== 'undefined' && sessionStorageKey) {
+          localStorage.setItem(sessionStorageKey, data.sessionId);
         }
       }
 
@@ -990,9 +1037,11 @@ export default function CouncilView({
     // Fetch full bot details if instruction wasn't loaded
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${bot.id}`);
-      if (res.ok) {
-        const json = await res.json();
-        const detailed = json?.data;
+      const detailed = await readCouncilData(res, 'bot details') as any;
+      if (!detailed || typeof detailed !== 'object' || Array.isArray(detailed)) {
+        throw new Error('Council returned invalid bot details');
+      }
+      if (detailed) {
         if (detailed?.instruction?.systemPrompt) {
           setEditorPrompt(detailed.instruction.systemPrompt);
         }
@@ -1014,7 +1063,10 @@ export default function CouncilView({
             if (Array.isArray(parsed?.fallbackPipeline)) {
               setFallbackPipeline(parsed.fallbackPipeline);
             }
-          } catch {}
+          } catch (err) {
+            console.warn('Could not parse bot fallback configuration:', err);
+            reportIntegrationError(err, 'Bot fallback configuration could not be loaded');
+          }
         }
       }
     } catch (err) {
@@ -1044,14 +1096,11 @@ export default function CouncilView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: editorTelegramToken.trim() }),
       });
-      const json = await res.json();
-      if (json.success && json.data) {
-        setEditorTelegramUsername(json.data.botUsername);
-        setTelegramConnectSuccess(`Connected to @${json.data.botUsername}! Webhook registered.`);
-        fetchBots();
-      } else {
-        setTelegramConnectError(json?.error?.message || 'Failed to connect Telegram bot.');
-      }
+      const data = await readCouncilData(res, 'Telegram bot connection') as { botUsername?: string };
+      if (!data.botUsername) throw new Error('Council returned no Telegram bot username');
+      setEditorTelegramUsername(data.botUsername);
+      setTelegramConnectSuccess(`Connected to @${data.botUsername}! Webhook registered.`);
+      await fetchBots();
     } catch (err: any) {
       setTelegramConnectError(err?.message || 'Failed to connect Telegram bot.');
     } finally {
@@ -1062,6 +1111,7 @@ export default function CouncilView({
   // Save Bot (Create or Edit)
   const handleSaveBot = async (e: React.FormEvent) => {
     e.preventDefault();
+    setActionNotice(null);
     if (!editorName.trim()) return;
 
     setSavingBot(true);
@@ -1101,10 +1151,7 @@ export default function CouncilView({
           body: JSON.stringify(payload),
         });
 
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}));
-          throw new Error(json?.error?.message || 'Failed to update bot');
-        }
+        await readCouncilData(res, 'bot update');
       } else {
         // POST new bot
         const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots`, {
@@ -1113,21 +1160,22 @@ export default function CouncilView({
           body: JSON.stringify(payload),
         });
 
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}));
-          throw new Error(json?.error?.message || 'Failed to create bot');
-        }
-
-        const created = (await res.json())?.data;
+        const created = await readCouncilData(res, 'bot creation') as { id?: string } | null;
         if (created?.id) {
           setActiveBotId(created.id);
+        } else {
+          throw new Error('Council returned no created bot');
         }
       }
 
       setShowEditorModal(false);
       await fetchBots();
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      setActionNotice({ type: 'success', message: editingBotId ? 'Bot updated.' : 'Bot created.' });
+    } catch (err) {
+      setActionNotice({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not save the bot.',
+      });
     } finally {
       setSavingBot(false);
     }
@@ -1135,40 +1183,49 @@ export default function CouncilView({
 
   // Duplicate Bot
   const handleDuplicateBot = async (botId: string) => {
+    setActionNotice(null);
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${botId}/duplicate`, {
         method: 'POST',
       });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error?.message || 'Failed to duplicate bot');
-      }
+      await readCouncilData(res, 'bot duplication');
       await fetchBots();
-      alert('✓ Bot duplicated successfully!');
-    } catch (err: any) {
-      alert(err.message);
+      setActionNotice({ type: 'success', message: 'Bot duplicated successfully.' });
+    } catch (err) {
+      setActionNotice({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not duplicate the bot.',
+      });
     }
   };
 
   // Delete Bot
   const handleDeleteBot = async (botId: string, botName: string) => {
-    if (!confirm(`Delete "${botName}"? This bot will be removed from your workspace.`)) return;
-    try {
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${botId}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error?.message || 'Failed to delete bot');
-      }
-      await fetchBots();
-      if (activeBotId === botId) {
-        setActiveBotId('sofi');
-        createNewSession('sofi', true);
-      }
-    } catch (err: any) {
-      alert(err.message);
-    }
+    setPendingConfirmation({
+      title: `Delete ${botName}?`,
+      message: 'This bot will be removed from your workspace.',
+      confirmLabel: 'Delete bot',
+      onConfirm: async () => {
+        setActionNotice(null);
+        try {
+          const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/bots/${botId}`, {
+            method: 'DELETE',
+          });
+          await readCouncilData(res, 'bot deletion');
+          await fetchBots();
+          if (activeBotId === botId) {
+            setActiveBotId('sofi');
+            createNewSession('sofi', true);
+          }
+          setActionNotice({ type: 'success', message: `${botName} was deleted.` });
+        } catch (err) {
+          setActionNotice({
+            type: 'error',
+            message: err instanceof Error ? err.message : 'Could not delete the bot.',
+          });
+        }
+      },
+    });
   };
 
   // Save BYOK Key
@@ -1176,6 +1233,7 @@ export default function CouncilView({
     e.preventDefault();
     if (!credKey.trim()) return;
 
+    setActionNotice(null);
     setSavingCred(true);
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials`, {
@@ -1188,17 +1246,17 @@ export default function CouncilView({
         }),
       });
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error?.message || 'Failed to save credential');
-      }
+      await readCouncilData(res, 'provider credential save');
 
       setCredKey('');
       setCredLabel('');
       await fetchCredentials();
-      alert('✓ API Key encrypted and linked to all matching bots!');
-    } catch (err: any) {
-      alert(`Failed to save key: ${err.message}`);
+      setActionNotice({ type: 'success', message: 'Provider credential saved securely.' });
+    } catch (err) {
+      setActionNotice({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not save the provider credential.',
+      });
     } finally {
       setSavingCred(false);
     }
@@ -1206,15 +1264,27 @@ export default function CouncilView({
 
   // Delete BYOK Key
   const handleDeleteCredential = async (credId: string) => {
-    if (!confirm('Revoke and delete this provider credential?')) return;
-    try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials/${credId}`, {
-        method: 'DELETE',
-      });
-      await fetchCredentials();
-    } catch (err: any) {
-      alert(err.message);
-    }
+    setPendingConfirmation({
+      title: 'Revoke provider credential?',
+      message: 'Bots using this credential may no longer be able to access their model provider.',
+      confirmLabel: 'Revoke credential',
+      onConfirm: async () => {
+        setActionNotice(null);
+        try {
+          const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/provider-credentials/${credId}`, {
+            method: 'DELETE',
+          });
+          await readCouncilData(res, 'provider credential deletion');
+          await fetchCredentials();
+          setActionNotice({ type: 'success', message: 'Provider credential revoked.' });
+        } catch (err) {
+          setActionNotice({
+            type: 'error',
+            message: err instanceof Error ? err.message : 'Could not revoke the provider credential.',
+          });
+        }
+      },
+    });
   };
 
   // Add Fact to Memory
@@ -1232,10 +1302,9 @@ export default function CouncilView({
         }),
       });
 
-      if (res.ok) {
-        setNewFact('');
-        await fetchMemory();
-      }
+      await readCouncilData(res, 'memory fact creation');
+      setNewFact('');
+      await fetchMemory();
     } catch (err) {
       console.warn('Failed to add memory fact:', err);
     } finally {
@@ -1379,6 +1448,57 @@ export default function CouncilView({
           </button>
         </div>
       </div>
+
+      {actionNotice && (
+        <div
+          role={actionNotice.type === 'error' ? 'alert' : 'status'}
+          className={`flex items-center justify-between gap-3 border-b px-4 py-2 text-xs ${
+            actionNotice.type === 'error'
+              ? 'border-rose-500/20 bg-rose-500/10 text-rose-800 dark:text-rose-200'
+              : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            {actionNotice.type === 'error' ? (
+              <AlertCircle size={15} className="shrink-0 text-rose-500" />
+            ) : (
+              <CheckCircle2 size={15} className="shrink-0 text-emerald-500" />
+            )}
+            {actionNotice.message}
+          </span>
+          <button
+            type="button"
+            onClick={() => setActionNotice(null)}
+            aria-label="Dismiss notification"
+            className="shrink-0 rounded p-1 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+      {integrationError && (
+        <div role="alert" className="flex items-center justify-between gap-3 border-b border-rose-500/20 bg-rose-500/10 px-4 py-2 text-xs text-rose-800 dark:text-rose-200">
+          <span className="flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0 text-rose-500" />
+            <span>Council connection issue: {integrationError}</span>
+          </span>
+          <button
+            type="button"
+            onClick={async () => {
+              const results = await Promise.all([
+                fetchBots(),
+                fetchCredentials(),
+                fetchSessions(),
+                fetchMemory(),
+              ]);
+              if (results.every(Boolean)) setIntegrationError(null);
+            }}
+            className="shrink-0 rounded-lg border border-rose-500/30 px-2.5 py-1 font-semibold hover:bg-rose-500/10"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* VIEW 1: CHAT STUDIO */}
       {studioView === 'chat' && (
@@ -2652,6 +2772,47 @@ export default function CouncilView({
           </div>
         </div>
       )}
+
+      <DialogShell
+        isOpen={pendingConfirmation !== null}
+        onClose={() => setPendingConfirmation(null)}
+        label={pendingConfirmation?.title}
+        className="max-w-md"
+      >
+        {pendingConfirmation && (
+          <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-rose-100 p-2.5 text-rose-600 dark:bg-rose-950 dark:text-rose-400">
+                <AlertTriangle size={20} />
+              </span>
+              <div>
+                <h2 className="font-bold text-slate-900 dark:text-slate-100">{pendingConfirmation.title}</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{pendingConfirmation.message}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingConfirmation(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const confirmation = pendingConfirmation;
+                  setPendingConfirmation(null);
+                  if (confirmation) void confirmation.onConfirm();
+                }}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+              >
+                {pendingConfirmation.confirmLabel}
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogShell>
     </div>
   );
 }

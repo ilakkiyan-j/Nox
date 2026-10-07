@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Clock,
   Zap,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { NavTab } from './Navigation';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { appendTimeZone } from '../lib/date';
 
 interface TimeViewProps {
   onNavigate?: (tab: NavTab) => void;
@@ -32,7 +33,10 @@ export default function TimeView({ onNavigate }: TimeViewProps) {
     upcoming: [],
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const timeFeedRequestRef = useRef<Promise<void> | null>(null);
   const [activeTypeFilter, setActiveTypeFilter] = useState<'ALL' | 'TASK' | 'EVENT' | 'REMINDER' | 'MILESTONE' | 'HABIT'>('ALL');
 
   useEffect(() => {
@@ -43,32 +47,54 @@ export default function TimeView({ onNavigate }: TimeViewProps) {
     return () => clearInterval(interval);
   }, []);
 
-  const fetchTimeFeed = async () => {
-    try {
-      setLoading(true);
-      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/time`);
-      const data = await res.json();
-      if (data.success) {
+  const fetchTimeFeed = () => {
+    if (timeFeedRequestRef.current) return timeFeedRequestRef.current;
+    setLoading(true);
+    const request = (async () => {
+      try {
+        const res = await fetchWithUser(appendTimeZone(`${API_BASE_URL}/api/v1/time`));
+        const data = await res.json();
+        if (!res.ok || !data?.success || !data.data ||
+            !Array.isArray(data.data.now) || !Array.isArray(data.data.next) ||
+            !Array.isArray(data.data.upcoming)) {
+          throw new Error(data?.error?.message || `Time feed request failed (HTTP ${res.status})`);
+        }
         setTimeData(data.data);
+        setError(null);
+      } catch (err) {
+        console.error('Fetch time feed error:', err);
+        setError(err instanceof Error ? err.message : 'Unable to load your time feed.');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Fetch time feed error:', err);
-    } finally {
-      setLoading(false);
-    }
+    })();
+    timeFeedRequestRef.current = request;
+    void request.then(() => {
+      if (timeFeedRequestRef.current === request) timeFeedRequestRef.current = null;
+    });
+    return request;
   };
 
   const handleToggleTaskComplete = async (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (completingTaskId) return;
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
+      setCompletingTaskId(taskId);
+      const res = await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' }),
       });
-      fetchTimeFeed();
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error?.message || `Task update failed (HTTP ${res.status})`);
+      }
+      await fetchTimeFeed();
     } catch (err) {
       console.error('Failed to complete task:', err);
+      setError(err instanceof Error ? err.message : 'Unable to complete this task.');
+    } finally {
+      setCompletingTaskId(null);
     }
   };
 
@@ -170,7 +196,8 @@ export default function TimeView({ onNavigate }: TimeViewProps) {
             <button
               type="button"
               onClick={(e) => handleToggleTaskComplete(item.id, e)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-xs font-bold flex items-center space-x-1.5 transition-all"
+              disabled={completingTaskId !== null}
+              className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-xs font-bold flex items-center space-x-1.5 transition-all disabled:cursor-not-allowed disabled:opacity-50"
               title="Mark task completed"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -199,6 +226,18 @@ export default function TimeView({ onNavigate }: TimeViewProps) {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-200">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => void fetchTimeFeed()}
+            className="rounded-lg px-3 py-1.5 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Dynamic Live Time Beacon Header */}
       <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
         <div className="absolute right-0 top-0 -mt-8 -mr-8 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />

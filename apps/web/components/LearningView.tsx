@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 
 interface LearningViewProps {
   learning: any[];
@@ -14,6 +15,7 @@ interface LearningViewProps {
 export default function LearningView({ learning, onRefresh }: LearningViewProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingLearning, setEditingLearning] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Card view state: expansion of learning modules per item
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
@@ -73,7 +75,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       : [];
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/learning`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,6 +86,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           modules,
         }),
       });
+      await assertApiSuccess(response, 'Could not create learning item');
       setTitle('');
       setUrl('');
       setDescription('');
@@ -91,7 +94,8 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       setShowCreate(false);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to create learning item:', err);
+      setError(err instanceof Error ? err.message : 'Could not create learning item');
     }
   };
 
@@ -100,7 +104,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
     if (!editingLearning) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${editingLearning.id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${editingLearning.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -111,10 +115,12 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           status: editingLearning.status,
         }),
       });
+      await assertApiSuccess(response, 'Could not update learning item');
       setEditingLearning(null);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to update learning item:', err);
+      setError(err instanceof Error ? err.message : 'Could not update learning item');
     }
   };
 
@@ -125,10 +131,12 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       message: 'Are you sure you want to delete this Learning item and all modules?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete learning item');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to delete learning item:', err);
+          setError(err instanceof Error ? err.message : 'Could not delete learning item');
         }
       },
     });
@@ -137,28 +145,32 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
   const handleToggleLearningStatus = async (item: any) => {
     const nextStatus = item.status === 'COMPLETED' ? 'IN_PROGRESS' : 'COMPLETED';
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${item.id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${item.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
       });
+      await assertApiSuccess(response, 'Could not update learning status');
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to update learning status:', err);
+      setError(err instanceof Error ? err.message : 'Could not update learning status');
     }
   };
 
   const handleToggleModule = async (moduleId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'NOT_STARTED' : 'COMPLETED';
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
+      await assertApiSuccess(response, 'Could not update module status');
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to update module status:', err);
+      setError(err instanceof Error ? err.message : 'Could not update module status');
     }
   };
 
@@ -171,14 +183,16 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       initialValue: '',
       onSubmit: async (val: string) => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}/modules`, {
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}/modules`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: val }),
           });
+          await assertApiSuccess(response, 'Could not add module');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to add module:', err);
+          setError(err instanceof Error ? err.message : 'Could not add module');
         }
       },
     });
@@ -191,10 +205,12 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       message: 'Are you sure you want to delete this Module?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete module');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to delete module:', err);
+          setError(err instanceof Error ? err.message : 'Could not delete module');
         }
       },
     });
@@ -208,14 +224,16 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       initialValue: currentTitle,
       onSubmit: async (val: string) => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, {
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: val }),
           });
+          await assertApiSuccess(response, 'Could not rename module');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to rename module:', err);
+          setError(err instanceof Error ? err.message : 'Could not rename module');
         }
       },
     });
@@ -225,6 +243,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
 
   return (
     <div className="space-y-6">
+      <ApiErrorNotice message={error} onDismiss={() => setError(null)} />
       {/* Header with Responsive Mobile Layout */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

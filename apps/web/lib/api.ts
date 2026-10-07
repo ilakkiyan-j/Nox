@@ -85,3 +85,30 @@ export async function fetchWithUser(url: string, options: RequestInit = {}) {
 
   return response;
 }
+
+export async function assertApiSuccess(response: Response, fallbackMessage: string): Promise<void> {
+  const responseText = await response.clone().text();
+  let payload: { success?: boolean; error?: { message?: unknown } } | null = null;
+  let invalidResponseBody = false;
+
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      invalidResponseBody = true;
+    }
+    if (
+      !invalidResponseBody &&
+      (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.success !== true)
+    ) {
+      invalidResponseBody = true;
+    }
+  }
+
+  if (!response.ok || invalidResponseBody) {
+    const apiMessage = payload?.error?.message;
+    const detail = typeof apiMessage === 'string' && apiMessage.trim() ? apiMessage : null;
+    const reason = !response.ok ? `HTTP ${response.status}` : 'invalid API response';
+    throw new Error(detail || `${fallbackMessage} (${reason})`);
+  }
+}

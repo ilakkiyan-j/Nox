@@ -22,16 +22,32 @@ import {
   Compass,
   Check,
   TrendingUp,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { NavTab } from './Navigation';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { formatCalendarDate, toCalendarDateKey, toLocalDateKey } from '../lib/date';
 
 interface DashboardViewProps {
   data: any;
   loading: boolean;
   onNavigate: (tab: NavTab) => void;
   onRefresh: () => void;
+}
+
+async function requireSuccessfulAction(response: Response, fallback: string): Promise<void> {
+  const payload = await response.json().catch(() => null) as {
+    success?: boolean;
+    error?: { message?: unknown };
+  } | null;
+  if (!response.ok || payload?.success !== true) {
+    const message = typeof payload?.error?.message === 'string'
+      ? payload.error.message
+      : `${fallback} (HTTP ${response.status})`;
+    throw new Error(message);
+  }
 }
 
 export default function DashboardView({ data, loading, onNavigate, onRefresh }: DashboardViewProps) {
@@ -43,6 +59,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const [animatingHabitId, setAnimatingHabitId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Destructure data safely — hooks must come BEFORE any early returns
   const {
@@ -55,36 +72,17 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
     reminders = [],
   } = data || {};
 
-  // Time of Day Greeting
-  const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return { text: 'Good morning', icon: '🌅' };
-    if (hour < 17) return { text: 'Good afternoon', icon: '☀️' };
-    if (hour < 21) return { text: 'Good evening', icon: '🌆' };
-    return { text: 'Good night', icon: '🌙' };
-  }, []);
+  // Use the user's local calendar day for habit logs and event comparisons.
+  const todayKey = toLocalDateKey();
 
-  // Today Date & Stats
-  const todayKey = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const todayStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }, []);
-
-  const todayEnd = useMemo(() => {
-    const d = new Date();
-    d.setHours(23, 59, 59, 999);
-    return d.getTime();
-  }, []);
-
-  // Momentum score calculation
-  const momentumScore = useMemo(() => {
-    const completedTasksToday = tasks.filter((t: any) => t.status === 'COMPLETED').length;
-    const activeHabitStreaks = habits.filter((h: any) => h.streakCount > 0).length;
-    const goalsCount = activeGoals.length;
-    return Math.min(100, (completedTasksToday * 15) + (activeHabitStreaks * 10) + (goalsCount * 5) + 30);
-  }, [tasks, habits, activeGoals]);
+  const hour = new Date().getHours();
+  const greeting = hour < 12
+    ? { text: 'Good morning', icon: '🌅' }
+    : hour < 17
+      ? { text: 'Good afternoon', icon: '☀️' }
+      : hour < 21
+        ? { text: 'Good evening', icon: '🌆' }
+        : { text: 'Good night', icon: '🌙' };
 
   // Generate 14-day history dates for habit heatmap
   const habitPastDays = useMemo(() => {
@@ -92,10 +90,10 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
     for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      days.push(d.toISOString().split('T')[0]);
+      days.push(toLocalDateKey(d));
     }
     return days;
-  }, []);
+  }, [todayKey]);
 
   // Early return AFTER all hooks — safe for React's hook ordering rules
   if (loading && !data) {
@@ -109,16 +107,19 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
 
   const handleHabitCheckin = async (habitId: string) => {
     try {
+      setActionError(null);
       setAnimatingHabitId(habitId);
-      await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}/log`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'COMPLETED' }),
+        body: JSON.stringify({ date: toLocalDateKey(), status: 'COMPLETED' }),
       });
+      await requireSuccessfulAction(response, 'Could not check in this habit');
       setTimeout(() => setAnimatingHabitId(null), 1000);
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Could not check in this habit');
       setAnimatingHabitId(null);
     }
   };
@@ -126,27 +127,33 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
   const handleTaskToggle = async (taskId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'COMPLETED' ? 'TODO' : 'COMPLETED';
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
+      setActionError(null);
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
+      await requireSuccessfulAction(response, 'Could not update this task');
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Could not update this task');
     }
   };
 
   const handleReminderToggle = async (reminderId: string, currentStatus: boolean) => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${reminderId}`, {
+      setActionError(null);
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${reminderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isCompleted: !currentStatus }),
       });
+      await requireSuccessfulAction(response, 'Could not update this reminder');
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Could not update this reminder');
     }
   };
 
@@ -157,10 +164,13 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
       message: `Are you sure you want to delete this ${name}?`,
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/${endpoint}/${id}`, { method: 'DELETE' });
+          setActionError(null);
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/${endpoint}/${id}`, { method: 'DELETE' });
+          await requireSuccessfulAction(response, `Could not delete this ${name}`);
           onRefresh();
         } catch (err) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : `Could not delete this ${name}`);
         }
       },
     });
@@ -168,6 +178,22 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
 
   return (
     <div className="space-y-6 w-full max-w-full min-w-0 overflow-hidden">
+      {actionError && (
+        <div role="alert" className="flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-200">
+          <div className="flex min-w-0 items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error"
+            className="shrink-0 rounded-md p-1 hover:bg-rose-100 dark:hover:bg-rose-900/50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Executive Daily Briefing & Telemetry Banner */}
       <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-slate-50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs relative overflow-hidden transition-colors">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
@@ -368,7 +394,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                     <div className="flex items-center space-x-2 shrink-0">
                       {task.dueDate && (
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                          {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          {formatCalendarDate(task.dueDate, undefined, { month: 'short', day: 'numeric' })}
                         </span>
                       )}
                       <button
@@ -485,7 +511,7 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                       </span>
                       {goal.targetDate && (
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                          Due {new Date(goal.targetDate).toLocaleDateString()}
+                          Due {formatCalendarDate(goal.targetDate)}
                         </span>
                       )}
                     </div>
@@ -621,9 +647,9 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
             ) : (
               <div className="space-y-2">
                 {upcomingEvents.map((event: any) => {
-                  const start = new Date(event.date).getTime();
-                  const end = event.endDate ? new Date(event.endDate).setHours(23, 59, 59, 999) : new Date(event.date).setHours(23, 59, 59, 999);
-                  const isOngoing = start <= todayEnd && end >= todayStart;
+                  const startDate = toCalendarDateKey(event.date);
+                  const endDate = toCalendarDateKey(event.endDate) || startDate;
+                  const isOngoing = Boolean(startDate && endDate && startDate <= todayKey && endDate >= todayKey);
 
                   return (
                     <div
@@ -644,8 +670,8 @@ export default function DashboardView({ data, loading, onNavigate, onRefresh }: 
                           )}
                         </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                          📅 {new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                          {event.endDate && ` – ${new Date(event.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+                          📅 {formatCalendarDate(event.date, undefined, { month: 'short', day: 'numeric' })}
+                          {event.endDate && ` – ${formatCalendarDate(event.endDate, undefined, { month: 'short', day: 'numeric' })}`}
                           {event.startTime && ` • ${event.startTime}`}
                         </p>
                       </div>

@@ -14,7 +14,8 @@ import {
   Filter,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 
 interface NotificationsViewProps {
   notifications: any[];
@@ -27,6 +28,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
   const [newTitle, setNewTitle] = useState('');
   const [newMessage, setNewMessage] = useState('');
   const [newType, setNewType] = useState('GENERAL');
+  const [error, setError] = useState<string | null>(null);
 
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -37,19 +39,23 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}/read`, { method: 'PATCH' });
+      await assertApiSuccess(response, 'Could not mark notification as read');
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to mark notification as read:', err);
+      setError(err instanceof Error ? err.message : 'Could not mark notification as read');
     }
   };
 
   const handleMarkAllRead = async () => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/mark-all-read`, { method: 'PATCH' });
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/mark-all-read`, { method: 'PATCH' });
+      await assertApiSuccess(response, 'Could not mark notifications as read');
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to mark notifications as read:', err);
+      setError(err instanceof Error ? err.message : 'Could not mark notifications as read');
     }
   };
 
@@ -60,10 +66,12 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
       message: 'Are you sure you want to delete this notification alert?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notifications/${id}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete notification');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to delete notification:', err);
+          setError(err instanceof Error ? err.message : 'Could not delete notification');
         }
       },
     });
@@ -76,10 +84,12 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
       message: 'Are you sure you want to clear all notification history?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/notifications`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notifications`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not clear notifications');
           onRefresh();
         } catch (err) {
-          console.error(err);
+          console.error('Failed to clear notifications:', err);
+          setError(err instanceof Error ? err.message : 'Could not clear notifications');
         }
       },
     });
@@ -90,7 +100,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
     if (!newTitle.trim() || !newMessage.trim()) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/notifications`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/notifications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -99,13 +109,15 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
           type: newType,
         }),
       });
+      await assertApiSuccess(response, 'Could not create notification');
 
       setNewTitle('');
       setNewMessage('');
       setShowCreate(false);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to create notification:', err);
+      setError(err instanceof Error ? err.message : 'Could not create notification');
     }
   };
 
@@ -133,6 +145,7 @@ export default function NotificationsView({ notifications, onRefresh }: Notifica
 
   return (
     <div className="space-y-6 max-w-4xl">
+      <ApiErrorNotice message={error} onDismiss={() => setError(null)} />
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

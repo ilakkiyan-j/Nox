@@ -1,17 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
+import { parseDateInput } from '../lib/date-validation';
 import { getOwnedGoal, validateGoalRelation } from '../lib/ownership';
 import { GOAL_STATUSES, isSafeString, limitString } from '../lib/validate';
 
 const router = Router();
-
-function parseDate(value: unknown): Date | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const d = new Date(String(value));
-  return isNaN(d.getTime()) ? null : d;
-}
 
 router.get('/goals', async (req: Request, res: Response) => {
   try {
@@ -51,12 +45,13 @@ router.post('/goals', async (req: Request, res: Response) => {
         title: limitString(title.trim(), 200),
         description: typeof description === 'string' ? limitString(description, 2000) : (description as string | null),
         status: (status as string) || 'IN_PROGRESS',
-        startDate: parseDate(startDate) ?? new Date(),
-        targetDate: (parseDate(targetDate) ?? null) as Date | null,
+        startDate: parseDateInput(startDate, 'Start date') ?? new Date(),
+        targetDate: (parseDateInput(targetDate, 'Target date') ?? null) as Date | null,
       },
     });
     return apiResponse(res, goal, 201);
   } catch (err: unknown) {
+    if (err instanceof HttpError) return apiError(res, err.message, err.statusCode);
     const message = err instanceof Error ? err.message : 'Failed to create goal';
     return apiError(res, message, 500);
   }
@@ -79,8 +74,8 @@ router.patch('/goals/:id', async (req: Request, res: Response) => {
       if (!GOAL_STATUSES.includes(status as any)) return apiError(res, `Status must be one of ${GOAL_STATUSES.join(', ')}`);
       data.status = status;
     }
-    if (targetDate !== undefined) data.targetDate = (parseDate(targetDate) ?? null) as Date | null;
-    if (startDate !== undefined) data.startDate = (parseDate(startDate) ?? null) as Date | null;
+    if (targetDate !== undefined) data.targetDate = (parseDateInput(targetDate, 'Target date') ?? null) as Date | null;
+    if (startDate !== undefined) data.startDate = (parseDateInput(startDate, 'Start date') ?? null) as Date | null;
 
     const updated = await db.goal.update({ where: { id }, data });
     return apiResponse(res, updated);

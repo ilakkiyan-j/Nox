@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Folder, Copy, Check, StickyNote, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import DialogShell from './ui/Dialog';
+import ApiErrorNotice from './ui/ApiErrorNotice';
 
 interface NoteStudioModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export default function NoteStudioModal({
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (note) {
@@ -62,6 +64,7 @@ export default function NoteStudioModal({
     if (!title.trim() && !content.trim()) return;
 
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave({
         id: note?.id,
@@ -73,6 +76,7 @@ export default function NoteStudioModal({
       onClose();
     } catch (err) {
       console.error('Failed to save note:', err);
+      setSaveError(err instanceof Error ? err.message : 'Could not save note');
     } finally {
       setSaving(false);
     }
@@ -154,6 +158,7 @@ export default function NoteStudioModal({
 
       {/* ── WRITING BODY (TITLE + CONTENT) ── */}
       <div className="flex-1 p-6 flex flex-col space-y-4 overflow-y-auto min-h-0 bg-white dark:bg-slate-900">
+        <ApiErrorNotice message={saveError} onDismiss={() => setSaveError(null)} />
         {/* Title Input */}
         <input
           type="text"

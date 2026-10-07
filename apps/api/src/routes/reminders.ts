@@ -1,17 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
 import { apiError, apiResponse, HttpError } from '../lib/http';
+import { parseDateInput } from '../lib/date-validation';
 import { getOwnedReminder, validateEventRelation, validateGoalRelation, validateHabitRelation, validateLearningRelation, validateMilestoneRelation, validateTaskRelation } from '../lib/ownership';
 import { isSafeString, limitString } from '../lib/validate';
 
 const router = Router();
-
-function parseDate(value: unknown): Date | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const d = new Date(String(value));
-  return isNaN(d.getTime()) ? null : d;
-}
 
 const ENTITY_TYPES = ['TASK', 'EVENT', 'HABIT', 'GOAL', 'MILESTONE', 'LEARNING', 'GENERAL'];
 
@@ -49,7 +43,7 @@ router.post('/reminders', async (req: Request, res: Response) => {
       data: {
         userId: req.user!.id,
         title: limitString(title.trim(), 200),
-        remindAt: (parseDate(remindAt) ?? new Date()) as Date,
+        remindAt: (parseDateInput(remindAt, 'Reminder date') ?? new Date()) as Date,
         entityType: (entityType as string) || null,
         entityId: (entityId as string) || null,
       },
@@ -73,7 +67,10 @@ router.patch('/reminders/:id', async (req: Request, res: Response) => {
       if (!isSafeString(title)) return apiError(res, 'Title must be a non-empty string');
       data.title = limitString(title.trim(), 200);
     }
-    if (remindAt !== undefined) data.remindAt = (parseDate(remindAt) ?? undefined) as Date | undefined;
+    if (remindAt !== undefined) {
+      const parsed = parseDateInput(remindAt, 'Reminder date');
+      if (parsed) data.remindAt = parsed;
+    }
     if (isCompleted !== undefined) data.isCompleted = Boolean(isCompleted);
 
     if (entityType !== undefined) {

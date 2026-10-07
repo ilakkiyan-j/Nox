@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Shield, Plus, X, User, Mail, Lock, Key, Copy, Check, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 import DialogShell from './ui/Dialog';
 import NoxLogo from './NoxLogo';
 
@@ -29,8 +29,9 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
     setErrorMsg('');
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`);
+      await assertApiSuccess(res, 'Failed to fetch user directory');
       const data = await res.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setUsers(data.data);
       } else {
         setErrorMsg(data.error?.message || 'Failed to fetch user directory');
@@ -50,7 +51,7 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
   if (!isOpen) return null;
 
   const handleGeneratePassword = () => {
-    const randomPass = 'nox-' + Math.random().toString(36).slice(-8);
+    const randomPass = `nox-${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
     setPassword(randomPass);
   };
 
@@ -65,6 +66,7 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
         body: JSON.stringify({ name, email, password, role }),
       });
 
+      await assertApiSuccess(res, 'Failed to provision account');
       const data = await res.json();
 
       if (res.ok && data.success) {
@@ -77,8 +79,8 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
         setErrorMsg(data.error?.message || 'Failed to provision account');
       }
     } catch (err) {
-      setErrorMsg('Server error during account creation');
-      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : 'Server error during account creation');
+      console.error('Failed to provision account:', err);
     }
   };
 
@@ -86,15 +88,11 @@ export default function AdminPanelModal({ isOpen, onClose }: AdminPanelModalProp
     setErrorMsg('');
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
-      if (res.ok) {
-        fetchUsers();
-      } else {
-        const data = await res.json();
-        setErrorMsg(data.error?.message || 'Failed to delete user');
-      }
+      await assertApiSuccess(res, 'Failed to delete user');
+      fetchUsers();
     } catch (err) {
-      setErrorMsg('Server connection error');
-      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : 'Server connection error');
+      console.error('Failed to delete user:', err);
     }
   };
 

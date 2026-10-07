@@ -1,7 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { db } from '@nox/database';
-import { apiError, apiResponse } from '../lib/http';
-import { dateToKey } from '../lib/streaks';
+import { apiError, apiResponse, HttpError } from '../lib/http';
+import {
+  dateOnlyFromKey,
+  dateOnlyKey,
+  formatDateOnly,
+  formatInstant,
+  getTimeZone,
+  zonedDayBounds,
+  zonedMidnightUtc,
+} from '../lib/timezone';
 
 const router = Router();
 
@@ -14,29 +22,19 @@ interface TimeItem {
   when?: string;
   sortAt: number;
   time?: string;
-}
-
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function endOfToday(): Date {
-  const d = new Date();
-  d.setHours(23, 59, 59, 999);
-  return d;
+  calendarDayKey?: string;
+  isDeadline?: boolean;
 }
 
 router.get('/time', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const now = new Date();
-    const todayStart = startOfToday();
-    const todayEnd = endOfToday();
-    const dayKey = dateToKey(now);
+    const timeZone = getTimeZone(req.query.timeZone);
+    const { dayKey, start: todayStart, end: todayEnd } = zonedDayBounds(now, timeZone);
+    const todayDate = dateOnlyFromKey(dayKey);
 
-    const [tasks, events, reminders, milestones, habits] = await Promise.all([
+    const [tasks, events, reminders, overdueReminders, milestones, habits] = await Promise.all([
       db.task.findMany({
         where: { userId, status: { in: ['TODO', 'IN_PROGRESS'] } },
         orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
@@ -46,7 +44,7 @@ router.get('/time', async (req: Request, res: Response) => {
         where: {
           userId,
           // Upcoming today-or-later, including open-ended events (endDate null).
-          OR: [{ date: { gte: todayStart } }, { endDate: { gte: todayStart } }],
+          OR: [{ date: { gte: todayDate } }, { endDate: { gte: todayDate } }],
         },
         orderBy: { date: 'asc' },
         include: { goal: true },
@@ -56,6 +54,11 @@ router.get('/time', async (req: Request, res: Response) => {
         where: { userId, isCompleted: false, remindAt: { gte: todayStart } },
         orderBy: { remindAt: 'asc' },
         take: 50,
+      }),
+      db.reminder.findMany({
+        where: { userId, isCompleted: false, remindAt: { lt: todayStart } },
+        orderBy: { remindAt: 'desc' },
+        take: 10,
       }),
       db.milestone.findMany({
         where: {
@@ -83,8 +86,12 @@ router.get('/time', async (req: Request, res: Response) => {
     const upcomingItems: TimeItem[] = [];
 
     function push(item: TimeItem) {
-      const isOverdue = item.sortAt > 0 && item.sortAt < now.getTime() && (item.type === 'TASK' || item.type === 'REMINDER');
-      const isNowWindow = item.sortAt > 0 && item.sortAt >= now.getTime() - 1 * 60 * 60 * 1000 && item.sortAt <= now.getTime() + 2 * 60 * 60 * 1000;
+      const isOverdue = item.isDeadline && item.calendarDayKey
+        ? item.calendarDayKey < dayKey
+        : item.isDeadline && item.sortAt > 0 && item.sortAt < now.getTime();
+      const isNowWindow = !item.calendarDayKey && item.sortAt > 0 &&
+        item.sortAt >= now.getTime() - 1 * 60 * 60 * 1000 &&
+        item.sortAt <= now.getTime() + 2 * 60 * 60 * 1000;
 
       if (isOverdue) {
         nowItems.push({ ...item, label: 'Overdue' });
@@ -92,7 +99,10 @@ router.get('/time', async (req: Request, res: Response) => {
         nowItems.push({ ...item, label: item.label || 'Active Now' });
       } else if (item.type === 'TASK' && item.sortAt === 0) {
         nextItems.push({ ...item, label: 'No due date' });
-      } else if (item.sortAt <= todayEnd.getTime()) {
+      } else if (
+        (item.calendarDayKey && item.calendarDayKey === dayKey) ||
+        (!item.calendarDayKey && item.sortAt <= todayEnd.getTime())
+      ) {
         nextItems.push({ ...item, label: item.label || 'Today' });
       } else {
         upcomingItems.push({ ...item });
@@ -100,27 +110,44 @@ router.get('/time', async (req: Request, res: Response) => {
     }
 
     for (const t of tasks) {
-      const sortAt = t.dueDate ? new Date(t.dueDate).getTime() : t.startDate ? new Date(t.startDate).getTime() : 0;
+      const dueDate = t.dueDate as Date | null;
+      const startDate = t.startDate as Date | null;
+      const calendarDayKey = dueDate
+        ? dateOnlyKey(dueDate)
+        : startDate
+          ? dateOnlyKey(startDate)
+          : undefined;
+      const sortAt = dueDate
+        ? dateOnlyFromKey(calendarDayKey!).getTime()
+        : startDate
+          ? dateOnlyFromKey(calendarDayKey!).getTime()
+          : 0;
       push({
         type: 'TASK',
         id: t.id,
         title: t.title,
         subtitle: t.goal?.title,
-        when: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : t.startDate ? `Starts ${new Date(t.startDate).toLocaleDateString()}` : undefined,
-        time: t.dueDate ? new Date(t.dueDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
+        when: dueDate
+          ? formatDateOnly(dueDate)
+          : startDate
+            ? `Starts ${formatDateOnly(startDate)}`
+            : undefined,
         sortAt,
+        calendarDayKey,
+        isDeadline: Boolean(dueDate),
       });
     }
 
     for (const e of events) {
-      const start = new Date(e.date).getTime();
-      const end = e.endDate ? new Date(e.endDate).getTime() : start;
-      const isOngoing = start <= now.getTime() && end >= todayStart.getTime();
-
-      let whenStr = new Date(e.date).toLocaleDateString();
-      if (e.endDate) {
-        whenStr = `${new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(e.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-      }
+      const startDate = e.date as Date;
+      const endDate = (e.endDate || e.date) as Date;
+      const startKey = dateOnlyKey(startDate);
+      const endKey = dateOnlyKey(endDate);
+      const isOngoing = startKey <= dayKey && endKey >= dayKey;
+      const whenStr = e.endDate
+        ? `${formatDateOnly(startDate, { month: 'short', day: 'numeric' })} – ${formatDateOnly(endDate, { month: 'short', day: 'numeric' })}`
+        : formatDateOnly(startDate);
+      const start = dateOnlyFromKey(startKey).getTime();
 
       push({
         type: 'EVENT',
@@ -131,30 +158,37 @@ router.get('/time', async (req: Request, res: Response) => {
         time: e.startTime || (e.endTime ? `ends ${e.endTime}` : undefined),
         sortAt: isOngoing ? Math.max(start, now.getTime()) : start,
         label: isOngoing ? 'Ongoing' : undefined,
+        calendarDayKey: isOngoing ? dayKey : startKey,
       });
     }
 
-    for (const r of reminders) {
+    for (const r of [...overdueReminders, ...reminders]) {
       const at = new Date(r.remindAt).getTime();
       push({
         type: 'REMINDER',
         id: r.id,
         title: r.title,
-        when: new Date(r.remindAt).toLocaleDateString(),
-        time: new Date(r.remindAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        when: formatInstant(r.remindAt, timeZone),
+        time: formatInstant(r.remindAt, timeZone, { hour: '2-digit', minute: '2-digit' }),
         sortAt: at,
+        calendarDayKey: undefined,
+        isDeadline: true,
       });
     }
 
     for (const m of milestones) {
-      const at = new Date(m.targetDate as Date).getTime();
+      const targetDate = m.targetDate as Date;
+      const milestoneDayKey = dateOnlyKey(targetDate);
+      const at = dateOnlyFromKey(milestoneDayKey).getTime();
       push({
         type: 'MILESTONE',
         id: m.id,
         title: m.title,
         subtitle: m.goal?.title,
-        when: new Date(m.targetDate as Date).toLocaleDateString(),
+        when: formatDateOnly(targetDate),
         sortAt: at,
+        calendarDayKey: milestoneDayKey,
+        isDeadline: true,
       });
     }
 
@@ -163,8 +197,8 @@ router.get('/time', async (req: Request, res: Response) => {
       if (!h.reminderTime) continue;
       const periodic = h.frequency === 'WEEKLY' ? `${dayKey}-W` : `${dayKey}`;
       const [hh, mm] = h.reminderTime.match(/\d{1,2}/)?.map(Number) || [0, 0];
-      const sortAt = new Date(now);
-      sortAt.setHours(hh, mm, 0, 0);
+      const sortAt = zonedMidnightUtc(dayKey, timeZone);
+      sortAt.setUTCMinutes(sortAt.getUTCMinutes() + hh * 60 + mm);
       nextItems.push({
         type: 'HABIT',
         id: h.id,
@@ -173,6 +207,7 @@ router.get('/time', async (req: Request, res: Response) => {
         when: `Due ${h.reminderTime}`,
         sortAt: sortAt.getTime(),
         label: periodic,
+        calendarDayKey: dayKey,
       });
     }
 
@@ -183,7 +218,8 @@ router.get('/time', async (req: Request, res: Response) => {
     return apiResponse(res, { now: nowItems, next: nextItems, upcoming: upcomingItems });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to build time feed';
-    return apiError(res, message, 500);
+    const status = err instanceof HttpError ? err.statusCode : 500;
+    return apiError(res, message, status);
   }
 });
 

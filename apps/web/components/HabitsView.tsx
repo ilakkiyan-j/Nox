@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Flame, Plus, Check, Edit2, Trash2, X, Save } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { toLocalDateKey } from '../lib/date';
 
 interface HabitsViewProps {
   habits: any[];
@@ -24,6 +25,7 @@ function formatDisplayTime(timeStr?: string): string {
 export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingHabit, setEditingHabit] = useState<any | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -36,12 +38,22 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
   const [frequency, setFrequency] = useState('DAILY');
   const [reminderTime, setReminderTime] = useState('08:00');
 
+  const requestHabitMutation = async (url: string, options: RequestInit) => {
+    const response = await fetchWithUser(url, options);
+    const data = await response.json();
+    if (!response.ok || data?.success !== true) {
+      throw new Error(data?.error?.message || `Habit update failed (HTTP ${response.status})`);
+    }
+    return data;
+  };
+
   const handleCreateHabit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/habits`, {
+      setActionError(null);
+      await requestHabitMutation(`${API_BASE_URL}/api/v1/habits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -57,6 +69,7 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to create the habit.');
     }
   };
 
@@ -65,7 +78,8 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
     if (!editingHabit) return;
 
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${editingHabit.id}`, {
+      setActionError(null);
+      await requestHabitMutation(`${API_BASE_URL}/api/v1/habits/${editingHabit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -79,6 +93,7 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to update the habit.');
     }
   };
 
@@ -89,10 +104,12 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
       message: 'Are you sure you want to delete this Habit routine?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}`, { method: 'DELETE' });
+          setActionError(null);
+          await requestHabitMutation(`${API_BASE_URL}/api/v1/habits/${habitId}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : 'Unable to delete the habit.');
         }
       },
     });
@@ -100,19 +117,34 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
 
   const handleCheckin = async (habitId: string) => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/habits/${habitId}/log`, {
+      setActionError(null);
+      await requestHabitMutation(`${API_BASE_URL}/api/v1/habits/${habitId}/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'COMPLETED' }),
+        body: JSON.stringify({ date: toLocalDateKey(), status: 'COMPLETED' }),
       });
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to record the habit check-in.');
     }
   };
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-200">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss habit error"
+            className="rounded-lg p-1 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -242,7 +274,7 @@ export default function HabitsView({ habits, onRefresh }: HabitsViewProps) {
       {/* Habits Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {habits.map((habit) => {
-          const todayStr = new Date().toISOString().split('T')[0];
+          const todayStr = toLocalDateKey();
           const todayLog = habit.logs?.find((l: any) => l.date === todayStr);
           const isDoneToday = todayLog?.status === 'COMPLETED';
 

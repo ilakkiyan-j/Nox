@@ -7,7 +7,8 @@ import {
   Volume2, Mic, Play, Pause, Radio, Check, SlidersHorizontal, Type
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser, setStoredUser } from '../lib/api';
 import Avatar from './Avatar';
 import NoxLogo from './NoxLogo';
 
@@ -17,6 +18,7 @@ interface UserControlPanelProps {
   onSignOut: () => void;
   onOpenAdmin?: () => void;
   onOpenTypography?: () => void;
+  onProfileUpdated?: (user: any) => void;
   currentUser?: any;
   stats?: {
     goalsCount: number;
@@ -37,6 +39,7 @@ export default function UserControlPanel({
   onSignOut,
   onOpenAdmin,
   onOpenTypography,
+  onProfileUpdated,
   currentUser,
   stats,
 }: UserControlPanelProps) {
@@ -47,6 +50,7 @@ export default function UserControlPanel({
   const [savingProfile, setSavingProfile] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [uploadingCloud, setUploadingCloud] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Voice Settings State
@@ -65,8 +69,11 @@ export default function UserControlPanel({
   useEffect(() => {
     if (currentUser?.name) setDisplayName(currentUser.name);
     if (currentUser?.avatarUrl !== undefined) setAvatarUrl(currentUser.avatarUrl || '');
-    loadVoiceSettings();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (isOpen && activeSection === 'voice') loadVoiceSettings();
+  }, [isOpen, activeSection, currentUser]);
 
   const loadVoiceSettings = async () => {
     try {
@@ -74,10 +81,14 @@ export default function UserControlPanel({
         fetchWithUser(`${API_BASE_URL}/api/v1/voice/preferences`),
         fetchWithUser(`${API_BASE_URL}/api/v1/voice/catalog`),
       ]);
+      await Promise.all([
+        assertApiSuccess(prefRes, 'Could not load voice preferences'),
+        assertApiSuccess(catalogRes, 'Could not load voice catalog'),
+      ]);
       const prefData = await prefRes.json();
       const catalogData = await catalogRes.json();
 
-      if (prefData.success && prefData.data) {
+      if (prefData.data && typeof prefData.data === 'object') {
         setVoiceModel(prefData.data.voiceModel || 'en-US-AvaMultilingualNeural');
         const pMatch = (prefData.data.pitch || '+0Hz').match(/([+-]?\d+)/);
         if (pMatch) setPitchHz(parseInt(pMatch[1], 10));
@@ -86,16 +97,20 @@ export default function UserControlPanel({
         setIsCloneEnabled(prefData.data.isCloneEnabled ?? true);
       }
 
-      if (catalogData.success && catalogData.data) {
+      if (Array.isArray(catalogData.data)) {
         setVoiceCatalog(catalogData.data);
+      } else {
+        throw new Error('Invalid voice catalog response');
       }
     } catch (err) {
       console.warn('Could not load voice preferences:', err);
+      setPanelError(err instanceof Error ? err.message : 'Could not load voice preferences');
     }
   };
 
   const handleSaveVoice = async () => {
     setSavingVoice(true);
+    setPanelError(null);
     try {
       const pitchStr = `${pitchHz >= 0 ? '+' : ''}${pitchHz}Hz`;
       const rateStr = `${ratePct >= 0 ? '+' : ''}${ratePct}%`;
@@ -110,13 +125,12 @@ export default function UserControlPanel({
           isCloneEnabled,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setVoiceSaveSuccess(true);
-        setTimeout(() => setVoiceSaveSuccess(false), 2500);
-      }
+      await assertApiSuccess(res, 'Could not save voice preferences');
+      setVoiceSaveSuccess(true);
+      setTimeout(() => setVoiceSaveSuccess(false), 2500);
     } catch (err) {
       console.error('Failed to save voice preference:', err);
+      setPanelError(err instanceof Error ? err.message : 'Could not save voice preferences');
     } finally {
       setSavingVoice(false);
     }
@@ -131,6 +145,7 @@ export default function UserControlPanel({
     }
 
     setTestingVoice(true);
+    setPanelError(null);
     try {
       const pitchStr = `${pitchHz >= 0 ? '+' : ''}${pitchHz}Hz`;
       const rateStr = `${ratePct >= 0 ? '+' : ''}${ratePct}%`;
@@ -145,17 +160,24 @@ export default function UserControlPanel({
           rate: rateStr,
         }),
       });
+      await assertApiSuccess(res, 'Could not synthesize voice sample');
       const data = await res.json();
-      if (data.success && data.data?.audioUrl) {
+      if (data.data?.audioUrl) {
         const audio = new Audio(data.data.audioUrl);
         audioPlayerRef.current = audio;
         setIsPlayingTest(true);
         audio.onended = () => setIsPlayingTest(false);
-        audio.onerror = () => setIsPlayingTest(false);
+        audio.onerror = () => {
+          setIsPlayingTest(false);
+          setPanelError('Voice sample audio could not be played');
+        };
         await audio.play();
+      } else {
+        throw new Error('Voice service returned no audio sample');
       }
     } catch (err) {
       console.error('Voice test synthesis failed:', err);
+      setPanelError(err instanceof Error ? err.message : 'Voice test synthesis failed');
     } finally {
       setTestingVoice(false);
     }
@@ -172,24 +194,27 @@ export default function UserControlPanel({
 
   const uploadToCloudCDN = async (base64Payload: string) => {
     setUploadingCloud(true);
+    setPanelError(null);
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/auth/avatar/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: base64Payload }),
       });
+      await assertApiSuccess(res, 'Could not upload profile image');
       const data = await res.json();
-      if (data.success && data.data?.url) {
-        setAvatarUrl(data.data.url);
-        if (data.data.user && typeof window !== 'undefined') {
-          localStorage.setItem('nox_user', JSON.stringify(data.data.user));
-        }
-      } else {
-        setAvatarUrl(base64Payload);
+      if (!data.data?.url) {
+        throw new Error('Avatar service returned no image URL');
       }
+      setAvatarUrl(data.data.url);
+      const updatedUser = data.data.user || { ...currentUser, avatarUrl: data.data.url };
+      if (typeof window !== 'undefined') {
+        setStoredUser(updatedUser);
+      }
+      onProfileUpdated?.(updatedUser);
     } catch (err) {
       console.error('Cloud avatar upload failed:', err);
-      setAvatarUrl(base64Payload);
+      setPanelError(err instanceof Error ? err.message : 'Could not upload profile image');
     } finally {
       setUploadingCloud(false);
     }
@@ -198,14 +223,24 @@ export default function UserControlPanel({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPanelError(null);
+    if (!file.type.startsWith('image/')) {
+      setPanelError('Select an image file to use as your profile picture.');
+      e.target.value = '';
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
-      alert('File size is too large. Please select an image under 10MB.');
+      setPanelError('Image is too large. Please choose a file under 10 MB.');
+      e.target.value = '';
       return;
     }
     const reader = new FileReader();
     reader.onload = (event) => {
       const rawUrl = event.target?.result as string;
-      if (!rawUrl) return;
+      if (!rawUrl) {
+        setPanelError('Could not read the selected image.');
+        return;
+      }
 
       // Compress photo to 256x256 thumbnail using Canvas before cloud upload
       const img = new Image();
@@ -224,16 +259,20 @@ export default function UserControlPanel({
           const compressed = canvas.toDataURL('image/jpeg', 0.88);
           uploadToCloudCDN(compressed);
         } else {
-          uploadToCloudCDN(rawUrl);
+          setPanelError('Image processing is unavailable in this browser. Try another browser.');
         }
       };
+      img.onerror = () => setPanelError('The selected file could not be decoded as an image.');
       img.src = rawUrl;
     };
+    reader.onerror = () => setPanelError('Could not read the selected image.');
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleSaveProfile = async () => {
     setSavingProfile(true);
+    setPanelError(null);
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/auth/profile`, {
         method: 'PATCH',
@@ -243,16 +282,20 @@ export default function UserControlPanel({
           avatarUrl: avatarUrl.trim() || null,
         }),
       });
+      await assertApiSuccess(res, 'Could not save profile');
       const data = await res.json();
-      if (data.success && data.data) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('nox_user', JSON.stringify(data.data));
-        }
+      if (!data.data) {
+        throw new Error('Profile service returned no updated profile');
       }
+      if (typeof window !== 'undefined') {
+        setStoredUser(data.data);
+      }
+      onProfileUpdated?.(data.data);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to save profile:', err);
+      setPanelError(err instanceof Error ? err.message : 'Could not save profile');
     } finally {
       setSavingProfile(false);
     }
@@ -406,6 +449,7 @@ export default function UserControlPanel({
 
         {/* Main Workstation Workspace Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 max-w-6xl w-full mx-auto space-y-8 pb-16 md:pb-10">
+          <ApiErrorNotice message={panelError} onDismiss={() => setPanelError(null)} />
 
           {/* ── OVERVIEW SECTION ── */}
           {activeSection === 'overview' && (

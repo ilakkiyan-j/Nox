@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Shield, Plus, Key, Copy, Check, Trash2, RefreshCw, Users, Lock, LogOut, Sun, Moon, AlertCircle } from 'lucide-react';
 import { useTheme } from './ThemeContext';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 import NoxLogo from './NoxLogo';
 
 interface AdminDashboardViewProps {
@@ -30,8 +30,9 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
     setErrorMsg('');
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users`);
+      await assertApiSuccess(res, 'Failed to fetch user directory');
       const data = await res.json();
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setUsers(data.data);
       } else {
         setErrorMsg(data.error?.message || 'Failed to fetch user directory');
@@ -49,7 +50,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
   }, []);
 
   const handleGeneratePassword = () => {
-    const randomPass = 'nox-' + Math.random().toString(36).slice(-8);
+    const randomPass = `nox-${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
     setPassword(randomPass);
   };
 
@@ -65,6 +66,7 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
         body: JSON.stringify({ name, email, password, role }),
       });
 
+      await assertApiSuccess(res, 'Failed to create user account');
       const data = await res.json();
 
       if (res.ok && data.success) {
@@ -79,8 +81,8 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
         setErrorMsg(data.error?.message || 'Failed to create user account');
       }
     } catch (err) {
-      setErrorMsg('Server connection error during account creation');
-      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : 'Server connection error during account creation');
+      console.error('Failed to create user account:', err);
     }
   };
 
@@ -88,17 +90,13 @@ export default function AdminDashboardView({ onSignOut }: AdminDashboardViewProp
     setErrorMsg('');
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
-      if (res.ok) {
-        setSuccessMsg('Account access revoked');
-        setTimeout(() => setSuccessMsg(''), 3000);
-        fetchUsers();
-      } else {
-        const data = await res.json();
-        setErrorMsg(data.error?.message || 'Failed to revoke account');
-      }
+      await assertApiSuccess(res, 'Failed to revoke account');
+      setSuccessMsg('Account access revoked');
+      setTimeout(() => setSuccessMsg(''), 3000);
+      fetchUsers();
     } catch (err) {
-      setErrorMsg('Server connection error');
-      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : 'Server connection error');
+      console.error('Failed to revoke account:', err);
     }
   };
 

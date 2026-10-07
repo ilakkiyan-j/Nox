@@ -7,11 +7,7 @@
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@nox/database": ["../../packages/database/dist/index.d.ts"]
-    }
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests/**/*", "**/*.test.ts"]

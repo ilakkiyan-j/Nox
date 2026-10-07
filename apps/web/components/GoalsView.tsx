@@ -3,7 +3,9 @@
 import React, { useState } from 'react';
 import { Target, Plus, X, Save, Edit2, Trash2 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
+import { formatCalendarDate, toCalendarDateKey } from '../lib/date';
 
 interface GoalsViewProps {
   goals: any[];
@@ -20,6 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingGoal, setEditingGoal] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean; title: string; message: string; onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
@@ -36,22 +39,26 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
     e.preventDefault();
     if (!title.trim()) return;
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/goals`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/goals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, description, targetDate }),
       });
+      await assertApiSuccess(response, 'Could not create goal');
       setTitle(''); setDescription(''); setTargetDate('');
       setShowCreate(false);
       onRefresh();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error('Failed to create goal:', err);
+      setError(err instanceof Error ? err.message : 'Could not create goal');
+    }
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGoal) return;
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/goals/${editingGoal.id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/goals/${editingGoal.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -61,9 +68,13 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
           targetDate: editingGoal.targetDate || null,
         }),
       });
+      await assertApiSuccess(response, 'Could not update goal');
       setEditingGoal(null);
       onRefresh();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error('Failed to update goal:', err);
+      setError(err instanceof Error ? err.message : 'Could not update goal');
+    }
   };
 
   const handleDelete = (id: string, title: string) => {
@@ -73,15 +84,20 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
       message: `Delete "${title}" and all linked roadmaps, tasks and notes?`,
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/goals/${id}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/goals/${id}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete goal');
           onRefresh();
-        } catch (err) { console.error(err); }
+        } catch (err) {
+          console.error('Failed to delete goal:', err);
+          setError(err instanceof Error ? err.message : 'Could not delete goal');
+        }
       },
     });
   };
 
   return (
     <div className="space-y-6">
+      <ApiErrorNotice message={error} onDismiss={() => setError(null)} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -196,7 +212,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
             <div>
               <label className={labelCls}>Target Date</label>
               <input type="date"
-                value={editingGoal.targetDate ? new Date(editingGoal.targetDate).toISOString().split('T')[0] : ''}
+                value={toCalendarDateKey(editingGoal.targetDate) || ''}
                 onChange={(e) => setEditingGoal({ ...editingGoal, targetDate: e.target.value })}
                 className={inputCls} />
             </div>
@@ -289,7 +305,7 @@ export default function GoalsView({ goals, onRefresh }: GoalsViewProps) {
                   )}
                   {goal.targetDate && (
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                      Due {new Date(goal.targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      Due {formatCalendarDate(goal.targetDate, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   )}
                 </div>

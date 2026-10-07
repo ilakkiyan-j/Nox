@@ -33,7 +33,8 @@ import {
 } from 'lucide-react';
 import { TelegramIcon, WhatsAppIcon, ShortcutsIcon, WebhookIcon } from './ui/BrandIcons';
 import ConfirmModal from './ConfirmModal';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 
 interface MessageItem {
   id: string;
@@ -100,6 +101,12 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [allMessagesRaw, setAllMessagesRaw] = useState<MessageItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<{
+    message: string;
+    navigateTo?: string;
+    actionLabel?: string;
+  } | null>(null);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'WHATSAPP' | 'TELEGRAM' | 'STARRED' | 'ARCHIVED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSetupModal, setShowSetupModal] = useState(false);
@@ -132,6 +139,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
     isOpen: boolean;
     title: string;
     message: string;
+    confirmText?: string;
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
@@ -152,6 +160,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
       }
 
       const res = await fetchWithUser(url);
+      await assertApiSuccess(res, 'Could not load messages');
       const data = await res.json();
       if (res.ok && data.success) {
         setMessages(data.data || []);
@@ -159,12 +168,14 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
 
       // Fetch all for tab counts
       const countRes = await fetchWithUser(`${API_BASE_URL}/api/v1/messages?isArchived=false`);
+      await assertApiSuccess(countRes, 'Could not load message counts');
       const countData = await countRes.json();
       if (countRes.ok && countData.success) {
         setAllMessagesRaw(countData.data || []);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load messages:', err);
+      setActionError(err instanceof Error ? err.message : 'Could not load messages');
     } finally {
       setLoading(false);
     }
@@ -173,12 +184,16 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
   const loadForwarderStatus = async () => {
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/messages/telegram/forwarder/status`);
+      await assertApiSuccess(res, 'Could not load Telegram Forwarder status');
       const data = await res.json();
-      if (res.ok && data.success && data.data) {
+      if (data.data && typeof data.data === 'object') {
         setForwarderStatus(data.data);
+      } else {
+        throw new Error('Telegram Forwarder returned an invalid status');
       }
     } catch (err) {
       console.warn('Could not load forwarder status:', err);
+      setActionError(err instanceof Error ? err.message : 'Could not load Telegram Forwarder status');
     }
   };
 
@@ -202,6 +217,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
         body: JSON.stringify({ token: forwarderToken.trim() }),
       });
 
+      await assertApiSuccess(res, 'Failed to connect Telegram Forwarder Bot');
       const data = await res.json();
       if (res.ok && data.success) {
         setForwarderSuccessMsg(`Connected successfully to @${data.data.botUsername}! Webhook is active.`);
@@ -218,22 +234,33 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
   };
 
   const handleDisconnectForwarder = async () => {
-    if (!confirm('Are you sure you want to disconnect your Telegram Forwarder bot?')) return;
+    setForwarderErrorMsg(null);
+    setForwarderSuccessMsg(null);
     try {
       setIsConnectingForwarder(true);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/messages/telegram/forwarder/disconnect`, {
         method: 'POST',
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setForwarderSuccessMsg('Forwarder Bot disconnected.');
-        loadForwarderStatus();
-      }
-    } catch (err: any) {
-      setForwarderErrorMsg(err?.message || 'Failed to disconnect bot');
+      await assertApiSuccess(res, 'Failed to disconnect Telegram Forwarder Bot');
+      await res.json();
+      setForwarderSuccessMsg('Forwarder Bot disconnected.');
+      setForwarderErrorMsg(null);
+      await loadForwarderStatus();
+    } catch (err) {
+      setForwarderErrorMsg(err instanceof Error ? err.message : 'Failed to disconnect bot');
     } finally {
       setIsConnectingForwarder(false);
     }
+  };
+
+  const requestDisconnectForwarder = () => {
+    setConfirmState({
+      isOpen: true,
+      title: 'Disconnect Telegram Forwarder',
+      message: 'The connected Telegram bot will stop forwarding new messages into Nox.',
+      confirmText: 'Disconnect bot',
+      onConfirm: handleDisconnectForwarder,
+    });
   };
 
   const counts = useMemo(() => {
@@ -268,16 +295,18 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
         }),
       });
 
+      await assertApiSuccess(res, 'Failed to send message');
       const data = await res.json();
       if (res.ok && data.success) {
         setManualText('');
         setShowDirectSend(false);
         loadMessages();
       } else {
-        alert(data.error?.message || 'Failed to send message');
+        setActionError(data.error?.message || 'Failed to send message');
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to send message:', err);
+      setActionError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setSending(false);
     }
@@ -285,27 +314,31 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
 
   const handleToggleStar = async (id: string, current: boolean) => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/messages/${id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/messages/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isStarred: !current }),
       });
+      await assertApiSuccess(response, 'Could not update message star');
       setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, isStarred: !current } : m)));
     } catch (err) {
-      console.error(err);
+      console.error('Failed to update message star:', err);
+      setActionError(err instanceof Error ? err.message : 'Could not update message star');
     }
   };
 
   const handleToggleArchive = async (id: string, current: boolean) => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/messages/${id}`, {
+      const response = await fetchWithUser(`${API_BASE_URL}/api/v1/messages/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isArchived: !current }),
       });
+      await assertApiSuccess(response, 'Could not update message archive');
       loadMessages();
     } catch (err) {
-      console.error(err);
+      console.error('Failed to update message archive:', err);
+      setActionError(err instanceof Error ? err.message : 'Could not update message archive');
     }
   };
 
@@ -314,12 +347,15 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
       isOpen: true,
       title: 'Delete Shared Message',
       message: 'Are you sure you want to permanently delete this message?',
+      confirmText: 'Delete message',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/messages/${id}`, { method: 'DELETE' });
+          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/messages/${id}`, { method: 'DELETE' });
+          await assertApiSuccess(response, 'Could not delete message');
           setMessages((prev) => prev.filter((m) => m.id !== id));
         } catch (err) {
-          console.error(err);
+          console.error('Failed to delete message:', err);
+          setActionError(err instanceof Error ? err.message : 'Could not delete message');
         }
       },
     });
@@ -332,19 +368,21 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetType: 'TASK' }),
       });
+      await assertApiSuccess(res, 'Could not convert message to task');
       const data = await res.json();
       if (res.ok && data.success) {
         setMessages((prev) =>
           prev.map((m) => (m.id === msg.id ? { ...m, convertedType: 'TASK', convertedId: data.data.createdEntity.id } : m))
         );
-        if (onNavigate) {
-          if (confirm('Created action Task successfully! Would you like to view Tasks now?')) {
-            onNavigate('tasks');
-          }
-        }
+        setActionNotice({
+          message: 'Message converted to a task.',
+          navigateTo: onNavigate ? 'tasks' : undefined,
+          actionLabel: 'View tasks',
+        });
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to convert message to task:', err);
+      setActionError(err instanceof Error ? err.message : 'Could not convert message to task');
     }
   };
 
@@ -355,19 +393,21 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetType: 'NOTE' }),
       });
+      await assertApiSuccess(res, 'Could not convert message to note');
       const data = await res.json();
       if (res.ok && data.success) {
         setMessages((prev) =>
           prev.map((m) => (m.id === msg.id ? { ...m, convertedType: 'NOTE', convertedId: data.data.createdEntity.id } : m))
         );
-        if (onNavigate) {
-          if (confirm('Created Note successfully! Would you like to view Notes now?')) {
-            onNavigate('notes');
-          }
-        }
+        setActionNotice({
+          message: 'Message converted to a note.',
+          navigateTo: onNavigate ? 'notes' : undefined,
+          actionLabel: 'View notes',
+        });
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to convert message to note:', err);
+      setActionError(err instanceof Error ? err.message : 'Could not convert message to note');
     }
   };
 
@@ -418,6 +458,37 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
 
   return (
     <div className="space-y-6">
+      <ApiErrorNotice message={actionError} onDismiss={() => setActionError(null)} />
+      {actionNotice && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+        >
+          <span>{actionNotice.message}</span>
+          <div className="flex items-center gap-2">
+            {actionNotice.navigateTo && onNavigate && (
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigate(actionNotice.navigateTo);
+                  setActionNotice(null);
+                }}
+                className="rounded-lg px-2.5 py-1.5 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900"
+              >
+                {actionNotice.actionLabel}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setActionNotice(null)}
+              aria-label="Dismiss notification"
+              className="rounded-lg p-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Header & Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -907,7 +978,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
               {forwarderStatus.isConfigured && (
                 <button
                   type="button"
-                  onClick={handleDisconnectForwarder}
+                  onClick={requestDisconnectForwarder}
                   disabled={isConnectingForwarder}
                   className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900 bg-white dark:bg-slate-900 text-rose-600 hover:bg-rose-50 text-[11px] font-bold cursor-pointer shrink-0"
                 >
@@ -1120,6 +1191,7 @@ export default function MessagesView({ onNavigate, currentUser }: MessagesViewPr
         isOpen={confirmState.isOpen}
         title={confirmState.title}
         message={confirmState.message}
+        confirmText={confirmState.confirmText}
         onConfirm={confirmState.onConfirm}
         onClose={() => setConfirmState({ ...confirmState, isOpen: false })}
       />

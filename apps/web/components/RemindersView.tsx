@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import { calendarDateToLocalDate, formatCalendarDate } from '../lib/date';
 
 interface RemindersViewProps {
   reminders: any[];
@@ -26,6 +27,7 @@ interface RemindersViewProps {
 export default function RemindersView({ reminders, events = [], onRefresh }: RemindersViewProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingReminder, setEditingReminder] = useState<any | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -38,6 +40,15 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
   const [title, setTitle] = useState('');
   const [remindAt, setRemindAt] = useState('');
   const [selectedEventId, setSelectedEventId] = useState('');
+
+  const requestReminderMutation = async (url: string, options: RequestInit) => {
+    const response = await fetchWithUser(url, options);
+    const data = await response.json();
+    if (!response.ok || data?.success !== true) {
+      throw new Error(data?.error?.message || `Reminder update failed (HTTP ${response.status})`);
+    }
+    return data;
+  };
 
   const formatDateTimeForInput = (val?: string | Date | null) => {
     if (!val) return '';
@@ -58,7 +69,8 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
     if (!ev || !ev.date) return;
 
     try {
-      const d = new Date(ev.date);
+      const d = calendarDateToLocalDate(ev.date);
+      if (!d) throw new Error('Event has an invalid date');
       let hours = 9;
       let minutes = 0;
 
@@ -94,6 +106,7 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
     if (!title.trim() || !remindAt) return;
 
     try {
+      setActionError(null);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/reminders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,10 +126,11 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
         setShowCreate(false);
         onRefresh();
       } else {
-        alert(data.error?.message || 'Failed to create reminder.');
+        setActionError(data.error?.message || 'Failed to create reminder.');
       }
     } catch (err) {
       console.error('Error creating reminder:', err);
+      setActionError(err instanceof Error ? err.message : 'Unable to create the reminder.');
     }
   };
 
@@ -134,6 +148,7 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
     if (!editingReminder) return;
 
     try {
+      setActionError(null);
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${editingReminder.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -150,16 +165,18 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
         setEditingReminder(null);
         onRefresh();
       } else {
-        alert(data.error?.message || 'Failed to update reminder.');
+        setActionError(data.error?.message || 'Failed to update reminder.');
       }
     } catch (err) {
       console.error('Error updating reminder:', err);
+      setActionError(err instanceof Error ? err.message : 'Unable to update the reminder.');
     }
   };
 
   const handleToggleReminder = async (id: string, currentIsCompleted: boolean) => {
     try {
-      await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${id}`, {
+      setActionError(null);
+      await requestReminderMutation(`${API_BASE_URL}/api/v1/reminders/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isCompleted: !currentIsCompleted }),
@@ -167,6 +184,7 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
       onRefresh();
     } catch (err) {
       console.error(err);
+      setActionError(err instanceof Error ? err.message : 'Unable to update the reminder.');
     }
   };
 
@@ -177,10 +195,12 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
       message: 'Are you sure you want to permanently delete this reminder?',
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/${id}`, { method: 'DELETE' });
+          setActionError(null);
+          await requestReminderMutation(`${API_BASE_URL}/api/v1/reminders/${id}`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : 'Unable to delete the reminder.');
         }
       },
     });
@@ -196,10 +216,12 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
       message: `Are you sure you want to permanently delete all ${count} completed reminders? This cannot be undone.`,
       onConfirm: async () => {
         try {
-          await fetchWithUser(`${API_BASE_URL}/api/v1/reminders/completed`, { method: 'DELETE' });
+          setActionError(null);
+          await requestReminderMutation(`${API_BASE_URL}/api/v1/reminders/completed`, { method: 'DELETE' });
           onRefresh();
         } catch (err) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : 'Unable to clear completed reminders.');
         }
       },
     });
@@ -218,6 +240,19 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-200">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss reminder error"
+            className="rounded-lg p-1 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Header with Mobile Responsive Layout */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -284,7 +319,7 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
                 <option value="">— Standalone Reminder (No Event)</option>
                 {events.map((ev) => (
                   <option key={ev.id} value={ev.id}>
-                    📅 {ev.title} ({new Date(ev.date).toLocaleDateString()})
+                    📅 {ev.title} ({formatCalendarDate(ev.date)})
                   </option>
                 ))}
               </select>
@@ -381,7 +416,7 @@ export default function RemindersView({ reminders, events = [], onRefresh }: Rem
                 <option value="">— Standalone Reminder (No Event)</option>
                 {events.map((ev) => (
                   <option key={ev.id} value={ev.id}>
-                    📅 {ev.title} ({new Date(ev.date).toLocaleDateString()})
+                    📅 {ev.title} ({formatCalendarDate(ev.date)})
                   </option>
                 ))}
               </select>

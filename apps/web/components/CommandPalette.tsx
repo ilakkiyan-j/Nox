@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, X, Target, CheckSquare, Calendar, StickyNote, GraduationCap } from 'lucide-react';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
+import { formatCalendarDate } from '../lib/date';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -20,6 +22,7 @@ export default function CommandPalette({ isOpen, onClose, onSelectEntity }: Comm
     learning: any[];
   }>({ goals: [], tasks: [], events: [], notes: [], learning: [] });
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -38,25 +41,44 @@ export default function CommandPalette({ isOpen, onClose, onSelectEntity }: Comm
   useEffect(() => {
     if (!query.trim()) {
       setResults({ goals: [], tasks: [], events: [], notes: [], learning: [] });
+      setSearchError(null);
+      setLoading(false);
       return;
     }
 
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLoading(true);
+      setSearchError(null);
       try {
-        const res = await fetchWithUser(`${API_BASE_URL}/api/v1/search?q=${encodeURIComponent(query)}`);
+        const res = await fetchWithUser(
+          `${API_BASE_URL}/api/v1/search?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal },
+        );
+        await assertApiSuccess(res, 'Search failed');
         const data = await res.json();
-        if (data.success) {
-          setResults(data.data);
+        const categories = ['goals', 'tasks', 'events', 'notes', 'learning'] as const;
+        if (
+          data.success !== true ||
+          !data.data ||
+          categories.some((category) => !Array.isArray(data.data[category]))
+        ) {
+          throw new Error('Search returned an invalid response');
         }
+        setResults(data.data);
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error('Search error:', err);
+        setSearchError(err instanceof Error ? err.message : 'Search failed');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 200);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
 
   if (!isOpen) return null;
@@ -90,6 +112,7 @@ export default function CommandPalette({ isOpen, onClose, onSelectEntity }: Comm
 
         {/* Search Results Feed */}
         <div className="p-4 overflow-y-auto space-y-4">
+          <ApiErrorNotice message={searchError} onDismiss={() => setSearchError(null)} />
           {loading && <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-6 font-medium">Searching NOX database...</p>}
 
           {!loading && query && totalResults === 0 && (
@@ -209,7 +232,7 @@ export default function CommandPalette({ isOpen, onClose, onSelectEntity }: Comm
                   >
                     <div>
                       <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{event.title}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{new Date(event.date).toLocaleDateString()}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{formatCalendarDate(event.date)}</p>
                     </div>
                   </div>
                 ))}

@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { X, Clipboard, Link as LinkIcon, Folder, Tag, Save } from 'lucide-react';
-import { API_BASE_URL, fetchWithUser } from '../lib/api';
+import ApiErrorNotice from './ui/ApiErrorNotice';
+import { API_BASE_URL, assertApiSuccess, fetchWithUser } from '../lib/api';
 import DialogShell from './ui/Dialog';
 
 interface QuickCaptureModalProps {
@@ -19,6 +20,7 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
   const [folder, setFolder] = useState('');
   const [tags, setTags] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -27,6 +29,7 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
     if (!content.trim() && !url.trim() && !title.trim()) return;
 
     setSaving(true);
+    setError(null);
     try {
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/notes`, {
         method: 'POST',
@@ -40,17 +43,17 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
         }),
       });
 
-      if (res.ok) {
-        setContent('');
-        setUrl('');
-        setTitle('');
-        setTags('');
-        setFolder('');
-        onSaved();
-        onClose();
-      }
+      await assertApiSuccess(res, 'Could not save capture');
+      setContent('');
+      setUrl('');
+      setTitle('');
+      setTags('');
+      setFolder('');
+      onSaved();
+      onClose();
     } catch (err) {
       console.error('Quick capture error:', err);
+      setError(err instanceof Error ? err.message : 'Could not save capture');
     } finally {
       setSaving(false);
     }
@@ -72,6 +75,7 @@ export default function QuickCaptureModal({ isOpen, onClose, onSaved, folders = 
 
   return (
     <DialogShell isOpen={isOpen} onClose={onClose} label="Quick Capture Scratchpad" className="max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 transition-colors">
+        <ApiErrorNotice message={error} onDismiss={() => setError(null)} />
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
           <div className="flex items-center space-x-2">
