@@ -441,65 +441,30 @@ export default function CouncilView({
     Promise.all([fetchBots(), fetchSessions(), fetchMemory()]);
   }, []);
 
-  // Compute displayed bots list (defaults + custom bots)
-  const displayedBots: BotItem[] = (() => {
-    const customList = [...bots];
-    const coreKeys = ['sofi', 'riven', 'lucifer'];
-    const merged: BotItem[] = [];
+  // Real database bots
+  const displayedBots: BotItem[] = bots;
 
-    for (const key of coreKeys) {
-      const foundInDb = customList.find(b => b.slug === key || b.id === key);
-      if (foundInDb) {
-        merged.push(foundInDb);
-      } else {
-        const def = DEFAULT_PERSONAS[key];
-        merged.push({
-          id: key,
-          slug: key,
-          name: def.name,
-          role: def.role,
-          avatar: def.avatar,
-          isDefault: true,
-          status: 'ACTIVE',
-          permissions: DEFAULT_PERMISSIONS_BY_BOT[key],
-          instruction: { systemPrompt: def.prompt },
-        });
-      }
-    }
-
-    for (const b of customList) {
-      if (!coreKeys.includes(b.slug || b.id)) {
-        merged.push(b);
-      }
-    }
-
-    return merged;
-  })();
-
-  const activeBot = displayedBots.find(b => b.id === activeBotId || b.slug === activeBotId) || displayedBots[0] || {
-    id: 'sofi',
-    name: 'Sofi',
-    role: 'Executive PA & Girlfriend',
-    avatar: '💖',
-  };
+  const activeBot = displayedBots.find(b => b.id === activeBotId || b.slug === activeBotId) || displayedBots[0] || null;
 
   // Initialize new session for a bot
-  const createNewSession = (botId: string, announceGreeting = true) => {
+  const createNewSession = (botId?: string, announceGreeting = true) => {
+    const targetBot = displayedBots.find(b => b.id === botId || b.slug === botId) || displayedBots[0];
+    if (!targetBot) {
+      setMessages([]);
+      return;
+    }
     const newId = `session_${Date.now()}`;
     setSessionId(newId);
-    setActiveBotId(botId);
+    setActiveBotId(targetBot.id);
 
-    const botObj = displayedBots.find(b => b.id === botId || b.slug === botId);
-    const greetingText =
-      DEFAULT_PERSONAS[botObj?.slug || botId]?.greeting ||
-      `Hello! I am ${botObj?.name || 'your AI assistant'}. How can we make progress on your goals today?`;
+    const greetingText = `Hello! I am ${targetBot.name}, your ${targetBot.role}. How can we make progress on your goals today?`;
 
     if (announceGreeting) {
       setMessages([
         {
           id: `greet_${Date.now()}`,
           sender: 'assistant',
-          persona: botId,
+          persona: targetBot.id,
           content: greetingText,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
@@ -516,12 +481,13 @@ export default function CouncilView({
     createNewSession(botId, true);
   };
 
-  // Initial Session setup
+  // Initial Session setup when bots load
   useEffect(() => {
-    if (!sessionId) {
-      createNewSession('sofi', true);
+    if (bots.length > 0 && !activeBotId) {
+      setActiveBotId(bots[0].id);
+      createNewSession(bots[0].id, true);
     }
-  }, []);
+  }, [bots]);
 
   // Auto-scroll messages to bottom
   useEffect(() => {
@@ -769,80 +735,98 @@ export default function CouncilView({
         
         {/* Left: Active Bot Avatar & Selector Dropdown */}
         <div className="flex items-center space-x-3.5 min-w-0">
-          
-          {/* Large 48px Avatar */}
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center text-2xl shrink-0 overflow-hidden">
-            <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-2xl" />
-          </div>
-
-          {/* Bot Selector Dropdown */}
-          <div className="relative" ref={botDropdownRef}>
-            <button
-              onClick={() => setIsBotDropdownOpen(!isBotDropdownOpen)}
-              className="flex items-center space-x-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800/80 px-2.5 py-1.5 rounded-xl transition cursor-pointer group"
-            >
-              <div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="font-display font-bold text-base text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    {activeBot.name}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-transform ${isBotDropdownOpen ? 'rotate-180' : ''}`} />
-                </div>
-                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium line-clamp-1">
-                  {activeBot.role}
-                </p>
+          {activeBot ? (
+            <>
+              {/* Large 48px Avatar */}
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center text-2xl shrink-0 overflow-hidden">
+                <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-2xl" />
               </div>
-            </button>
 
-            {/* Dropdown Popover Menu */}
-            {isBotDropdownOpen && (
-              <div className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 py-2 animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-                  Select Active Bot
-                </div>
+              {/* Bot Selector Dropdown */}
+              <div className="relative" ref={botDropdownRef}>
+                <button
+                  onClick={() => setIsBotDropdownOpen(!isBotDropdownOpen)}
+                  className="flex items-center space-x-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800/80 px-2.5 py-1.5 rounded-xl transition cursor-pointer group"
+                >
+                  <div>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="font-display font-bold text-base text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {activeBot.name}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-transform ${isBotDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium line-clamp-1">
+                      {activeBot.role}
+                    </p>
+                  </div>
+                </button>
 
-                <div className="max-h-64 overflow-y-auto px-1 space-y-1">
-                  {displayedBots.map((b) => {
-                    const isSelected = b.id === activeBot.id || b.slug === activeBot.id;
-                    return (
+                {/* Dropdown Popover Menu */}
+                {isBotDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 py-2 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                      Select Active Bot
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto px-1 space-y-1">
+                      {displayedBots.map((b) => {
+                        const isSelected = b.id === activeBot.id;
+                        return (
+                          <button
+                            key={b.id}
+                            onClick={() => handleSelectBot(b.id)}
+                            className={`w-full flex items-center space-x-3 p-2.5 rounded-xl text-left transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-lg shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
+                              <BotAvatarDisplay avatar={b.avatar} name={b.name} className="w-full h-full text-lg" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold leading-tight truncate">{b.name}</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{b.role}</p>
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Settings Redirect Footer in Dropdown */}
+                    <div className="pt-2 mt-1 border-t border-slate-100 dark:border-slate-800 px-2">
                       <button
-                        key={b.id}
-                        onClick={() => handleSelectBot(b.id)}
-                        className={`w-full flex items-center space-x-3 p-2.5 rounded-xl text-left transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                        }`}
+                        onClick={() => {
+                          setIsBotDropdownOpen(false);
+                          onOpenSettings?.('council');
+                        }}
+                        className="w-full flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-bold transition cursor-pointer"
                       >
-                        <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-lg shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
-                          <BotAvatarDisplay avatar={b.avatar} name={b.name} className="w-full h-full text-lg" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold leading-tight truncate">{b.name}</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{b.role}</p>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                        <Settings className="w-3.5 h-3.5" />
+                        <span>Manage Bots & Models in Settings</span>
                       </button>
-                    );
-                  })}
-                </div>
-
-                {/* Settings Redirect Footer in Dropdown */}
-                <div className="pt-2 mt-1 border-t border-slate-100 dark:border-slate-800 px-2">
-                  <button
-                    onClick={() => {
-                      setIsBotDropdownOpen(false);
-                      onOpenSettings?.('council');
-                    }}
-                    className="w-full flex items-center justify-center space-x-1.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-bold transition cursor-pointer"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Manage Bots & Models in Settings</span>
-                  </button>
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
+                <Bot className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100 leading-tight">No Bots Configured</h3>
+                <button
+                  onClick={() => onOpenSettings?.('council')}
+                  className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                >
+                  + Create your first bot in Settings
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right: Deliberation Switch, Memory, Sessions, Server Status & Settings */}
@@ -984,132 +968,152 @@ export default function CouncilView({
       {/* ── MAIN WORKSPACE CANVAS ── */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
         
-        {/* ── MODE A: 1-ON-1 BOT CHAT ── */}
-        {!isDeliberation && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-              {messages.map((msg) => {
-                const isUser = msg.sender === 'user';
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex items-start space-x-3 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-150`}
-                  >
-                    {!isUser && (
-                      <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg shrink-0 overflow-hidden mt-0.5">
+        {/* Empty State when no bots exist */}
+        {!activeBot ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+            <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-sm">
+              <Bot className="w-8 h-8" />
+            </div>
+            <div className="max-w-md space-y-1">
+              <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">No Council Bots Configured</h3>
+              <p className="text-xs text-slate-500">Create your custom AI persona in settings to start conversing and delegating tasks.</p>
+            </div>
+            <button
+              onClick={() => onOpenSettings?.('council')}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition flex items-center space-x-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Bot in Settings</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* ── MODE A: 1-ON-1 BOT CHAT ── */}
+            {!isDeliberation && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Messages Scroll Area */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                  {messages.map((msg) => {
+                    const isUser = msg.sender === 'user';
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex items-start space-x-3 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-150`}
+                      >
+                        {!isUser && (
+                          <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg shrink-0 overflow-hidden mt-0.5">
+                            <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-lg" />
+                          </div>
+                        )}
+
+                        <div
+                          className={`max-w-2xl rounded-3xl p-4 sm:p-5 shadow-xs ${
+                            isUser
+                              ? 'bg-indigo-600 text-white rounded-tr-none'
+                              : msg.isError
+                              ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100 rounded-tl-none'
+                              : 'bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 rounded-tl-none'
+                          }`}
+                        >
+                          {/* Executed Tools / Actions */}
+                          {msg.executedActions && msg.executedActions.length > 0 && (
+                            <div className="mb-3 space-y-1.5 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
+                              {msg.executedActions.map((act, i) => (
+                                <div key={i} className="flex items-center space-x-2 text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-900/60">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Executed: {act.toolName}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
+                            <MarkdownRenderer content={msg.content} />
+                          </div>
+
+                          <div className={`mt-2 flex items-center justify-between text-[10px] ${isUser ? 'text-indigo-200' : 'text-slate-400'}`}>
+                            <span>{msg.timestamp}</span>
+                            {!isUser && !msg.isError && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(msg.content);
+                                  setActionNotice({ type: 'success', message: 'Copied to clipboard.' });
+                                }}
+                                className="hover:text-slate-600 dark:hover:text-slate-200 transition p-1"
+                                title="Copy reply"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            )}
+                            {msg.isError && msg.failedPrompt && (
+                              <button
+                                onClick={() => handleSendMessage(msg.failedPrompt)}
+                                className="text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center space-x-1"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Retry</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {isThinking && (
+                    <div className="flex items-center space-x-3 animate-pulse">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg">
                         <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-lg" />
                       </div>
-                    )}
-
-                    <div
-                      className={`max-w-2xl rounded-3xl p-4 sm:p-5 shadow-xs ${
-                        isUser
-                          ? 'bg-indigo-600 text-white rounded-tr-none'
-                          : msg.isError
-                          ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100 rounded-tl-none'
-                          : 'bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 rounded-tl-none'
-                      }`}
-                    >
-                      {/* Executed Tools / Actions */}
-                      {msg.executedActions && msg.executedActions.length > 0 && (
-                        <div className="mb-3 space-y-1.5 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
-                          {msg.executedActions.map((act, i) => (
-                            <div key={i} className="flex items-center space-x-2 text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-900/60">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Executed: {act.toolName}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
-                        <MarkdownRenderer content={msg.content} />
-                      </div>
-
-                      <div className={`mt-2 flex items-center justify-between text-[10px] ${isUser ? 'text-indigo-200' : 'text-slate-400'}`}>
-                        <span>{msg.timestamp}</span>
-                        {!isUser && !msg.isError && (
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(msg.content);
-                              setActionNotice({ type: 'success', message: 'Copied to clipboard.' });
-                            }}
-                            className="hover:text-slate-600 dark:hover:text-slate-200 transition p-1"
-                            title="Copy reply"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </button>
-                        )}
-                        {msg.isError && msg.failedPrompt && (
-                          <button
-                            onClick={() => handleSendMessage(msg.failedPrompt)}
-                            className="text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center space-x-1"
-                          >
-                            <RefreshCw className="w-3 h-3" />
-                            <span>Retry</span>
-                          </button>
-                        )}
+                      <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-500 font-mono flex items-center space-x-2">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                        <span>{activeBot.name} is reasoning & drafting plan...</span>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  )}
 
-              {isThinking && (
-                <div className="flex items-center space-x-3 animate-pulse">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg">
-                    <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-lg" />
-                  </div>
-                  <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-500 font-mono flex items-center space-x-2">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-                    <span>{activeBot.name} is reasoning & drafting plan...</span>
-                  </div>
+                  <div ref={messagesEndRef} />
                 </div>
-              )}
 
-              <div ref={messagesEndRef} />
-            </div>
+                {/* Bottom Chat Composer Bar */}
+                <div className="p-3 sm:p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                  <div className="max-w-4xl mx-auto flex items-end space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 transition">
+                    <textarea
+                      ref={textareaRef}
+                      rows={1}
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder={`Message ${activeBot.name}... (Press Enter to send, Shift+Enter for newline)`}
+                      className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none resize-none px-2 py-1 max-h-32"
+                    />
 
-            {/* Bottom Chat Composer Bar */}
-            <div className="p-3 sm:p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
-              <div className="max-w-4xl mx-auto flex items-end space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 transition">
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  placeholder={`Message ${activeBot.name}... (Press Enter to send, Shift+Enter for newline)`}
-                  className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none resize-none px-2 py-1 max-h-32"
-                />
+                    <div className="flex items-center space-x-1.5 shrink-0">
+                      <button
+                        onClick={() => createNewSession(activeBot.id, true)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                        title="Clear chat and start fresh session"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
 
-                <div className="flex items-center space-x-1.5 shrink-0">
-                  <button
-                    onClick={() => createNewSession(activeBot.id, true)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
-                    title="Clear chat and start fresh session"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={() => handleSendMessage()}
-                    disabled={!inputMessage.trim() || isThinking}
-                    className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 transition cursor-pointer shadow-sm"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
+                      <button
+                        onClick={() => handleSendMessage()}
+                        disabled={!inputMessage.trim() || isThinking}
+                        className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 transition cursor-pointer shadow-sm"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
         {/* ── MODE B: MULTI-BOT COUNCIL DELIBERATION ── */}
         {isDeliberation && (
@@ -1224,6 +1228,8 @@ export default function CouncilView({
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
 

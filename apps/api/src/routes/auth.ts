@@ -94,11 +94,12 @@ privateRouter.patch('/auth/profile', async (req: Request, res: Response) => {
 
 privateRouter.post('/auth/avatar/upload', async (req: Request, res: Response) => {
   try {
-    const { image } = (req.body ?? {}) as { image?: unknown };
+    const { image, target } = (req.body ?? {}) as { image?: unknown; target?: unknown };
     if (typeof image !== 'string' || !image.trim()) {
       return apiError(res, 'Image payload is required');
     }
 
+    const isUserTarget = target === 'user' || (!target && target !== 'bot' && target !== 'asset');
     const imgbbKey = process.env.IMGBB_API_KEY;
 
     // 1. Upload to ImgBB Cloud CDN if IMGBB_API_KEY is configured in .env
@@ -115,20 +116,27 @@ privateRouter.post('/auth/avatar/upload', async (req: Request, res: Response) =>
 
       if (cloudData && cloudData.success && cloudData.data?.url) {
         const cdnUrl = (cloudData.data.display_url || cloudData.data.url) as string;
-        const updatedUser = await db.user.update({
-          where: { id: req.user!.id },
-          data: { avatarUrl: cdnUrl },
-        });
-        return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to ImgBB CDN successfully');
+        if (isUserTarget) {
+          const updatedUser = await db.user.update({
+            where: { id: req.user!.id },
+            data: { avatarUrl: cdnUrl },
+          });
+          return apiResponse(res, { url: cdnUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar uploaded to ImgBB CDN successfully');
+        }
+        return apiResponse(res, { url: cdnUrl }, 200, 'Image uploaded to ImgBB CDN successfully');
       }
     }
 
     // 2. Fallback: Save optimized base64 thumbnail directly if IMGBB_API_KEY is not configured
-    const updatedUser = await db.user.update({
-      where: { id: req.user!.id },
-      data: { avatarUrl: image.trim() },
-    });
-    return apiResponse(res, { url: image.trim(), user: sanitizeUser(updatedUser) }, 200, 'Avatar saved successfully');
+    const cleanImageUrl = image.trim();
+    if (isUserTarget) {
+      const updatedUser = await db.user.update({
+        where: { id: req.user!.id },
+        data: { avatarUrl: cleanImageUrl },
+      });
+      return apiResponse(res, { url: cleanImageUrl, user: sanitizeUser(updatedUser) }, 200, 'Avatar saved successfully');
+    }
+    return apiResponse(res, { url: cleanImageUrl }, 200, 'Image uploaded successfully');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Avatar upload failed';
     return apiError(res, message, 500);

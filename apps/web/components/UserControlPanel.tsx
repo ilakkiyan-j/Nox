@@ -315,7 +315,10 @@ export default function UserControlPanel({
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/auth/avatar/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Payload }),
+        body: JSON.stringify({
+          image: base64Payload,
+          target: forBotEdit || forBotCreate ? 'bot' : 'user',
+        }),
       });
       await assertApiSuccess(res, 'Could not upload image');
       const data = await res.json();
