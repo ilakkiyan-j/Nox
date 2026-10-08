@@ -728,34 +728,34 @@ export default function CouncilView({
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden flex flex-col h-[calc(100vh-140px)] min-h-[580px] relative">
+    <div className="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden flex flex-col h-[calc(100vh-140px)] min-h-[580px] relative transition-colors">
       
       {/* ── TOP MINIMAL COMMAND BAR ── */}
-      <header className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 shrink-0 z-20">
+      <header className="px-4 sm:px-6 py-3 border-b border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md flex items-center justify-between gap-3 shrink-0 z-20">
         
         {/* Left: Active Bot Avatar & Selector Dropdown */}
-        <div className="flex items-center space-x-3.5 min-w-0">
+        <div className="flex items-center space-x-3 min-w-0">
           {activeBot ? (
             <>
-              {/* Large 48px Avatar */}
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center text-2xl shrink-0 overflow-hidden">
-                <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-2xl" />
+              {/* Compact 40px Avatar */}
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500/10 to-indigo-500/20 border border-indigo-200/60 dark:border-indigo-800/60 shadow-xs flex items-center justify-center text-xl shrink-0 overflow-hidden">
+                <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-xl" />
               </div>
 
               {/* Bot Selector Dropdown */}
               <div className="relative" ref={botDropdownRef}>
                 <button
                   onClick={() => setIsBotDropdownOpen(!isBotDropdownOpen)}
-                  className="flex items-center space-x-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800/80 px-2.5 py-1.5 rounded-xl transition cursor-pointer group"
+                  className="flex items-center space-x-1.5 text-left hover:bg-slate-100/80 dark:hover:bg-slate-800/80 px-2.5 py-1 rounded-xl transition cursor-pointer group"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center space-x-1.5">
-                      <span className="font-display font-bold text-base text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      <span className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
                         {activeBot.name}
                       </span>
-                      <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-transform ${isBotDropdownOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 transition-transform duration-200 shrink-0 ${isBotDropdownOpen ? 'rotate-180' : ''}`} />
                     </div>
-                    <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium line-clamp-1">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[160px] sm:max-w-xs">
                       {activeBot.role}
                     </p>
                   </div>
@@ -813,11 +813,11 @@ export default function CouncilView({
             </>
           ) : (
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
-                <Bot className="w-6 h-6" />
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
+                <Bot className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100 leading-tight">No Bots Configured</h3>
+                <h3 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 leading-tight">No Bots Configured</h3>
                 <button
                   onClick={() => onOpenSettings?.('council')}
                   className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
@@ -829,94 +829,97 @@ export default function CouncilView({
           )}
         </div>
 
-        {/* Right: Deliberation Switch, Memory, Sessions, Server Status & Settings */}
+        {/* Right: Unified Segmented Mode & Clean Utility Group */}
         <div className="flex items-center space-x-2 shrink-0">
           
-          {/* Deliberation Mode Toggle */}
-          <button
-            onClick={() => setIsDeliberation(!isDeliberation)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-xs ${
-              isDeliberation
-                ? 'bg-gradient-to-r from-rose-500 via-amber-500 to-indigo-600 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-            }`}
-            title="Toggle Multi-Bot Deliberation Mode"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{isDeliberation ? 'Council Deliberation' : '1-on-1 Chat'}</span>
-          </button>
+          {/* Segmented Mode Switcher */}
+          <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+            <button
+              onClick={() => setIsDeliberation(false)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
+                !isDeliberation
+                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">1-on-1 Chat</span>
+            </button>
+            <button
+              onClick={() => setIsDeliberation(true)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
+                isDeliberation
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Deliberation</span>
+            </button>
+          </div>
 
-          {/* Memory Vault Button */}
-          <button
-            onClick={() => setShowMemoryDrawer(true)}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
-            title="Open Long-Term Memory Vault"
-          >
-            <Brain className="w-3.5 h-3.5 text-indigo-500" />
-            <span className="hidden md:inline">Memory</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
-              {memoryProfile?.facts?.length || 0}
-            </span>
-          </button>
+          {/* Grouped Secondary Utilities */}
+          <div className="flex items-center space-x-1 border-l border-slate-200/80 dark:border-slate-800 pl-1.5">
+            {/* Memory Vault Button */}
+            <button
+              onClick={() => setShowMemoryDrawer(true)}
+              className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer"
+              title="Open Long-Term Memory Vault"
+            >
+              <Brain className="w-4 h-4" />
+              {memoryProfile?.facts && memoryProfile.facts.length > 0 ? (
+                <span className="absolute top-1 right-1 px-1 min-w-[14px] h-3.5 rounded-full bg-indigo-600 text-white font-mono text-[9px] font-bold flex items-center justify-center">
+                  {memoryProfile.facts.length}
+                </span>
+              ) : null}
+            </button>
 
-          {/* Sessions Drawer Button */}
-          <button
-            onClick={() => setShowSessionsDrawer(true)}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
-            title="Chat Sessions History"
-          >
-            <MessageSquare className="w-3.5 h-3.5 text-sky-500" />
-            <span className="hidden md:inline">Sessions</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono text-[10px]">
-              {sessions.length}
-            </span>
-          </button>
+            {/* Sessions Drawer Button */}
+            <button
+              onClick={() => setShowSessionsDrawer(true)}
+              className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-sky-600 dark:hover:text-sky-400 transition cursor-pointer"
+              title="Chat Sessions History"
+            >
+              <MessageSquare className="w-4 h-4" />
+              {sessions.length > 0 && (
+                <span className="absolute top-1 right-1 px-1 min-w-[14px] h-3.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-mono text-[9px] font-bold flex items-center justify-center">
+                  {sessions.length}
+                </span>
+              )}
+            </button>
 
-          {/* Council Server Ping Pill */}
-          <button
-            onClick={() => handleWakeOrPingCouncil(!isOnline)}
-            disabled={isPinging}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono transition cursor-pointer ${
-              isPinging
-                ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400 cursor-wait'
-                : isOnline
-                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/40 text-amber-600 dark:text-amber-400 animate-pulse'
-            }`}
-            title={
-              isPinging
-                ? `Waking Council container... (${wakeSecondsElapsed}s)`
-                : isOnline
-                ? `Council is live (${pingLatency ? `${pingLatency}ms` : 'active'}). Click to re-ping.`
-                : 'Council is on Standby. Click to wake.'
-            }
-          >
-            {isPinging ? (
-              <>
-                <RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
-                <span className="hidden sm:inline">Waking... ({wakeSecondsElapsed}s)</span>
-              </>
-            ) : isOnline ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="hidden sm:inline">Online{pingLatency ? ` (${pingLatency}ms)` : ''}</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                <span className="hidden sm:inline font-semibold">Standby • Wake</span>
-              </>
-            )}
-          </button>
+            {/* Council Server Ping Pill */}
+            <button
+              onClick={() => handleWakeOrPingCouncil(!isOnline)}
+              disabled={isPinging}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-mono transition cursor-pointer ${
+                isPinging
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 cursor-wait'
+                  : isOnline
+                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse'
+              }`}
+              title={
+                isPinging
+                  ? `Waking Council container... (${wakeSecondsElapsed}s)`
+                  : isOnline
+                  ? `Council is live (${pingLatency ? `${pingLatency}ms` : 'active'}). Click to re-ping.`
+                  : 'Council is on Standby. Click to wake.'
+              }
+            >
+              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span className="hidden md:inline">{isOnline ? `Online${pingLatency ? ` (${pingLatency}ms)` : ''}` : 'Standby'}</span>
+            </button>
 
-          {/* Dedicated Settings Button */}
-          <button
-            onClick={() => onOpenSettings?.('council')}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 transition cursor-pointer"
-            title="Configure Bots, Model Pipelines & BYOK in Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+            {/* Dedicated Settings Button */}
+            <button
+              onClick={() => onOpenSettings?.('council')}
+              className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer"
+              title="Configure Bots, Model Pipelines & BYOK in Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -934,12 +937,12 @@ export default function CouncilView({
             <button
               onClick={() => handleWakeOrPingCouncil(true)}
               disabled={isPinging}
-              className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs flex items-center space-x-1.5 transition disabled:opacity-50"
+              className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin' : ''}`} />
               <span>{isPinging ? `Waking... (${wakeSecondsElapsed}s)` : 'Wake Council Now'}</span>
             </button>
-            <button onClick={() => setDismissStandbyBanner(true)} className="p-1 text-amber-700 dark:text-amber-300 rounded">
+            <button onClick={() => setDismissStandbyBanner(true)} className="p-1 text-amber-700 dark:text-amber-300 rounded cursor-pointer">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -959,7 +962,7 @@ export default function CouncilView({
             {actionNotice.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-500" /> : <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
             <span>{actionNotice.message}</span>
           </div>
-          <button onClick={() => setActionNotice(null)} className="p-1 hover:opacity-75">
+          <button onClick={() => setActionNotice(null)} className="p-1 hover:opacity-75 cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -991,93 +994,95 @@ export default function CouncilView({
             {/* ── MODE A: 1-ON-1 BOT CHAT ── */}
             {!isDeliberation && (
               <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Messages Scroll Area */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                  {messages.map((msg) => {
-                    const isUser = msg.sender === 'user';
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`flex items-start space-x-3 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-150`}
-                      >
-                        {!isUser && (
-                          <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg shrink-0 overflow-hidden mt-0.5">
-                            <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-lg" />
-                          </div>
-                        )}
-
+                {/* Messages Scroll Area - Centered Ergonomic Column */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                  <div className="max-w-3xl mx-auto space-y-4">
+                    {messages.map((msg) => {
+                      const isUser = msg.sender === 'user';
+                      return (
                         <div
-                          className={`max-w-2xl rounded-3xl p-4 sm:p-5 shadow-xs ${
-                            isUser
-                              ? 'bg-indigo-600 text-white rounded-tr-none'
-                              : msg.isError
-                              ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100 rounded-tl-none'
-                              : 'bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 rounded-tl-none'
-                          }`}
+                          key={msg.id}
+                          className={`flex items-start space-x-2.5 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-150`}
                         >
-                          {/* Executed Tools / Actions */}
-                          {msg.executedActions && msg.executedActions.length > 0 && (
-                            <div className="mb-3 space-y-1.5 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
-                              {msg.executedActions.map((act, i) => (
-                                <div key={i} className="flex items-center space-x-2 text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-900/60">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>Executed: {act.toolName}</span>
-                                </div>
-                              ))}
+                          {!isUser && (
+                            <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center text-sm shrink-0 overflow-hidden mt-0.5 shadow-xs">
+                              <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-sm" />
                             </div>
                           )}
 
-                          <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
-                            <MarkdownRenderer content={msg.content} />
-                          </div>
+                          <div
+                            className={`max-w-xl sm:max-w-2xl rounded-2xl p-4 sm:p-4.5 shadow-xs transition-all ${
+                              isUser
+                                ? 'bg-indigo-600 text-white rounded-tr-xs'
+                                : msg.isError
+                                ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100 rounded-tl-xs'
+                                : 'bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/70 dark:border-slate-700/70 text-slate-900 dark:text-slate-100 rounded-tl-xs'
+                            }`}
+                          >
+                            {/* Executed Tools / Actions */}
+                            {msg.executedActions && msg.executedActions.length > 0 && (
+                              <div className="mb-3 space-y-1.5 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
+                                {msg.executedActions.map((act, i) => (
+                                  <div key={i} className="flex items-center space-x-2 text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-900/60">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Executed: {act.toolName}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
 
-                          <div className={`mt-2 flex items-center justify-between text-[10px] ${isUser ? 'text-indigo-200' : 'text-slate-400'}`}>
-                            <span>{msg.timestamp}</span>
-                            {!isUser && !msg.isError && (
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(msg.content);
-                                  setActionNotice({ type: 'success', message: 'Copied to clipboard.' });
-                                }}
-                                className="hover:text-slate-600 dark:hover:text-slate-200 transition p-1"
-                                title="Copy reply"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                            )}
-                            {msg.isError && msg.failedPrompt && (
-                              <button
-                                onClick={() => handleSendMessage(msg.failedPrompt)}
-                                className="text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center space-x-1"
-                              >
-                                <RefreshCw className="w-3 h-3" />
-                                <span>Retry</span>
-                              </button>
-                            )}
+                            <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
+                              <MarkdownRenderer content={msg.content} />
+                            </div>
+
+                            <div className={`mt-2.5 flex items-center justify-between text-[10px] ${isUser ? 'text-indigo-200' : 'text-slate-400'}`}>
+                              <span>{msg.timestamp}</span>
+                              {!isUser && !msg.isError && (
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(msg.content);
+                                    setActionNotice({ type: 'success', message: 'Copied to clipboard.' });
+                                  }}
+                                  className="hover:text-slate-600 dark:hover:text-slate-200 transition p-1 cursor-pointer"
+                                  title="Copy reply"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {msg.isError && msg.failedPrompt && (
+                                <button
+                                  onClick={() => handleSendMessage(msg.failedPrompt)}
+                                  className="text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <RefreshCw className="w-3 h-3" />
+                                  <span>Retry</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
 
-                  {isThinking && (
-                    <div className="flex items-center space-x-3 animate-pulse">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg">
-                        <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-lg" />
+                    {isThinking && (
+                      <div className="flex items-center space-x-2.5 animate-pulse">
+                        <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-sm">
+                          <BotAvatarDisplay avatar={activeBot.avatar} name={activeBot.name} className="w-full h-full text-sm" />
+                        </div>
+                        <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-500 font-mono flex items-center space-x-2">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                          <span>{activeBot.name} is reasoning & drafting plan...</span>
+                        </div>
                       </div>
-                      <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-500 font-mono flex items-center space-x-2">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-                        <span>{activeBot.name} is reasoning & drafting plan...</span>
-                      </div>
-                    </div>
-                  )}
+                    )}
 
-                  <div ref={messagesEndRef} />
+                    <div ref={messagesEndRef} />
+                  </div>
                 </div>
 
                 {/* Bottom Chat Composer Bar */}
-                <div className="p-3 sm:p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
-                  <div className="max-w-4xl mx-auto flex items-end space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 transition">
+                <div className="p-3 sm:p-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800">
+                  <div className="max-w-3xl mx-auto flex items-end space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-600/20 transition shadow-xs">
                     <textarea
                       ref={textareaRef}
                       rows={1}
@@ -1089,14 +1094,14 @@ export default function CouncilView({
                           handleSendMessage();
                         }
                       }}
-                      placeholder={`Message ${activeBot.name}... (Press Enter to send, Shift+Enter for newline)`}
-                      className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none resize-none px-2 py-1 max-h-32"
+                      placeholder={`Message ${activeBot.name}... (Enter to send, Shift+Enter for newline)`}
+                      className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none px-2 py-1 max-h-32 leading-relaxed"
                     />
 
-                    <div className="flex items-center space-x-1.5 shrink-0">
+                    <div className="flex items-center space-x-1 shrink-0 pb-0.5">
                       <button
                         onClick={() => createNewSession(activeBot.id, true)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                        className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition cursor-pointer"
                         title="Clear chat and start fresh session"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1105,7 +1110,7 @@ export default function CouncilView({
                       <button
                         onClick={() => handleSendMessage()}
                         disabled={!inputMessage.trim() || isThinking}
-                        className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 transition cursor-pointer shadow-sm"
+                        className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs active:scale-95 flex items-center justify-center"
                       >
                         <Send className="w-4 h-4" />
                       </button>
@@ -1118,95 +1123,97 @@ export default function CouncilView({
         {/* ── MODE B: MULTI-BOT COUNCIL DELIBERATION ── */}
         {isDeliberation && (
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-              {/* Deliberation Header Card */}
-              <div className="p-6 rounded-3xl bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-indigo-500/10 border border-indigo-200/50 dark:border-indigo-900/40 space-y-3">
-                <div className="flex items-center space-x-2.5">
-                  <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Multi-Agent Deliberation Chamber</h3>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Pose strategic dilemmas, technical architecture decisions, or workload prioritization problems. Sofi, Riven, and Lucifer will debate perspectives and construct a synthesized, actionable consensus.
-                </p>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="max-w-3xl mx-auto space-y-6">
+                {/* Deliberation Header Card */}
+                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-indigo-500/10 border border-indigo-200/50 dark:border-indigo-900/40 space-y-3">
+                  <div className="flex items-center space-x-2.5">
+                    <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Multi-Agent Deliberation Chamber</h3>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                    Pose strategic dilemmas, technical architecture decisions, or workload prioritization problems. All configured Council bots will debate perspectives and construct a synthesized, actionable consensus.
+                  </p>
 
-                {/* Debate suggestions */}
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {DEBATE_SUGGESTIONS.map((sug) => (
-                    <button
-                      key={sug}
-                      onClick={() => handleRunDeliberation(sug)}
-                      className="text-[11px] px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-slate-700 dark:text-slate-300 font-medium transition cursor-pointer"
-                    >
-                      💡 {sug}
-                    </button>
-                  ))}
+                  {/* Debate suggestions */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {DEBATE_SUGGESTIONS.map((sug) => (
+                      <button
+                        key={sug}
+                        onClick={() => handleRunDeliberation(sug)}
+                        className="text-[11px] px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-slate-700 dark:text-slate-300 font-medium transition cursor-pointer shadow-xs"
+                      >
+                        💡 {sug}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Deliberation Stream */}
-              {deliberationMessages.map((msg) => {
-                const isUser = msg.sender === 'user';
-                return (
-                  <div key={msg.id} className="space-y-4">
-                    {isUser ? (
-                      <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900">
-                        <span className="text-[10px] font-mono font-bold uppercase text-indigo-600 dark:text-indigo-400">Deliberation Topic</span>
-                        <p className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 mt-1">{msg.content}</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {/* Round table opinions */}
-                        {msg.deliberation && msg.deliberation.length > 0 && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {msg.deliberation.map((item, idx) => (
-                              <div
-                                key={idx}
-                                className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2"
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-xl">
-                                    {item.persona === 'sofi' ? '💖' : item.persona === 'riven' ? '🧭' : '🔥'}
-                                  </span>
-                                  <div>
-                                    <h4 className="font-display font-bold text-xs text-slate-900 dark:text-slate-100">{item.name}</h4>
-                                    <p className="text-[10px] text-slate-500">{item.role}</p>
+                {/* Deliberation Stream */}
+                {deliberationMessages.map((msg) => {
+                  const isUser = msg.sender === 'user';
+                  return (
+                    <div key={msg.id} className="space-y-4">
+                      {isUser ? (
+                        <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900">
+                          <span className="text-[10px] font-mono font-bold uppercase text-indigo-600 dark:text-indigo-400">Deliberation Topic</span>
+                          <p className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 mt-1">{msg.content}</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {/* Round table opinions */}
+                          {msg.deliberation && msg.deliberation.length > 0 && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                              {msg.deliberation.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2"
+                                >
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xl">
+                                      {item.persona === 'sofi' ? '💖' : item.persona === 'riven' ? '🧭' : '🔥'}
+                                    </span>
+                                    <div>
+                                      <h4 className="font-display font-bold text-xs text-slate-900 dark:text-slate-100">{item.name}</h4>
+                                      <p className="text-[10px] text-slate-500">{item.role}</p>
+                                    </div>
                                   </div>
+                                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
+                                    "{item.opinion}"
+                                  </p>
                                 </div>
-                                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
-                                  "{item.opinion}"
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              ))}
+                            </div>
+                          )}
 
-                        {/* Synthesized Consensus */}
-                        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border-2 border-indigo-500/40 shadow-lg space-y-3">
-                          <div className="flex items-center space-x-2">
-                            <Zap className="w-5 h-5 text-amber-500" />
-                            <h4 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100">Synthesized Council Consensus</h4>
-                          </div>
-                          <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
-                            <MarkdownRenderer content={msg.content} />
+                          {/* Synthesized Consensus */}
+                          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border-2 border-indigo-500/40 shadow-md space-y-3">
+                            <div className="flex items-center space-x-2">
+                              <Zap className="w-5 h-5 text-amber-500" />
+                              <h4 className="font-display font-bold text-sm text-slate-900 dark:text-slate-100">Synthesized Council Consensus</h4>
+                            </div>
+                            <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
+                              <MarkdownRenderer content={msg.content} />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                      )}
+                    </div>
+                  );
+                })}
 
-              {isThinking && deliberationProgress && (
-                <div className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-center space-x-3 text-xs font-mono text-amber-800 dark:text-amber-200">
-                  <RefreshCw className="w-4 h-4 animate-spin text-amber-500" />
-                  <span>{deliberationProgress}</span>
-                </div>
-              )}
+                {isThinking && deliberationProgress && (
+                  <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-center space-x-3 text-xs font-mono text-amber-800 dark:text-amber-200">
+                    <RefreshCw className="w-4 h-4 animate-spin text-amber-500" />
+                    <span>{deliberationProgress}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Deliberation Composer Bar */}
-            <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
-              <div className="max-w-4xl mx-auto flex items-center space-x-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-2">
+            <div className="p-3 sm:p-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800">
+              <div className="max-w-3xl mx-auto flex items-center space-x-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-600/20 transition shadow-xs">
                 <input
                   type="text"
                   value={deliberationTopic}
@@ -1220,7 +1227,7 @@ export default function CouncilView({
                 <button
                   onClick={() => handleRunDeliberation()}
                   disabled={!deliberationTopic.trim() || isThinking}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-indigo-600 text-white font-bold text-xs disabled:opacity-40 transition cursor-pointer flex items-center space-x-1.5"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 via-amber-500 to-indigo-600 text-white font-bold text-xs disabled:opacity-40 transition cursor-pointer flex items-center space-x-1.5 shadow-xs active:scale-95"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Deliberate</span>
