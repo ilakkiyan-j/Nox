@@ -600,7 +600,15 @@ privateRouter.get('/council/sessions/:id', async (req: Request, res: Response) =
 
     if (councilResponse && councilResponse.ok) {
       const councilData = await councilResponse.json().catch(() => ({}));
-      return apiResponse(res, councilData.data || councilData);
+      const payload = councilData.data || councilData;
+      if (payload && Array.isArray(payload.messages)) {
+        payload.messages = payload.messages.map((m: any) => ({
+          ...m,
+          sender: (m.sender === 'user' || m.role === 'user' || m.role === 'human') ? 'user' : 'assistant',
+          role: m.role || m.sender || 'user',
+        }));
+      }
+      return apiResponse(res, payload);
     }
 
     // 2. Fallback to /api/v1/conversations/:id
@@ -614,11 +622,15 @@ privateRouter.get('/council/sessions/:id', async (req: Request, res: Response) =
       return apiResponse(res, {
         sessionId: conv.id,
         personaId: conv.bot?.slug || conv.botId || 'sofi',
+        botId: conv.bot?.id,
+        botName: conv.bot?.name || 'Sofi',
+        botAvatar: conv.bot?.avatar,
         createdAt: conv.createdAt,
         updatedAt: conv.updatedAt,
         messages: (conv.messages || []).map((m: any) => ({
           id: m.id,
-          sender: m.role === 'assistant' ? 'assistant' : 'user',
+          sender: m.role === 'assistant' || m.sender === 'assistant' ? 'assistant' : 'user',
+          role: m.role || (m.sender === 'assistant' ? 'assistant' : 'user'),
           persona: conv.bot?.slug || 'sofi',
           content: m.content,
           timestamp: m.createdAt,

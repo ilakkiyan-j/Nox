@@ -67,6 +67,9 @@ export interface Message {
 export interface SessionSummary {
   sessionId: string;
   personaId?: string;
+  botId?: string;
+  botName?: string;
+  botAvatar?: string;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -633,27 +636,51 @@ export default function CouncilView({
       const res = await fetchWithUser(`${API_BASE_URL}/api/v1/council/sessions/${sessId}`);
       const data = (await readCouncilData(res, 'session history')) as {
         personaId?: string;
+        botId?: string;
+        botName?: string;
+        botAvatar?: string;
         messages?: Array<{
-          id: string;
-          sender: 'user' | 'assistant';
+          id?: string;
+          sender?: 'user' | 'assistant';
+          role?: string;
           content: string;
           createdAt?: string;
+          timestamp?: string;
+          executedActions?: ExecutedAction[];
+          toolCalls?: any;
         }>;
       };
 
       if (data && Array.isArray(data.messages)) {
         setSessionId(sessId);
-        if (data.personaId) setActiveBotId(data.personaId);
+        
+        // Match and switch active bot to the session's bot
+        const targetBotId = data.botId || data.personaId;
+        if (targetBotId) {
+          const matched = displayedBots.find(
+            b => b.id === targetBotId || b.slug === targetBotId || b.name.toLowerCase() === targetBotId.toLowerCase()
+          );
+          if (matched) {
+            setActiveBotId(matched.id);
+          } else if (data.personaId) {
+            setActiveBotId(data.personaId);
+          }
+        }
+
         setMessages(
-          data.messages.map(m => ({
-            id: m.id,
-            sender: m.sender,
-            content: m.content,
-            timestamp: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+          data.messages.map((m, idx) => ({
+            id: m.id || `restored_msg_${idx}`,
+            sender: (m.sender === 'user' || m.role === 'user' || m.role === 'human') ? 'user' : 'assistant',
+            persona: data.personaId || activeBotId,
+            content: m.content || '',
+            executedActions: m.executedActions || m.toolCalls,
+            timestamp: m.createdAt || m.timestamp
+              ? new Date(m.createdAt || m.timestamp!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : '',
           }))
         );
         setShowSessionsDrawer(false);
-        setActionNotice({ type: 'success', message: 'Chat session restored.' });
+        setActionNotice({ type: 'success', message: `Chat session with ${data.botName || 'bot'} restored.` });
       }
     } catch (err) {
       setActionNotice({
@@ -829,9 +856,19 @@ export default function CouncilView({
           )}
         </div>
 
-        {/* Right: Unified Segmented Mode & Clean Utility Group */}
+        {/* Right: Unified Segmented Mode, New Chat & Clean Utility Group */}
         <div className="flex items-center space-x-2 shrink-0">
           
+          {/* New Chat Primary Action */}
+          <button
+            onClick={() => createNewSession(activeBotId, true)}
+            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+            title="Start a fresh chat session with active bot"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">New Chat</span>
+          </button>
+
           {/* Segmented Mode Switcher */}
           <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
             <button
@@ -1416,6 +1453,13 @@ export default function CouncilView({
               <div className="space-y-2 pt-1">
                 {sessions.map((sess) => {
                   const isCur = sess.sessionId === sessionId;
+                  const botForSess = displayedBots.find(
+                    (b) => b.id === sess.personaId || b.slug === sess.personaId || b.id === sess.botId || b.slug === sess.botId
+                  ) || {
+                    name: sess.botName || sess.personaId || 'Sofi',
+                    avatar: sess.botAvatar || (sess.personaId === 'riven' ? '🧭' : sess.personaId === 'lucifer' ? '🔥' : '💖'),
+                  };
+
                   return (
                     <div
                       key={sess.sessionId}
@@ -1426,10 +1470,14 @@ export default function CouncilView({
                           : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 dark:hover:border-indigo-600 shadow-2xs'
                       }`}
                     >
+                      <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center text-sm shrink-0 overflow-hidden shadow-2xs">
+                        <BotAvatarDisplay avatar={botForSess.avatar} name={botForSess.name} className="w-full h-full text-sm object-cover" />
+                      </div>
+
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                            {sess.personaId || 'sofi'}
+                          <span className="font-display font-bold text-xs text-slate-900 dark:text-slate-100 truncate">
+                            {botForSess.name}
                           </span>
                           <span className="text-[10px] text-slate-400">
                             {sess.updatedAt ? new Date(sess.updatedAt).toLocaleDateString() : ''}
@@ -1440,7 +1488,7 @@ export default function CouncilView({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate">
+                        <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">
                           {sess.lastMessagePreview || 'Conversation'}
                         </p>
                       </div>
