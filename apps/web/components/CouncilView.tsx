@@ -1251,42 +1251,55 @@ export default function CouncilView({
         )}
       </div>
 
-      {/* ── MEMORY VAULT SLIDE-OVER DRAWER ── */}
+      {/* ── MEMORY VAULT MODAL ── */}
       {showMemoryDrawer && (
-        <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 h-full shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-            {/* Sticky Header */}
+        <DialogShell
+          isOpen={showMemoryDrawer}
+          onClose={() => setShowMemoryDrawer(false)}
+          label="Long-Term Memory Vault"
+          className="max-w-lg"
+        >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
             <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-white dark:bg-slate-900">
-              <div className="flex items-center space-x-2.5">
-                <Brain className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-slate-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+                  <Brain className="w-5 h-5" />
+                </div>
                 <div>
                   <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Long-Term Memory Vault</h3>
-                  <p className="text-[11px] text-slate-500">{memoryProfile?.facts?.length || 0} Learned facts</p>
+                  <p className="text-xs text-slate-500">{memoryProfile?.facts?.length || 0} Learned preferences & facts</p>
                 </div>
               </div>
-              <button onClick={() => setShowMemoryDrawer(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-slate-500">
-                <X className="w-4 h-4" />
+              <button
+                onClick={() => setShowMemoryDrawer(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
               {/* Add Fact Form */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3 shadow-2xs">
                 <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Store Direct Memory</h4>
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   <input
                     type="text"
                     value={newFact}
                     onChange={(e) => setNewFact(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddFact();
+                    }}
                     placeholder="e.g. Preparing for Snowflake architect interview"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20"
                   />
                   <div className="flex items-center space-x-2">
                     <select
                       value={newFactCategory}
                       onChange={(e) => setNewFactCategory(e.target.value as UserFact['category'])}
-                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-medium"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none"
                     >
                       <option value="preference">Preference</option>
                       <option value="goal">Goal</option>
@@ -1299,7 +1312,7 @@ export default function CouncilView({
                     <button
                       onClick={handleAddFact}
                       disabled={isAddingFact || !newFact.trim()}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition disabled:opacity-50 cursor-pointer"
+                      className="flex-1 py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition disabled:opacity-50 shadow-xs cursor-pointer active:scale-95"
                     >
                       {isAddingFact ? 'Storing...' : '+ Add Fact'}
                     </button>
@@ -1308,99 +1321,118 @@ export default function CouncilView({
               </div>
 
               {/* Facts List */}
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {memoryProfile?.facts && memoryProfile.facts.length > 0 ? (
                   memoryProfile.facts.map((fact) => (
                     <div
                       key={fact.id}
-                      className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex items-start justify-between gap-2"
+                      className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex items-start justify-between gap-3 shadow-2xs"
                     >
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
                           {fact.category}
                         </span>
-                        <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">{fact.fact}</p>
+                        <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed pt-0.5">{fact.fact}</p>
                       </div>
 
                       <button
                         onClick={() => handleDeleteFact(fact.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer shrink-0"
+                        title="Delete fact"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-slate-400 text-center py-6">Memory vault is empty.</p>
+                  <div className="py-8 text-center space-y-1">
+                    <p className="text-xs text-slate-400 font-medium">Memory vault is empty.</p>
+                    <p className="text-[11px] text-slate-500">Bots automatically record key facts here as you chat.</p>
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* Sticky Footer */}
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end shrink-0">
               <button
                 onClick={() => setShowMemoryDrawer(false)}
-                className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
               >
-                Close Memory Vault
+                Done
               </button>
             </div>
           </div>
-        </div>
+        </DialogShell>
       )}
 
-      {/* ── SESSIONS HISTORY SLIDE-OVER DRAWER ── */}
+      {/* ── SESSIONS HISTORY MODAL ── */}
       {showSessionsDrawer && (
-        <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 h-full shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-            {/* Sticky Header */}
+        <DialogShell
+          isOpen={showSessionsDrawer}
+          onClose={() => setShowSessionsDrawer(false)}
+          label="Chat History"
+          className="max-w-lg"
+        >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
             <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-white dark:bg-slate-900">
-              <div className="flex items-center space-x-2.5">
-                <MessageSquare className="w-5 h-5 text-sky-500" />
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-slate-800 flex items-center justify-center text-sky-600 dark:text-sky-400 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
                 <div>
-                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Chat History</h3>
-                  <p className="text-[11px] text-slate-500">{sessions.length} Saved sessions</p>
+                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">Conversation History</h3>
+                  <p className="text-xs text-slate-500">{sessions.length} Saved sessions</p>
                 </div>
               </div>
-              <button onClick={() => setShowSessionsDrawer(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-slate-500">
-                <X className="w-4 h-4" />
+              <button
+                onClick={() => setShowSessionsDrawer(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Scrollable Sessions List */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-3 flex-1">
               <button
                 onClick={() => {
                   createNewSession(activeBotId, true);
                   setShowSessionsDrawer(false);
                 }}
-                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer mb-2"
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-xs transition cursor-pointer active:scale-95"
               >
                 <Plus className="w-4 h-4" />
                 <span>Start New Conversation</span>
               </button>
 
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 {sessions.map((sess) => {
                   const isCur = sess.sessionId === sessionId;
                   return (
                     <div
                       key={sess.sessionId}
                       onClick={() => handleLoadSession(sess.sessionId)}
-                      className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between gap-3 ${
+                      className={`p-3.5 rounded-2xl border transition flex items-center justify-between gap-3 cursor-pointer ${
                         isCur
-                          ? 'bg-indigo-50/80 dark:bg-indigo-950/50 border-indigo-400 dark:border-indigo-700 ring-1 ring-indigo-400/40'
-                          : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300'
+                          ? 'bg-indigo-50/80 dark:bg-indigo-950/50 border-indigo-400 dark:border-indigo-700 ring-2 ring-indigo-400/30 shadow-xs'
+                          : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 dark:hover:border-indigo-600 shadow-2xs'
                       }`}
                     >
-                      <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                          <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                             {sess.personaId || 'sofi'}
                           </span>
                           <span className="text-[10px] text-slate-400">
                             {sess.updatedAt ? new Date(sess.updatedAt).toLocaleDateString() : ''}
                           </span>
+                          {isCur && (
+                            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                              • Active
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate">
                           {sess.lastMessagePreview || 'Conversation'}
@@ -1412,7 +1444,7 @@ export default function CouncilView({
                           e.stopPropagation();
                           handleDeleteSession(sess.sessionId);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition cursor-pointer"
+                        className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
                         title="Delete session"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1423,17 +1455,17 @@ export default function CouncilView({
               </div>
             </div>
 
-            {/* Sticky Footer */}
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end shrink-0">
               <button
                 onClick={() => setShowSessionsDrawer(false)}
-                className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </DialogShell>
       )}
 
       {/* Confirmation Dialog Shell */}
