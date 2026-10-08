@@ -1009,12 +1009,12 @@ export default function CouncilView({
                           )}
 
                           <div
-                            className={`w-full max-w-3xl sm:max-w-4xl rounded-2xl p-4 sm:p-5 shadow-xs transition-all ${
+                            className={`w-fit max-w-[85%] sm:max-w-[75%] rounded-2xl shadow-xs transition-all ${
                               isUser
-                                ? 'bg-indigo-600 text-white rounded-tr-xs max-w-2xl sm:max-w-3xl'
+                                ? 'bg-blue-600 text-white rounded-tr-xs px-4 py-2.5 sm:px-5 sm:py-3 ml-auto'
                                 : msg.isError
-                                ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100 rounded-tl-xs'
-                                : 'bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/70 dark:border-slate-700/70 text-slate-900 dark:text-slate-100 rounded-tl-xs'
+                                ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100 rounded-tl-xs p-4 sm:p-5'
+                                : 'bg-white dark:bg-slate-800/95 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 rounded-tl-xs p-4 sm:p-5 shadow-2xs'
                             }`}
                           >
                             {/* Executed Tools / Actions */}
@@ -1029,11 +1029,17 @@ export default function CouncilView({
                               </div>
                             )}
 
-                            <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed">
-                              <MarkdownRenderer content={msg.content} />
-                            </div>
+                            {isUser ? (
+                              <div className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words font-medium">
+                                {msg.content}
+                              </div>
+                            ) : (
+                              <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm leading-relaxed break-words">
+                                <MarkdownRenderer content={msg.content} />
+                              </div>
+                            )}
 
-                            <div className={`mt-2.5 flex items-center justify-between text-[10px] ${isUser ? 'text-indigo-200' : 'text-slate-400'}`}>
+                            <div className={`mt-2 flex items-center justify-between text-[10px] ${isUser ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
                               <span>{msg.timestamp}</span>
                               {!isUser && !msg.isError && (
                                 <button
@@ -1063,7 +1069,7 @@ export default function CouncilView({
                     })}
 
                     {/* Starter Suggestion Chips */}
-                    {messages.length <= 1 && (
+                    {!messages.some((m) => m.sender === 'user') && messages.length <= 1 && (
                       <div className="pt-2 pb-1 flex flex-wrap gap-2">
                         {[
                           "What's on my agenda for today?",
@@ -1166,8 +1172,8 @@ export default function CouncilView({
                   return (
                     <div key={msg.id} className="space-y-4">
                       {isUser ? (
-                        <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900">
-                          <span className="text-[10px] font-mono font-bold uppercase text-indigo-600 dark:text-indigo-400">Deliberation Topic</span>
+                        <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 shadow-2xs">
+                          <span className="text-[10px] font-mono font-bold uppercase text-blue-600 dark:text-blue-400">Deliberation Topic</span>
                           <p className="font-display font-bold text-sm text-slate-900 dark:text-slate-100 mt-1">{msg.content}</p>
                         </div>
                       ) : (
