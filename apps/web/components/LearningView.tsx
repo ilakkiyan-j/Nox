@@ -39,7 +39,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           if (!prev) return null;
           return {
             ...prev,
-            modules: updated.modules || [],
+            modules: (updated.modules || []).filter((m: any) => Boolean(m && typeof m === 'object' && m.title)),
           };
         });
       }
@@ -212,14 +212,33 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: cleanTitle }),
         });
-        const createdModule = await assertApiSuccess(response, 'Could not add module');
+        await assertApiSuccess(response, 'Could not add module');
+
+        let createdModule: any = null;
+        try {
+          const json = await response.clone().json();
+          createdModule = json?.data || json;
+        } catch {
+          // fallback if body is not JSON
+        }
+
+        if (!createdModule || typeof createdModule !== 'object' || !createdModule.title) {
+          createdModule = {
+            id: `temp-${Date.now()}`,
+            learningId,
+            title: cleanTitle,
+            status: 'NOT_STARTED',
+            order: 999,
+          };
+        }
 
         // Immediately update local editingLearning state so user sees it instantly
         setEditingLearning((prev: any) => {
           if (prev && prev.id === learningId) {
+            const currentModules = (prev.modules || []).filter((m: any) => Boolean(m && typeof m === 'object' && m.title));
             return {
               ...prev,
-              modules: [...(prev.modules || []), createdModule],
+              modules: [...currentModules, createdModule],
             };
           }
           return prev;
@@ -260,7 +279,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
             if (prev) {
               return {
                 ...prev,
-                modules: (prev.modules || []).filter((m: any) => m.id !== moduleId),
+                modules: (prev.modules || []).filter((m: any) => Boolean(m && typeof m === 'object' && m.id && m.id !== moduleId)),
               };
             }
             return prev;
@@ -297,7 +316,9 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
             if (prev) {
               return {
                 ...prev,
-                modules: (prev.modules || []).map((m: any) => (m.id === moduleId ? { ...m, title: cleanTitle } : m)),
+                modules: (prev.modules || [])
+                  .filter((m: any) => Boolean(m && typeof m === 'object'))
+                  .map((m: any) => (m.id === moduleId ? { ...m, title: cleanTitle } : m)),
               };
             }
             return prev;
@@ -530,7 +551,7 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
                       Curriculum Phases & Chapters
                     </label>
                     <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400">
-                      {editingLearning.modules?.length || 0}
+                      {(editingLearning.modules || []).filter((m: any) => Boolean(m && typeof m === 'object' && m.title)).length}
                     </span>
                   </div>
                 </div>
@@ -571,8 +592,10 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
 
                 {/* Modules List inside Modal */}
                 <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                  {editingLearning.modules && editingLearning.modules.length > 0 ? (
-                    editingLearning.modules.map((m: any, idx: number) => (
+                  {editingLearning.modules && editingLearning.modules.filter((m: any) => Boolean(m && typeof m === 'object' && m.title)).length > 0 ? (
+                    editingLearning.modules
+                      .filter((m: any) => Boolean(m && typeof m === 'object' && m.title))
+                      .map((m: any, idx: number) => (
                       <div
                         key={m.id || idx}
                         className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-x-2 shadow-2xs"
@@ -633,15 +656,16 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       {/* Learning Items Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         {learning.map((item) => {
-          const completedCount = item.modules?.filter((m: any) => m.status === 'COMPLETED').length || 0;
-          const totalCount = item.modules?.length || 0;
+          const validModules = (item.modules || []).filter((m: any) => Boolean(m && typeof m === 'object' && m.title));
+          const completedCount = validModules.filter((m: any) => m.status === 'COMPLETED').length;
+          const totalCount = validModules.length;
           const isCompleted = item.status === 'COMPLETED';
           const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : (isCompleted ? 100 : 0);
 
           const isExpanded = expandedItems[item.id] === true;
 
           const currentFilter = phaseFilter[item.id] || 'ALL';
-          const filteredModules = (item.modules || []).filter((mod: any) => {
+          const filteredModules = validModules.filter((mod: any) => {
             if (currentFilter === 'ACTIVE') return mod.status !== 'COMPLETED';
             if (currentFilter === 'COMPLETED') return mod.status === 'COMPLETED';
             return true;
