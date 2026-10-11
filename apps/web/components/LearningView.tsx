@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Plus, CheckCircle2, Circle, Edit2, Trash2, X, Save, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import DialogShell from './ui/Dialog';
 import ConfirmModal from './ConfirmModal';
 import PromptModal from './PromptModal';
 import ApiErrorNotice from './ui/ApiErrorNotice';
@@ -19,6 +20,31 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
 
   // Card view state: expansion of learning modules per item
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+  // Phase filter per item: 'ALL' | 'ACTIVE' | 'COMPLETED'
+  const [phaseFilter, setPhaseFilter] = useState<Record<string, 'ALL' | 'ACTIVE' | 'COMPLETED'>>({});
+
+  // Inline quick-add phase state per card
+  const [newModuleTitles, setNewModuleTitles] = useState<Record<string, string>>({});
+
+  // Quick-add phase state inside Edit modal
+  const [editModalNewModule, setEditModalNewModule] = useState('');
+
+  // Synchronize editingLearning with fresh learning prop data from parent
+  useEffect(() => {
+    if (editingLearning) {
+      const updated = learning.find((l) => l.id === editingLearning.id);
+      if (updated) {
+        setEditingLearning((prev: any) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            modules: updated.modules || [],
+          };
+        });
+      }
+    }
+  }, [learning]);
 
   // Responsive mobile check
   const [isMobile, setIsMobile] = useState(false);
@@ -174,28 +200,49 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
     }
   };
 
-  const handleAddModule = (learningId: string) => {
+  const handleAddModule = async (learningId: string, customTitle?: string) => {
     setExpandedItems((prev) => ({ ...prev, [learningId]: true }));
-    setPromptState({
-      isOpen: true,
-      title: 'Add Module / Chapter',
-      placeholder: 'Module Title (e.g. Chapter 4: Distributed Consensus)',
-      initialValue: '',
-      onSubmit: async (val: string) => {
-        try {
-          const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}/modules`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: val }),
-          });
-          await assertApiSuccess(response, 'Could not add module');
-          onRefresh();
-        } catch (err) {
-          console.error('Failed to add module:', err);
-          setError(err instanceof Error ? err.message : 'Could not add module');
-        }
-      },
-    });
+
+    const executeAdd = async (val: string) => {
+      const cleanTitle = val.trim();
+      if (!cleanTitle) return;
+      try {
+        const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/${learningId}/modules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: cleanTitle }),
+        });
+        const createdModule = await assertApiSuccess(response, 'Could not add module');
+
+        // Immediately update local editingLearning state so user sees it instantly
+        setEditingLearning((prev: any) => {
+          if (prev && prev.id === learningId) {
+            return {
+              ...prev,
+              modules: [...(prev.modules || []), createdModule],
+            };
+          }
+          return prev;
+        });
+
+        onRefresh();
+      } catch (err) {
+        console.error('Failed to add module:', err);
+        setError(err instanceof Error ? err.message : 'Could not add module');
+      }
+    };
+
+    if (customTitle && customTitle.trim()) {
+      await executeAdd(customTitle);
+    } else {
+      setPromptState({
+        isOpen: true,
+        title: 'Add Module / Chapter',
+        placeholder: 'Module Title (e.g. Chapter 4: Distributed Consensus)',
+        initialValue: '',
+        onSubmit: executeAdd,
+      });
+    }
   };
 
   const handleDeleteModule = (moduleId: string) => {
@@ -207,6 +254,18 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
         try {
           const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, { method: 'DELETE' });
           await assertApiSuccess(response, 'Could not delete module');
+
+          // Immediately update local editingLearning state
+          setEditingLearning((prev: any) => {
+            if (prev) {
+              return {
+                ...prev,
+                modules: (prev.modules || []).filter((m: any) => m.id !== moduleId),
+              };
+            }
+            return prev;
+          });
+
           onRefresh();
         } catch (err) {
           console.error('Failed to delete module:', err);
@@ -223,13 +282,27 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
       placeholder: 'Module Title',
       initialValue: currentTitle,
       onSubmit: async (val: string) => {
+        const cleanTitle = val.trim();
+        if (!cleanTitle) return;
         try {
           const response = await fetchWithUser(`${API_BASE_URL}/api/v1/learning/modules/${moduleId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: val }),
+            body: JSON.stringify({ title: cleanTitle }),
           });
           await assertApiSuccess(response, 'Could not rename module');
+
+          // Immediately update local editingLearning state
+          setEditingLearning((prev: any) => {
+            if (prev) {
+              return {
+                ...prev,
+                modules: (prev.modules || []).map((m: any) => (m.id === moduleId ? { ...m, title: cleanTitle } : m)),
+              };
+            }
+            return prev;
+          });
+
           onRefresh();
         } catch (err) {
           console.error('Failed to rename module:', err);
@@ -352,136 +425,209 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
         </form>
       )}
 
-      {/* Edit Learning Modal */}
+      {/* Edit Learning Track Modal Dialog */}
       {editingLearning && (
-        <form onSubmit={handleUpdateLearning} className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
-              <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>Edit Learning Track & Phases / Modules</span>
-            </h3>
-            <button type="button" onClick={() => setEditingLearning(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div>
-            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Track Title</label>
-            <input
-              type="text"
-              value={editingLearning.title}
-              onChange={(e) => setEditingLearning({ ...editingLearning, title: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Website / Certification Link</label>
-            <input
-              type="url"
-              placeholder="https://..."
-              value={editingLearning.url || ''}
-              onChange={(e) => setEditingLearning({ ...editingLearning, url: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Description & Notes</label>
-            <textarea
-              rows={3}
-              placeholder="Course description, notes, or objectives..."
-              value={editingLearning.description || ''}
-              onChange={(e) => setEditingLearning({ ...editingLearning, description: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 leading-relaxed"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Type</label>
-              <select
-                value={editingLearning.type || 'COURSE'}
-                onChange={(e) => setEditingLearning({ ...editingLearning, type: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
-              >
-                <option value="COURSE">COURSE</option>
-                <option value="BOOK">BOOK</option>
-                <option value="CERTIFICATION">CERTIFICATION</option>
-                <option value="PRACTICE">PRACTICE</option>
-                <option value="TUTORIAL">TUTORIAL</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Status</label>
-              <select
-                value={editingLearning.status || 'IN_PROGRESS'}
-                onChange={(e) => setEditingLearning({ ...editingLearning, status: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium"
-              >
-                <option value="NOT_STARTED">NOT_STARTED</option>
-                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                <option value="COMPLETED">COMPLETED</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Inline Module / Phase Editor */}
-          <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Modules & Chapters ({editingLearning.modules?.length || 0})</label>
+        <DialogShell
+          isOpen={!!editingLearning}
+          onClose={() => setEditingLearning(null)}
+          label="Edit Learning Track & Phases"
+          className="max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        >
+          <form onSubmit={handleUpdateLearning} className="flex flex-col h-full max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-white dark:bg-slate-900">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-slate-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-slate-100">
+                    Edit Learning Track & Phases
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Update course metadata and manage curriculum phases & chapters.
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => handleAddModule(editingLearning.id)}
-                className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center space-x-1"
+                onClick={() => setEditingLearning(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Module</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {editingLearning.modules?.map((m: any) => (
-                <div key={m.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-x-2">
-                  <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate flex-1">{m.title}</span>
-                  <div className="flex items-center space-x-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleRenameModule(m.id, m.title)}
-                      className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                      title="Edit Module Title"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteModule(m.id)}
-                      className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
-                      title="Delete Module"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              <div>
+                <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Track Title</label>
+                <input
+                  type="text"
+                  value={editingLearning.title}
+                  onChange={(e) => setEditingLearning({ ...editingLearning, title: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Website / Certification Link</label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={editingLearning.url || ''}
+                  onChange={(e) => setEditingLearning({ ...editingLearning, url: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Description & Notes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Course description, notes, or objectives..."
+                  value={editingLearning.description || ''}
+                  onChange={(e) => setEditingLearning({ ...editingLearning, description: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 leading-relaxed focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Type</label>
+                  <select
+                    value={editingLearning.type || 'COURSE'}
+                    onChange={(e) => setEditingLearning({ ...editingLearning, type: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-600"
+                  >
+                    <option value="COURSE">COURSE</option>
+                    <option value="BOOK">BOOK</option>
+                    <option value="CERTIFICATION">CERTIFICATION</option>
+                    <option value="PRACTICE">PRACTICE</option>
+                    <option value="TUTORIAL">TUTORIAL</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1 font-medium">Status</label>
+                  <select
+                    value={editingLearning.status || 'IN_PROGRESS'}
+                    onChange={(e) => setEditingLearning({ ...editingLearning, status: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-indigo-600"
+                  >
+                    <option value="NOT_STARTED">NOT_STARTED</option>
+                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Inline Module / Phase Editor */}
+              <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <label className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      Curriculum Phases & Chapters
+                    </label>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400">
+                      {editingLearning.modules?.length || 0}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="flex justify-end space-x-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => setEditingLearning(null)}
-              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button type="submit" className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs flex items-center space-x-1">
-              <Save className="w-3.5 h-3.5" />
-              <span>Save Changes</span>
-            </button>
-          </div>
-        </form>
+                {/* Quick Add Row in Modal */}
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    placeholder="Quick add phase (e.g. Phase 20: Capstone Evaluation) — Enter to add"
+                    value={editModalNewModule}
+                    onChange={(e) => setEditModalNewModule(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (editModalNewModule.trim()) {
+                          handleAddModule(editingLearning.id, editModalNewModule.trim());
+                          setEditModalNewModule('');
+                        }
+                      }
+                    }}
+                    className="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editModalNewModule.trim()) {
+                        handleAddModule(editingLearning.id, editModalNewModule.trim());
+                        setEditModalNewModule('');
+                      }
+                    }}
+                    disabled={!editModalNewModule.trim()}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-semibold flex items-center space-x-1 cursor-pointer transition shadow-xs shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Phase</span>
+                  </button>
+                </div>
+
+                {/* Modules List inside Modal */}
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {editingLearning.modules && editingLearning.modules.length > 0 ? (
+                    editingLearning.modules.map((m: any, idx: number) => (
+                      <div
+                        key={m.id || idx}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-x-2 shadow-2xs"
+                      >
+                        <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate flex-1">
+                          {m.title}
+                        </span>
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRenameModule(m.id, m.title)}
+                            className="p-1 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition cursor-pointer"
+                            title="Edit Module Title"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteModule(m.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                            title="Delete Module"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-4 text-center text-xs text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                      No phases added yet. Type a phase above and press Enter.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditingLearning(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs flex items-center space-x-1.5 transition cursor-pointer active:scale-95"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save Changes</span>
+              </button>
+            </div>
+          </form>
+        </DialogShell>
       )}
 
       {/* Learning Items Grid */}
@@ -493,6 +639,13 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
           const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : (isCompleted ? 100 : 0);
 
           const isExpanded = expandedItems[item.id] === true;
+
+          const currentFilter = phaseFilter[item.id] || 'ALL';
+          const filteredModules = (item.modules || []).filter((mod: any) => {
+            if (currentFilter === 'ACTIVE') return mod.status !== 'COMPLETED';
+            if (currentFilter === 'COMPLETED') return mod.status === 'COMPLETED';
+            return true;
+          });
 
           return (
             <div key={item.id} className="p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 relative group hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between">
@@ -583,53 +736,122 @@ export default function LearningView({ learning, onRefresh }: LearningViewProps)
 
                 {/* Modules List */}
                 {isExpanded && (
-                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                    {totalCount === 0 ? (
-                      <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-                        <span>No modules added yet</span>
-                        <button
-                          onClick={() => handleAddModule(item.id)}
-                          className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center space-x-1 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add Module</span>
-                        </button>
+                  <div className="space-y-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+                    
+                    {/* Header bar of Modules: Filter tabs + count */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[11px] font-medium">
+                        {(['ALL', 'ACTIVE', 'COMPLETED'] as const).map((filter) => {
+                          const isSel = currentFilter === filter;
+                          const count = filter === 'ALL'
+                            ? totalCount
+                            : filter === 'ACTIVE'
+                            ? totalCount - completedCount
+                            : completedCount;
+                          return (
+                            <button
+                              key={filter}
+                              type="button"
+                              onClick={() => setPhaseFilter((prev) => ({ ...prev, [item.id]: filter }))}
+                              className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                                isSel
+                                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 font-bold shadow-2xs'
+                                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                              }`}
+                            >
+                              {filter === 'ALL' ? 'All' : filter === 'ACTIVE' ? 'Active' : 'Done'} ({count})
+                            </button>
+                          );
+                        })}
                       </div>
-                    ) : (
-                      item.modules.map((mod: any) => (
-                        <div key={mod.id} className="p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between group/m text-xs">
-                          <div
-                            onClick={() => handleToggleModule(mod.id, mod.status)}
-                            className="flex items-center space-x-2.5 cursor-pointer select-none min-w-0 flex-1"
-                          >
-                            {mod.status === 'COMPLETED' ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                            ) : (
-                              <Circle className="w-4 h-4 text-slate-400 shrink-0" />
-                            )}
-                            <span className={`truncate ${mod.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200 font-medium'}`}>
-                              {mod.title}
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-1 shrink-0 text-slate-400 dark:text-slate-500">
-                            <button
-                              onClick={() => handleRenameModule(mod.id, mod.title)}
-                              className="p-1 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer transition-colors"
-                              title="Edit Module Title"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteModule(mod.id)}
-                              className="p-1 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer transition-colors"
-                              title="Delete Module"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
+
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {completedCount} of {totalCount} completed
+                      </span>
+                    </div>
+
+                    {/* Scroll-bounded phase list */}
+                    <div className="space-y-1.5 max-h-72 sm:max-h-80 overflow-y-auto pr-1 scrollbar-thin">
+                      {filteredModules.length === 0 ? (
+                        <div className="p-3.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 dark:text-slate-500">
+                          {totalCount === 0 ? 'No modules added yet' : 'No phases match this filter'}
                         </div>
-                      ))
-                    )}
+                      ) : (
+                        filteredModules.map((mod: any) => (
+                          <div
+                            key={mod.id}
+                            className="p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between group/m text-xs hover:border-slate-300 dark:hover:border-slate-600 transition"
+                          >
+                            <div
+                              onClick={() => handleToggleModule(mod.id, mod.status)}
+                              className="flex items-center space-x-2.5 cursor-pointer select-none min-w-0 flex-1"
+                            >
+                              {mod.status === 'COMPLETED' ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              ) : (
+                                <Circle className="w-4 h-4 text-slate-400 shrink-0" />
+                              )}
+                              <span className={`truncate ${mod.status === 'COMPLETED' ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200 font-medium'}`}>
+                                {mod.title}
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-1 shrink-0 text-slate-400 dark:text-slate-500">
+                              <button
+                                onClick={() => handleRenameModule(mod.id, mod.title)}
+                                className="p-1 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer transition-colors"
+                                title="Edit Module Title"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteModule(mod.id)}
+                                className="p-1 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer transition-colors"
+                                title="Delete Module"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Quick Add Row right on the Card */}
+                    <div className="pt-1 flex items-center space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Add phase... (Press Enter)"
+                        value={newModuleTitles[item.id] || ''}
+                        onChange={(e) => setNewModuleTitles((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const val = (newModuleTitles[item.id] || '').trim();
+                            if (val) {
+                              handleAddModule(item.id, val);
+                              setNewModuleTitles((prev) => ({ ...prev, [item.id]: '' }));
+                            }
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = (newModuleTitles[item.id] || '').trim();
+                          if (val) {
+                            handleAddModule(item.id, val);
+                            setNewModuleTitles((prev) => ({ ...prev, [item.id]: '' }));
+                          }
+                        }}
+                        disabled={!(newModuleTitles[item.id] || '').trim()}
+                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-600 hover:text-white dark:bg-slate-800 dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-300 disabled:opacity-40 text-xs font-semibold flex items-center space-x-1 cursor-pointer transition shrink-0"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add</span>
+                      </button>
+                    </div>
+
                   </div>
                 )}
               </div>
